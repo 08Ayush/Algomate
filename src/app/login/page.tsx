@@ -10,7 +10,7 @@ export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [formData, setFormData] = useState({
-    email: '',
+    collegeUid: '',
     password: ''
   });
 
@@ -44,10 +44,10 @@ export default function LoginPage() {
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email address';
+    if (!formData.collegeUid.trim()) {
+      newErrors.collegeUid = 'College UID is required';
+    } else if (!/^[A-Z0-9-]+$/i.test(formData.collegeUid)) {
+      newErrors.collegeUid = 'Please enter a valid College UID';
     }
 
     if (!formData.password) {
@@ -74,7 +74,7 @@ export default function LoginPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email: formData.email,
+          collegeUid: formData.collegeUid,
           password: formData.password,
         }),
       });
@@ -146,26 +146,26 @@ export default function LoginPage() {
                 </div>
               )}
 
-              {/* Email */}
+              {/* College UID */}
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Email Address
+                <label htmlFor="collegeUid" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  College UID
                 </label>
                 <input
-                  type="email"
-                  id="email"
-                  name="email"
-                  value={formData.email}
+                  type="text"
+                  id="collegeUid"
+                  name="collegeUid"
+                  value={formData.collegeUid}
                   onChange={handleInputChange}
                   className={`w-full px-4 py-3 rounded-lg border ${
-                    errors.email 
+                    errors.collegeUid 
                       ? 'border-red-300 focus:border-red-500 focus:ring-red-500' 
                       : 'border-gray-300 dark:border-gray-600 focus:border-blue-500 focus:ring-blue-500'
                   } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 transition-colors`}
-                  placeholder="Enter your email address"
+                  placeholder="Enter your College UID"
                 />
-                {errors.email && (
-                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.email}</p>
+                {errors.collegeUid && (
+                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.collegeUid}</p>
                 )}
               </div>
 

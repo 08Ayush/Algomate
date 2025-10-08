@@ -16,17 +16,17 @@ const supabaseAdmin = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password } = await request.json();
+    const { collegeUid, password } = await request.json();
 
     // Validate required fields
-    if (!email || !password) {
+    if (!collegeUid || !password) {
       return NextResponse.json(
-        { error: 'Email and password are required' },
+        { error: 'College UID and password are required' },
         { status: 400 }
       );
     }
 
-    // Find user by email with department info
+    // Find user by college_uid with department info
     const { data: userData, error: userError } = await supabaseAdmin
       .from('users')
       .select(`
@@ -47,14 +47,14 @@ export async function POST(request: NextRequest) {
         created_at,
         departments!users_department_id_fkey(id, name, code)
       `)
-      .eq('email', email)
+      .eq('college_uid', collegeUid)
       .eq('is_active', true)
       .single();
 
     if (userError || !userData) {
       console.error('User lookup error:', userError);
       return NextResponse.json(
-        { error: 'Invalid email or password' },
+        { error: 'Invalid College UID or password' },
         { status: 401 }
       );
     }
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
     const isValidPassword = await bcrypt.compare(password, userData.password_hash);
     if (!isValidPassword) {
       return NextResponse.json(
-        { error: 'Invalid email or password' },
+        { error: 'Invalid College UID or password' },
         { status: 401 }
       );
     }

@@ -1,32 +1,88 @@
 'use client';
 
-import React, { createContext, useContext } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 
-// Simplified context without theme switching - always light mode
-interface ThemeContextType {
-  theme: 'light';
-}
+type Theme = 'dark' | 'light' | 'system';
 
-const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+type ThemeProviderProps = {
+  children: ReactNode;
+  defaultTheme?: Theme;
+  storageKey?: string;
+};
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
+type ThemeProviderState = {
+  theme: Theme;
+  setTheme: (theme: Theme) => void;
+};
+
+const initialState: ThemeProviderState = {
+  theme: 'system',
+  setTheme: () => null,
+};
+
+const ThemeProviderContext = createContext<ThemeProviderState>(initialState);
+
+export function ThemeProvider({
+  children,
+  defaultTheme = 'system',
+  storageKey = 'ui-theme',
+  ...props
+}: ThemeProviderProps) {
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window === 'undefined') return defaultTheme;
+    try {
+      return (localStorage.getItem(storageKey) as Theme) || defaultTheme;
+    } catch {
+      return defaultTheme;
+    }
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const root = window.document.documentElement;
+
+    root.classList.remove('light', 'dark');
+
+    if (theme === 'system') {
+      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)')
+        .matches
+        ? 'dark'
+        : 'light';
+
+      root.classList.add(systemTheme);
+      return;
+    }
+
+    root.classList.add(theme);
+  }, [theme]);
+
   const value = {
-    theme: 'light' as const,
+    theme,
+    setTheme: (theme: Theme) => {
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(storageKey, theme);
+        } catch {
+          // Handle localStorage errors silently
+        }
+      }
+      setTheme(theme);
+    },
   };
 
   return (
-    <ThemeContext.Provider value={value}>
-      <div className="min-h-screen bg-white">
-        {children}
-      </div>
-    </ThemeContext.Provider>
+    <ThemeProviderContext.Provider {...props} value={value}>
+      {children}
+    </ThemeProviderContext.Provider>
   );
 }
 
-export function useTheme() {
-  const context = useContext(ThemeContext);
-  if (context === undefined) {
+export const useTheme = () => {
+  const context = useContext(ThemeProviderContext);
+
+  if (context === undefined)
     throw new Error('useTheme must be used within a ThemeProvider');
-  }
+
   return context;
-}
+};

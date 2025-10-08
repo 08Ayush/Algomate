@@ -16,12 +16,20 @@ const supabaseAdmin = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password, firstName, lastName, department_id, role, faculty_type } = await request.json();
+    const { collegeUid, password, firstName, lastName, department_id, role, faculty_type } = await request.json();
 
     // Validate required fields
-    if (!email || !password || !firstName || !lastName || !department_id || !role) {
+    if (!collegeUid || !password || !firstName || !lastName || !department_id || !role) {
       return NextResponse.json(
         { error: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
+
+    // Validate role - only student and faculty allowed
+    if (role !== 'student' && role !== 'faculty') {
+      return NextResponse.json(
+        { error: 'Invalid role. Only student and faculty roles are allowed.' },
         { status: 400 }
       );
     }
@@ -34,33 +42,81 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate unique college UID (you can customize this logic)
-    const college_uid = `${role.toUpperCase().substring(0, 3)}${Date.now().toString().slice(-6)}`;
+    // Validate College UID format
+    if (!/^[A-Z0-9-]+$/i.test(collegeUid)) {
+      return NextResponse.json(
+        { error: 'Invalid College UID format' },
+        { status: 400 }
+      );
+    }
+
+    // Get college_id from the selected department
+    const { data: departmentData, error: deptError } = await supabaseAdmin
+      .from('departments')
+      .select('college_id')
+      .eq('id', department_id)
+      .single();
+
+    if (deptError || !departmentData) {
+      return NextResponse.json(
+        { error: 'Invalid department selected' },
+        { status: 400 }
+      );
+    }
+
+    const college_id = departmentData.college_id;
+
+    // Check if College UID already exists in this college
+    const { data: existingUser } = await supabaseAdmin
+      .from('users')
+      .select('id')
+      .eq('college_uid', collegeUid)
+      .eq('college_id', college_id)
+      .single();
+
+    if (existingUser) {
+      return NextResponse.json(
+        { error: 'College UID already exists' },
+        { status: 409 }
+      );
+    }
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
+    // Prepare user data based on role
+    const userData: any = {
+      first_name: firstName,
+      last_name: lastName,
+      college_uid: collegeUid,
+      email: `${collegeUid}@college.internal`, // Generate a placeholder email
+      password_hash: hashedPassword,
+      college_id: college_id, // Add college_id from department
+      department_id,
+      role,
+      is_active: true,
+      email_verified: false
+    };
+
+    // Add role-specific fields
+    if (role === 'faculty') {
+      userData.faculty_type = faculty_type;
+    } else if (role === 'student') {
+      // For students, use college_uid as student_id and set default values
+      userData.student_id = collegeUid;
+      userData.admission_year = new Date().getFullYear();
+      userData.current_semester = 1; // Default to first semester
+    }
+
     // Create user in users table with new schema
     const { data: userRecord, error: userError } = await supabaseAdmin
       .from('users')
-      .insert({
-        first_name: firstName,
-        last_name: lastName,
-        college_uid,
-        email,
-        password_hash: hashedPassword,
-        department_id,
-        role,
-        faculty_type: role === 'faculty' ? faculty_type : null,
-        is_active: true,
-        email_verified: false
-      })
+      .insert(userData)
       .select(`
         id,
         first_name,
         last_name,
         college_uid,
-        email,
         role,
         faculty_type,
         created_at
@@ -71,7 +127,7 @@ export async function POST(request: NextRequest) {
       console.error('User creation error:', userError);
       if (userError.code === '23505') { // Unique constraint violation
         return NextResponse.json(
-          { error: 'Email or College UID already exists' },
+          { error: 'College UID already exists' },
           { status: 409 }
         );
       }
