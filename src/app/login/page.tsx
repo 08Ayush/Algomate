@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/Header';
-import { authHelpers } from '@/lib/supabase';
+
 
 export default function LoginPage() {
   const router = useRouter();

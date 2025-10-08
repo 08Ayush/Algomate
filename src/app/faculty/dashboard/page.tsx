@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import DashboardLayout from '../../../components/DashboardLayout';
 
 export default function FacultyDashboard() {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -14,13 +16,20 @@ export default function FacultyDashboard() {
       return;
     }
 
-    const parsedUser = JSON.parse(userData);
-    if (parsedUser.role !== 'faculty') {
+    try {
+      const parsedUser = JSON.parse(userData);
+      if (parsedUser.role !== 'faculty') {
+        router.push('/login');
+        return;
+      }
+      
+      setUser(parsedUser);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error parsing user data:', error);
+      localStorage.removeItem('user');
       router.push('/login');
-      return;
     }
-
-    setUser(parsedUser);
   }, [router]);
 
   const handleLogout = () => {
@@ -28,230 +37,246 @@ export default function FacultyDashboard() {
     router.push('/');
   };
 
-  if (!user) {
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
       </div>
     );
   }
 
+  if (!user) {
+    return null;
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Faculty Dashboard</h1>
-              <p className="text-gray-600">Welcome back, {user.faculty?.[0]?.name || 'Faculty'}!</p>
+    <DashboardLayout 
+      user={user} 
+      facultyRole="creator" // Allow all faculty to access manual scheduling for now
+      currentPath="/faculty/dashboard"
+      onLogout={handleLogout}
+    >
+      <main className="flex-1 p-6 bg-gray-50 min-h-screen">
+        {/* Header Section */}
+        <div className="mb-8">
+          <div className="flex items-center space-x-3 mb-4">
+            <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center">
+              <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
             </div>
-            <button
-              onClick={handleLogout}
-              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors"
-            >
-              Logout
+            <div>
+              <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                AI-Powered
+              </span>
+            </div>
+          </div>
+          
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">
+            The Academic Compass
+          </h1>
+          <p className="text-lg text-gray-600 mb-6">
+            Revolutionary AI-powered timetable generation with ChatGPT-style interface. Create, review, and publish optimized schedules through intelligent workflows.
+          </p>
+          
+          <div className="flex flex-wrap gap-4">
+            <button className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center space-x-2">
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z"/>
+              </svg>
+              <span>Create with AI Assistant</span>
+            </button>
+            
+            <button className="bg-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-purple-700 transition-colors flex items-center space-x-2">
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              <span>Advanced Hybrid Scheduler</span>
+            </button>
+            
+            <button className="bg-gray-100 text-gray-700 px-6 py-3 rounded-lg font-medium hover:bg-gray-200 transition-colors flex items-center space-x-2">
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd"/>
+              </svg>
+              <span>View Timetables</span>
             </button>
           </div>
         </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {/* Quick Stats */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                      <span className="text-white text-sm font-bold">👥</span>
-                    </div>
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">
-                        My Classes
-                      </dt>
-                      <dd className="text-lg font-medium text-gray-900">
-                        8 Active
-                      </dd>
-                    </dl>
-                  </div>
-                </div>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {/* Active Timetables */}
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd"/>
+                </svg>
               </div>
             </div>
+            <div className="text-3xl font-bold text-gray-900 mb-1">8</div>
+            <div className="text-sm text-gray-600">Active Timetables</div>
+          </div>
 
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-                      <span className="text-white text-sm font-bold">📅</span>
-                    </div>
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">
-                        Today's Schedule
-                      </dt>
-                      <dd className="text-lg font-medium text-gray-900">
-                        6 Classes
-                      </dd>
-                    </dl>
-                  </div>
-                </div>
+          {/* Quality Score */}
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
               </div>
             </div>
+            <div className="text-3xl font-bold text-gray-900 mb-1">94%</div>
+            <div className="text-sm text-gray-600">Quality Score</div>
+          </div>
 
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
-                      <span className="text-white text-sm font-bold">📊</span>
-                    </div>
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">
-                        Total Students
-                      </dt>
-                      <dd className="text-lg font-medium text-gray-900">
-                        240
-                      </dd>
-                    </dl>
-                  </div>
-                </div>
+          {/* Faculty Members */}
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z"/>
+                </svg>
               </div>
             </div>
+            <div className="text-3xl font-bold text-gray-900 mb-1">15</div>
+            <div className="text-sm text-gray-600">Faculty Members</div>
+          </div>
 
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center">
-                      <span className="text-white text-sm font-bold">📝</span>
-                    </div>
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">
-                        Pending Tasks
-                      </dt>
-                      <dd className="text-lg font-medium text-gray-900">
-                        12
-                      </dd>
-                    </dl>
-                  </div>
+          {/* Avg. Generation Time */}
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd"/>
+                </svg>
+              </div>
+            </div>
+            <div className="text-3xl font-bold text-gray-900 mb-1">5.2s</div>
+            <div className="text-sm text-gray-600">Avg. Generation Time</div>
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          {/* Recent Timetables */}
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Timetables</h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div>
+                  <div className="font-medium text-gray-900">Computer Science - Semester 3</div>
+                  <div className="text-sm text-gray-600">Generated 2 hours ago</div>
                 </div>
+                <span className="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                  Active
+                </span>
+              </div>
+              
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div>
+                  <div className="font-medium text-gray-900">Data Science - Semester 1</div>
+                  <div className="text-sm text-gray-600">Generated 1 day ago</div>
+                </div>
+                <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                  Published
+                </span>
+              </div>
+              
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div>
+                  <div className="font-medium text-gray-900">Information Technology - Semester 2</div>
+                  <div className="text-sm text-gray-600">Generated 3 days ago</div>
+                </div>
+                <span className="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                  Draft
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Today's Schedule */}
-          <div className="mt-8">
-            <div className="bg-white shadow overflow-hidden sm:rounded-md">
-              <div className="px-4 py-5 sm:px-6">
-                <h3 className="text-lg leading-6 font-medium text-gray-900">
-                  Today's Schedule
-                </h3>
-                <p className="mt-1 max-w-2xl text-sm text-gray-500">
-                  Your classes and meetings for today.
+          {/* Quick Stats */}
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Statistics</h3>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-600">Total Classes Scheduled</span>
+                <span className="font-semibold text-gray-900">247</span>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <span className="text-gray-600">Conflict Resolution Rate</span>
+                <span className="font-semibold text-green-600">98.5%</span>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <span className="text-gray-600">Room Utilization</span>
+                <span className="font-semibold text-blue-600">87%</span>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <span className="text-gray-600">Faculty Satisfaction</span>
+                <span className="font-semibold text-purple-600">4.8/5</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Recent Activity */}
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
+            <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
+              View All
+            </button>
+          </div>
+          
+          <div className="space-y-4">
+            <div className="flex items-start space-x-3">
+              <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+              </div>
+              <div className="flex-1">
+                <p className="text-sm text-gray-900">
+                  <span className="font-medium">Computer Science Semester 3</span> timetable was successfully generated and published
                 </p>
+                <p className="text-xs text-gray-500">2 hours ago</p>
               </div>
-              <ul className="border-t border-gray-200 divide-y divide-gray-200">
-                <li className="px-4 py-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="flex-shrink-0">
-                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                          <span className="text-blue-600 text-sm font-bold">9:00</span>
-                        </div>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900">
-                          Data Structures & Algorithms
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          Room 301, CSE Department • 60 students
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      1.5 hours
-                    </div>
-                  </div>
-                </li>
-                <li className="px-4 py-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="flex-shrink-0">
-                        <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                          <span className="text-green-600 text-sm font-bold">11:00</span>
-                        </div>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900">
-                          Database Management Systems
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          Room 205, IT Department • 45 students
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      1.5 hours
-                    </div>
-                  </div>
-                </li>
-                <li className="px-4 py-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="flex-shrink-0">
-                        <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                          <span className="text-purple-600 text-sm font-bold">2:00</span>
-                        </div>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900">
-                          Software Engineering Lab
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          Computer Lab 1 • 30 students
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      2 hours
-                    </div>
-                  </div>
-                </li>
-              </ul>
             </div>
-          </div>
-
-          {/* Quick Actions */}
-          <div className="mt-8">
-            <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
-              Quick Actions
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <button className="bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-lg text-left transition-colors">
-                <h4 className="font-semibold">Create Timetable</h4>
-                <p className="text-sm opacity-90">Generate new class schedule</p>
-              </button>
-              <button className="bg-green-600 hover:bg-green-700 text-white p-4 rounded-lg text-left transition-colors">
-                <h4 className="font-semibold">Mark Attendance</h4>
-                <p className="text-sm opacity-90">Record student attendance</p>
-              </button>
-              <button className="bg-purple-600 hover:bg-purple-700 text-white p-4 rounded-lg text-left transition-colors">
-                <h4 className="font-semibold">View Reports</h4>
-                <p className="text-sm opacity-90">Academic progress reports</p>
-              </button>
+            
+            <div className="flex items-start space-x-3">
+              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z"/>
+                </svg>
+              </div>
+              <div className="flex-1">
+                <p className="text-sm text-gray-900">
+                  <span className="font-medium">Prof. Sarah Johnson</span> requested schedule modification for Data Science course
+                </p>
+                <p className="text-xs text-gray-500">5 hours ago</p>
+              </div>
+            </div>
+            
+            <div className="flex items-start space-x-3">
+              <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <svg className="w-4 h-4 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd"/>
+                </svg>
+              </div>
+              <div className="flex-1">
+                <p className="text-sm text-gray-900">
+                  AI optimization completed for <span className="font-medium">Information Technology Semester 2</span>
+                </p>
+                <p className="text-xs text-gray-500">1 day ago</p>
+              </div>
             </div>
           </div>
         </div>
       </main>
-    </div>
+    </DashboardLayout>
   );
 }

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
-import { authHelpers, dbHelpers, Department } from '@/lib/supabase';
+import { dbHelpers, Department } from '@/lib/supabase';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -15,8 +15,8 @@ export default function RegisterPage() {
     password: '',
     confirmPassword: '',
     department: '',
-    role: 'student' as 'student' | 'faculty',
-    batchYear: new Date().getFullYear()
+    role: 'student' as 'admin' | 'faculty' | 'student' | 'hod',
+    facultyType: 'general' as 'creator' | 'publisher' | 'general' | 'guest'
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -28,10 +28,16 @@ export default function RegisterPage() {
   useEffect(() => {
     const loadDepartments = async () => {
       try {
+        console.log('🔄 Loading departments...');
         const depts = await dbHelpers.getDepartments();
+        console.log('✅ Departments loaded:', depts);
         setDepartments(depts);
       } catch (error) {
-        console.error('Failed to load departments:', error);
+        console.error('❌ Failed to load departments:', error);
+        setErrors(prev => ({ 
+          ...prev, 
+          departments: 'Failed to load departments. Please refresh the page.' 
+        }));
       }
     };
 
@@ -109,10 +115,11 @@ export default function RegisterPage() {
         body: JSON.stringify({
           email: formData.email,
           password: formData.password,
-          name: `${formData.firstName} ${formData.lastName}`,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
           department_id: formData.department,
           role: formData.role,
-          batch_year: formData.role === 'student' ? formData.batchYear : undefined
+          faculty_type: formData.role === 'faculty' ? formData.facultyType : undefined
         }),
       });
 
@@ -218,6 +225,8 @@ export default function RegisterPage() {
                 >
                   <option value="student">Student</option>
                   <option value="faculty">Faculty Member</option>
+                  <option value="admin">Administrator</option>
+                  <option value="hod">Head of Department</option>
                 </select>
               </div>
 
@@ -231,13 +240,16 @@ export default function RegisterPage() {
                   name="department"
                   value={formData.department}
                   onChange={handleInputChange}
+                  disabled={departments.length === 0}
                   className={`w-full px-4 py-3 rounded-lg border ${
                     errors.department 
                       ? 'border-red-300 focus:border-red-500 focus:ring-red-500' 
                       : 'border-gray-300 dark:border-gray-600 focus:border-blue-500 focus:ring-blue-500'
-                  } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 transition-colors`}
+                  } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
-                  <option value="">Select your department</option>
+                  <option value="">
+                    {departments.length === 0 ? 'Loading departments...' : 'Select your department'}
+                  </option>
                   {departments.map((dept) => (
                     <option key={dept.id} value={dept.id}>
                       {dept.name}
@@ -247,25 +259,29 @@ export default function RegisterPage() {
                 {errors.department && (
                   <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.department}</p>
                 )}
+                {errors.departments && (
+                  <p className="mt-1 text-sm text-yellow-600 dark:text-yellow-400">{errors.departments}</p>
+                )}
               </div>
 
-              {/* Batch Year (only for students) */}
-              {formData.role === 'student' && (
+              {/* Faculty Type (only for faculty) */}
+              {formData.role === 'faculty' && (
                 <div>
-                  <label htmlFor="batchYear" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Batch Year *
+                  <label htmlFor="facultyType" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Faculty Type *
                   </label>
-                  <input
-                    type="number"
-                    id="batchYear"
-                    name="batchYear"
-                    value={formData.batchYear}
+                  <select
+                    id="facultyType"
+                    name="facultyType"
+                    value={formData.facultyType}
                     onChange={handleInputChange}
-                    min="2020"
-                    max={new Date().getFullYear() + 4}
                     className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 focus:border-blue-500 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 transition-colors"
-                    placeholder="Enter your batch year"
-                  />
+                  >
+                    <option value="general">General Faculty</option>
+                    <option value="creator">Creator (Can create timetables)</option>
+                    <option value="publisher">Publisher (Can publish timetables)</option>
+                    <option value="guest">Guest Faculty</option>
+                  </select>
                 </div>
               )}
 

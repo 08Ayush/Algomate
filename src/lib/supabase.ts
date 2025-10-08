@@ -6,37 +6,52 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-// Database Types based on your current schema
+// Database Types based on your new schema
 export interface Department {
   id: string
   name: string
   code: string
+  description?: string
+  head_of_department?: string
+  max_hours_per_day: number
+  working_days: string[]
+  default_class_duration: number
+  algorithm_priority: number
+  is_active: boolean
   created_at: string
-}
-
-export interface Faculty {
-  id: string
-  name: string
-  email: string
-  department_id: string
-  created_at: string
-}
-
-export interface Student {
-  id: string
-  name: string
-  email: string
-  department_id: string
-  batch_year: number
-  created_at: string
+  updated_at: string
 }
 
 export interface User {
   id: string
+  first_name: string
+  last_name: string
+  college_uid: string
   email: string
-  password: string
-  role: 'admin' | 'faculty' | 'student'
+  password_hash: string
+  phone?: string
+  profile_image_url?: string
+  department_id?: string
+  role: 'admin' | 'faculty' | 'student' | 'hod'
+  faculty_type?: 'creator' | 'publisher' | 'general' | 'guest'
+  max_hours_per_day?: number
+  max_hours_per_week?: number
+  min_hours_per_week?: number
+  faculty_priority?: number
+  algorithm_weight?: number
+  preferred_days?: string[]
+  avoid_days?: string[]
+  preferred_time_start?: string
+  preferred_time_end?: string
+  unavailable_slots?: any
+  is_shared_faculty?: boolean
+  is_guest_faculty?: boolean
+  is_active: boolean
+  email_verified: boolean
+  last_login?: string
   created_at: string
+  updated_at: string
+  departments?: Department
 }
 
 export interface Subject {
@@ -61,53 +76,49 @@ export const authHelpers = {
   async registerUser(userData: {
     email: string
     password: string
-    name: string
+    firstName: string
+    lastName: string
     department_id: string
-    role: 'student' | 'faculty'
-    batch_year?: number
+    role: 'admin' | 'faculty' | 'student' | 'hod'
+    faculty_type?: 'creator' | 'publisher' | 'general' | 'guest'
   }) {
     try {
+      // Generate unique college UID
+      const college_uid = `${userData.role.toUpperCase().substring(0, 3)}${Date.now().toString().slice(-6)}`
+      
       // Hash password
       const hashedPassword = await bcrypt.hash(userData.password, 12)
 
-      // Create user in users table
+      // Create user in users table with new schema
       const { data: userRecord, error: userError } = await supabase
         .from('users')
         .insert({
+          first_name: userData.firstName,
+          last_name: userData.lastName,
+          college_uid,
           email: userData.email,
-          password: hashedPassword,
-          role: userData.role
+          password_hash: hashedPassword,
+          department_id: userData.department_id,
+          role: userData.role,
+          faculty_type: userData.role === 'faculty' ? userData.faculty_type : null,
+          is_active: true,
+          email_verified: false
         })
-        .select()
+        .select(`
+          id,
+          first_name,
+          last_name,
+          college_uid,
+          email,
+          role,
+          faculty_type,
+          department_id,
+          created_at,
+          departments(id, name, code)
+        `)
         .single()
 
       if (userError) throw userError
-
-      // Add to specific role table
-      if (userData.role === 'student') {
-        const { error: studentError } = await supabase
-          .from('students')
-          .insert({
-            id: userRecord.id,
-            name: userData.name,
-            email: userData.email,
-            department_id: userData.department_id,
-            batch_year: userData.batch_year || new Date().getFullYear()
-          })
-
-        if (studentError) throw studentError
-      } else if (userData.role === 'faculty') {
-        const { error: facultyError } = await supabase
-          .from('faculty')
-          .insert({
-            id: userRecord.id,
-            name: userData.name,
-            email: userData.email,
-            department_id: userData.department_id
-          })
-
-        if (facultyError) throw facultyError
-      }
 
       return { userRecord }
     } catch (error) {
@@ -119,15 +130,15 @@ export const authHelpers = {
   // Login user
   async loginUser(identifier: string, password: string) {
     try {
-      // Find user by email
+      // Find user by email with department info
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select(`
           *,
-          students(*),
-          faculty(*)
+          departments(id, name, code)
         `)
         .eq('email', identifier)
+        .eq('is_active', true)
         .single()
 
       if (userError || !userData) {
@@ -135,10 +146,16 @@ export const authHelpers = {
       }
 
       // Check password
-      const isValidPassword = await bcrypt.compare(password, userData.password)
+      const isValidPassword = await bcrypt.compare(password, userData.password_hash)
       if (!isValidPassword) {
         throw new Error('Invalid email or password')
       }
+
+      // Update last login
+      await supabase
+        .from('users')
+        .update({ last_login: new Date().toISOString() })
+        .eq('id', userData.id)
 
       return { userData }
     } catch (error) {
@@ -154,10 +171,10 @@ export const authHelpers = {
         .from('users')
         .select(`
           *,
-          students(*),
-          faculty(*)
+          departments(id, name, code)
         `)
         .eq('id', userId)
+        .eq('is_active', true)
         .single()
 
       if (error) throw error
@@ -173,13 +190,18 @@ export const authHelpers = {
 export const dbHelpers = {
   // Get all departments
   async getDepartments(): Promise<Department[]> {
-    const { data, error } = await supabase
-      .from('departments')
-      .select('*')
-      .order('name')
-
-    if (error) throw error
-    return data || []
+    try {
+      // Use our API endpoint instead of direct Supabase call
+      const response = await fetch('/api/departments')
+      if (!response.ok) {
+        throw new Error(`Failed to fetch departments: ${response.status}`)
+      }
+      const result = await response.json()
+      return result.departments || []
+    } catch (error) {
+      console.error('Error fetching departments:', error)
+      throw error
+    }
   },
 
   // Get department by ID
@@ -241,28 +263,48 @@ export const dbHelpers = {
   },
 
   // Get all faculty
-  async getFaculty(): Promise<Faculty[]> {
+  async getFaculty(): Promise<User[]> {
     const { data, error } = await supabase
-      .from('faculty')
+      .from('users')
       .select(`
         *,
-        departments(name)
+        departments(id, name, code)
       `)
-      .order('name')
+      .eq('role', 'faculty')
+      .eq('is_active', true)
+      .order('first_name')
 
     if (error) throw error
     return data || []
   },
 
   // Get all students
-  async getStudents(): Promise<Student[]> {
+  async getStudents(): Promise<User[]> {
     const { data, error } = await supabase
-      .from('students')
+      .from('users')
       .select(`
         *,
-        departments(name)
+        departments(id, name, code)
       `)
-      .order('name')
+      .eq('role', 'student')
+      .eq('is_active', true)
+      .order('first_name')
+
+    if (error) throw error
+    return data || []
+  },
+
+  // Get all users by role
+  async getUsersByRole(role: 'admin' | 'faculty' | 'student' | 'hod'): Promise<User[]> {
+    const { data, error } = await supabase
+      .from('users')
+      .select(`
+        *,
+        departments(id, name, code)
+      `)
+      .eq('role', role)
+      .eq('is_active', true)
+      .order('first_name')
 
     if (error) throw error
     return data || []

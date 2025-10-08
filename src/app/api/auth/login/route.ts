@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
+
+// Create server-side supabase client with service role key
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  }
+);
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,11 +26,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find user by email
-    const { data: userData, error: userError } = await supabase
+    // Find user by email with department info
+    const { data: userData, error: userError } = await supabaseAdmin
       .from('users')
-      .select('*')
+      .select(`
+        id,
+        first_name,
+        last_name,
+        college_uid,
+        email,
+        password_hash,
+        phone,
+        profile_image_url,
+        department_id,
+        role,
+        faculty_type,
+        is_active,
+        email_verified,
+        last_login,
+        created_at,
+        departments!users_department_id_fkey(id, name, code)
+      `)
       .eq('email', email)
+      .eq('is_active', true)
       .single();
 
     if (userError || !userData) {
@@ -30,7 +60,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check password
-    const isValidPassword = await bcrypt.compare(password, userData.password);
+    const isValidPassword = await bcrypt.compare(password, userData.password_hash);
     if (!isValidPassword) {
       return NextResponse.json(
         { error: 'Invalid email or password' },
@@ -38,26 +68,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get role-specific data
-    let roleData = null;
-    if (userData.role === 'student') {
-      const { data: studentData } = await supabase
-        .from('students')
-        .select('*')
-        .eq('id', userData.id)
-        .single();
-      roleData = { students: studentData ? [studentData] : [] };
-    } else if (userData.role === 'faculty') {
-      const { data: facultyData } = await supabase
-        .from('faculty')
-        .select('*')
-        .eq('id', userData.id)
-        .single();
-      roleData = { faculty: facultyData ? [facultyData] : [] };
-    }
+    // Update last login
+    await supabaseAdmin
+      .from('users')
+      .update({ last_login: new Date().toISOString() })
+      .eq('id', userData.id);
 
-    // Remove password from response and add role data
-    const { password: _, ...userWithoutPassword } = { ...userData, ...roleData };
+    // Remove password from response
+    const { password_hash: _, ...userWithoutPassword } = userData;
 
     return NextResponse.json({
       message: 'Login successful',

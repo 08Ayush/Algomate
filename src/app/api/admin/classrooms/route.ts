@@ -1,0 +1,130 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+// Create admin Supabase client
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
+);
+
+export async function GET() {
+  try {
+    const { data: classrooms, error } = await supabaseAdmin
+      .from('classrooms')
+      .select('*')
+      .order('name');
+
+    if (error) {
+      console.error('Error fetching classrooms:', error);
+      return NextResponse.json({ error: 'Failed to fetch classrooms' }, { status: 500 });
+    }
+
+    return NextResponse.json(classrooms);
+  } catch (error) {
+    console.error('Server error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    
+    // Validate required fields
+    const { name, capacity, type } = body;
+    if (!name || !capacity || !type) {
+      return NextResponse.json(
+        { error: 'Name, capacity, and type are required' },
+        { status: 400 }
+      );
+    }
+
+    // Validate capacity
+    if (capacity < 1 || capacity > 500) {
+      return NextResponse.json(
+        { error: 'Capacity must be between 1 and 500' },
+        { status: 400 }
+      );
+    }
+
+    // Validate type
+    const validTypes = ['Lecture Hall', 'Lab', 'Seminar Room', 'Tutorial Room', 'Auditorium'];
+    if (!validTypes.includes(type)) {
+      return NextResponse.json(
+        { error: 'Invalid classroom type' },
+        { status: 400 }
+      );
+    }
+
+    // Validate floor number
+    if (body.floor_number !== undefined && (body.floor_number < 0 || body.floor_number > 20)) {
+      return NextResponse.json(
+        { error: 'Floor number must be between 0 and 20' },
+        { status: 400 }
+      );
+    }
+
+    // Validate priority
+    if (body.classroom_priority !== undefined && (body.classroom_priority < 1 || body.classroom_priority > 10)) {
+      return NextResponse.json(
+        { error: 'Classroom priority must be between 1 and 10' },
+        { status: 400 }
+      );
+    }
+
+    // Check if classroom name already exists
+    const { data: existingClassroom } = await supabaseAdmin
+      .from('classrooms')
+      .select('id')
+      .eq('name', name)
+      .single();
+
+    if (existingClassroom) {
+      return NextResponse.json(
+        { error: 'A classroom with this name already exists' },
+        { status: 400 }
+      );
+    }
+
+    // Prepare classroom data
+    const classroomData = {
+      name: name.trim(),
+      building: body.building?.trim() || null,
+      floor_number: body.floor_number || 1,
+      capacity,
+      type,
+      has_projector: body.has_projector || false,
+      has_ac: body.has_ac || false,
+      has_computers: body.has_computers || false,
+      has_lab_equipment: body.has_lab_equipment || false,
+      is_smart_classroom: body.is_smart_classroom || false,
+      classroom_priority: body.classroom_priority || 5,
+      booking_weight: body.booking_weight || 1.0,
+      facilities: body.facilities || [],
+      location_notes: body.location_notes?.trim() || null,
+      is_available: body.is_available !== undefined ? body.is_available : true,
+    };
+
+    const { data: classroom, error } = await supabaseAdmin
+      .from('classrooms')
+      .insert([classroomData])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating classroom:', error);
+      return NextResponse.json({ error: 'Failed to create classroom' }, { status: 500 });
+    }
+
+    return NextResponse.json(classroom, { status: 201 });
+  } catch (error) {
+    console.error('Server error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
