@@ -32,7 +32,7 @@ export interface User {
   phone?: string
   profile_image_url?: string
   department_id?: string
-  role: 'admin' | 'faculty' | 'student' | 'hod'
+  role: 'admin' | 'college_admin' | 'faculty' | 'student' | 'hod'
   faculty_type?: 'creator' | 'publisher' | 'general' | 'guest'
   max_hours_per_day?: number
   max_hours_per_week?: number

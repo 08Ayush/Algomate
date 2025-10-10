@@ -39,6 +39,9 @@ interface Assignment {
   subject: Subject;
   timeSlot: TimeSlot;
   classroom?: string;
+  isLab?: boolean;
+  duration?: number; // Duration in hours (1 for regular class, 2 for lab)
+  endSlotIndex?: number; // For lab sessions that span multiple slots
 }
 
 interface ManualSchedulingComponentProps {
@@ -58,6 +61,8 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
   const [dragOverSlot, setDragOverSlot] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [timetableTitle, setTimetableTitle] = useState('');
 
   // Time slots for the timetable
   const timeSlots: TimeSlot[] = [
@@ -105,9 +110,18 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
     { id: '38', day: 'Friday', time: '1:15-2:15', startTime: '13:15', endTime: '14:15', slotIndex: 5, isLunch: true },
     { id: '39', day: 'Friday', time: '2:15-3:15', startTime: '14:15', endTime: '15:15', slotIndex: 6 },
     { id: '40', day: 'Friday', time: '3:15-4:15', startTime: '15:15', endTime: '16:15', slotIndex: 7 },
+    
+    { id: '41', day: 'Saturday', time: '9:00-10:00', startTime: '09:00', endTime: '10:00', slotIndex: 0 },
+    { id: '42', day: 'Saturday', time: '10:00-11:00', startTime: '10:00', endTime: '11:00', slotIndex: 1 },
+    { id: '43', day: 'Saturday', time: '11:00-11:15', startTime: '11:00', endTime: '11:15', slotIndex: 2, isBreak: true },
+    { id: '44', day: 'Saturday', time: '11:15-12:15', startTime: '11:15', endTime: '12:15', slotIndex: 3 },
+    { id: '45', day: 'Saturday', time: '12:15-1:15', startTime: '12:15', endTime: '13:15', slotIndex: 4 },
+    { id: '46', day: 'Saturday', time: '1:15-2:15', startTime: '13:15', endTime: '14:15', slotIndex: 5, isLunch: true },
+    { id: '47', day: 'Saturday', time: '2:15-3:15', startTime: '14:15', endTime: '15:15', slotIndex: 6 },
+    { id: '48', day: 'Saturday', time: '3:15-4:15', startTime: '15:15', endTime: '16:15', slotIndex: 7 },
   ];
 
-  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
   // Load faculty and subjects from database
   useEffect(() => {
@@ -122,14 +136,20 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
       );
       setFilteredSubjects(semesterSubjects);
 
-      // Filter faculty who can teach subjects in this semester
-      const relevantFaculty = faculty.filter(facultyMember => 
-        facultyMember.qualifiedSubjects.some(qualifiedSubject => 
-          semesterSubjects.some(semesterSubject => 
-            semesterSubject.id === qualifiedSubject.id
-          )
-        )
-      );
+      // For now, show all faculty regardless of qualifications
+      // Later we can add qualification-based filtering
+      const relevantFaculty = faculty.filter(facultyMember => {
+        // If faculty has qualifications, filter by them
+        if (facultyMember.qualifiedSubjects.length > 0) {
+          return facultyMember.qualifiedSubjects.some(qualifiedSubject => 
+            semesterSubjects.some(semesterSubject => 
+              semesterSubject.id === qualifiedSubject.id
+            )
+          );
+        }
+        // If no qualifications exist, show all faculty
+        return true;
+      });
       setFilteredFaculty(relevantFaculty);
 
       // Clear selections when semester changes
@@ -163,7 +183,7 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
         }
         
         // Use default department temporarily
-        console.log('⚠️ Using default CSE department:', defaultDept.id);
+        console.log('⚠ Using default CSE department:', defaultDept.id);
         user.department_id = defaultDept.id;
       }
 
@@ -204,7 +224,7 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
       console.log('📚 Loading subjects for department:', user.department_id);
       const { data: subjectsData, error: subjectsError } = await supabase
         .from('subjects')
-        .select('id, name, code, subject_type, credits, requires_lab, semester')
+        .select('id, name, code, subject_type, credits_per_week, requires_lab, semester')
         .eq('department_id', user.department_id)
         .eq('is_active', true)
         .order('semester', { ascending: true });
@@ -232,7 +252,7 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
         name: s.name,
         code: s.code,
         subjectType: s.subject_type,
-        credits: s.credits,
+        credits: s.credits_per_week,
         requiresLab: s.requires_lab,
         semester: s.semester || 1
       })) || [];
@@ -248,7 +268,7 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
           .select(`
             faculty_id,
             subject_id,
-            subjects!inner(id, name, code, subject_type, credits, requires_lab, semester)
+            subjects!inner(id, name, code, subject_type, credits_per_week, requires_lab, semester)
           `)
           .in('faculty_id', facultyIds);
 
@@ -268,7 +288,7 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
               name: q.subjects.name,
               code: q.subjects.code,
               subjectType: q.subjects.subject_type,
-              credits: q.subjects.credits,
+              credits: q.subjects.credits_per_week,
               requiresLab: q.subjects.requires_lab,
               semester: q.subjects.semester || 1
             })) || []
@@ -277,7 +297,7 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
         setFaculty(updatedFaculty);
         console.log('✅ Faculty updated with qualifications');
       } else {
-        console.log('⚠️  No faculty found, skipping qualifications');
+        console.log('⚠  No faculty found, skipping qualifications');
       }
       
       console.log('🎉 Data loading completed successfully!');
@@ -295,11 +315,23 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
     const conflicts: string[] = [];
     
     assignments.forEach(assignment => {
-      if (assignment.timeSlot.day === newAssignment.timeSlot.day && 
-          assignment.timeSlot.slotIndex === newAssignment.timeSlot.slotIndex) {
-        // Faculty conflict
-        if (assignment.faculty.id === newAssignment.faculty.id) {
-          conflicts.push(`${assignment.faculty.firstName} ${assignment.faculty.lastName} is already assigned at ${assignment.timeSlot.day} ${assignment.timeSlot.time}`);
+      // Check for faculty conflicts
+      if (assignment.faculty.id === newAssignment.faculty.id) {
+        // For lab sessions, check all occupied slots
+        const assignmentSlots = assignment.isLab 
+          ? [assignment.timeSlot.slotIndex, assignment.endSlotIndex!]
+          : [assignment.timeSlot.slotIndex];
+          
+        const newAssignmentSlots = newAssignment.isLab 
+          ? [newAssignment.timeSlot.slotIndex, newAssignment.endSlotIndex!]
+          : [newAssignment.timeSlot.slotIndex];
+        
+        // Check if any slots overlap on the same day
+        if (assignment.timeSlot.day === newAssignment.timeSlot.day) {
+          const hasOverlap = assignmentSlots.some(slot => newAssignmentSlots.includes(slot));
+          if (hasOverlap) {
+            conflicts.push(`${assignment.faculty.firstName} ${assignment.faculty.lastName} is already assigned at ${assignment.timeSlot.day} ${assignment.timeSlot.time}`);
+          }
         }
       }
     });
@@ -308,34 +340,70 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
   }, [assignments]);
 
   const handleAssignClass = useCallback((faculty: Faculty, subject: Subject, timeSlot: TimeSlot) => {
-    // Check if faculty is qualified for this subject
-    const isQualified = faculty.qualifiedSubjects.some(s => s.id === subject.id);
-    if (!isQualified) {
-      alert(`${faculty.firstName} ${faculty.lastName} is not qualified to teach ${subject.name}`);
-      return;
+    // Check if faculty is qualified for this subject (skip check if no qualifications set up)
+    const hasQualifications = faculty.qualifiedSubjects.length > 0;
+    if (hasQualifications) {
+      const isQualified = faculty.qualifiedSubjects.some(s => s.id === subject.id);
+      if (!isQualified) {
+        console.warn(`${faculty.firstName} ${faculty.lastName} is not qualified to teach ${subject.name}`);
+        return;
+      }
+    }
+
+    const isLab = subject.requiresLab || subject.subjectType.toLowerCase().includes('lab');
+    const duration = isLab ? 2 : 1;
+    
+    // For lab sessions, check if we have enough consecutive slots
+    if (isLab) {
+      // Skip break/lunch slots for consecutive checking
+      const nextSlotIndex = timeSlot.slotIndex + 1;
+      
+      // Check if next slot exists and is not break/lunch
+      const nextTimeSlot = timeSlots.find(ts => 
+        ts.day === timeSlot.day && ts.slotIndex === nextSlotIndex
+      );
+      
+      if (!nextTimeSlot || nextTimeSlot.isBreak || nextTimeSlot.isLunch) {
+        console.warn('Lab sessions require 2 consecutive non-break hours');
+        return;
+      }
+      
+      // Check if both slots are free
+      const slot1Assignment = assignments.find(a => 
+        a.timeSlot.day === timeSlot.day && a.timeSlot.slotIndex === timeSlot.slotIndex
+      );
+      const slot2Assignment = assignments.find(a => 
+        a.timeSlot.day === timeSlot.day && a.timeSlot.slotIndex === nextSlotIndex
+      );
+      
+      if (slot1Assignment || slot2Assignment) {
+        console.warn('Both time slots must be free for lab sessions');
+        return;
+      }
     }
 
     const newAssignment: Assignment = {
       id: `${faculty.id}-${subject.id}-${timeSlot.day}-${timeSlot.slotIndex}-${Date.now()}`,
       faculty,
       subject,
-      timeSlot
+      timeSlot,
+      isLab,
+      duration,
+      endSlotIndex: isLab ? timeSlot.slotIndex + 1 : undefined
     };
 
     const conflicts = checkConflicts(newAssignment);
     
     if (conflicts.length > 0) {
-      alert(`Scheduling Conflict: ${conflicts[0]}`);
+      console.warn(`Scheduling Conflict: ${conflicts[0]}`);
       return;
     }
 
     setAssignments(prev => [...prev, newAssignment]);
-    alert(`Class assigned: ${subject.name} with ${faculty.firstName} ${faculty.lastName} on ${timeSlot.day} ${timeSlot.time}`);
-  }, [checkConflicts]);
+  }, [checkConflicts, assignments, timeSlots]);
 
   const handleRemoveAssignment = useCallback((assignmentId: string) => {
     setAssignments(prev => prev.filter(a => a.id !== assignmentId));
-    alert('Assignment removed from timetable');
   }, []);
 
   const handleDragStart = (type: 'faculty' | 'subject', item: any) => {
@@ -359,13 +427,11 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
     setDragOverSlot(null);
     
     if (!draggedItem) {
-      alert('No item selected. Please drag a faculty or subject to assign.');
       return;
     }
     
     // Check if the time slot is a break or lunch
     if (timeSlot.isBreak || timeSlot.isLunch) {
-      alert('Cannot assign classes during break or lunch time.');
       setDraggedItem(null);
       return;
     }
@@ -374,32 +440,216 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
       handleAssignClass(draggedItem.item, selectedSubject, timeSlot);
     } else if (draggedItem.type === 'subject' && selectedFaculty) {
       handleAssignClass(selectedFaculty, draggedItem.item, timeSlot);
-    } else if (draggedItem.type === 'faculty' && !selectedSubject) {
-      alert(`You've dragged "${draggedItem.item.firstName} ${draggedItem.item.lastName}". Please select a subject first, then try dragging again.`);
-    } else if (draggedItem.type === 'subject' && !selectedFaculty) {
-      alert(`You've dragged "${draggedItem.item.name}". Please select a faculty member first, then try dragging again.`);
-    } else {
-      alert('Please select both a faculty member and a subject before dragging.');
     }
     
     setDraggedItem(null);
   };
-
   const getAssignmentForSlot = (day: string, slotIndex: number) => {
-    return assignments.find(a => a.timeSlot.day === day && a.timeSlot.slotIndex === slotIndex);
+    // Check for direct assignment
+    const directAssignment = assignments.find(a => a.timeSlot.day === day && a.timeSlot.slotIndex === slotIndex);
+    if (directAssignment) {
+      return directAssignment;
+    }
+    
+    // Check if this slot is part of a lab session (second hour of a 2-hour lab)
+    const labAssignment = assignments.find(a => 
+      a.timeSlot.day === day && 
+      a.isLab && 
+      a.endSlotIndex === slotIndex
+    );
+    
+    if (labAssignment) {
+      return labAssignment;
+    }
+    
+    return null;
   };
 
   const saveSchedule = async () => {
     setSaving(true);
     try {
-      // Here you would save the schedule to the database
-      // For now, just show a success message
-      alert(`Timetable saved successfully with ${assignments.length} assignments!`);
+      if (assignments.length === 0) {
+        alert('Please create at least one assignment before saving.');
+        return;
+      }
+
+      if (!timetableTitle.trim()) {
+        alert('Please enter a title for the timetable.');
+        return;
+      }
+
+      // Log the full user object to see what we're working with
+      console.log('👤 Full user object:', user);
+      console.log('📋 User properties:', {
+        id: user?.id,
+        userId: user?.userId,
+        department_id: user?.department_id,
+        departmentId: user?.departmentId,
+        college_id: user?.college_id,
+        collegeId: user?.collegeId,
+        allKeys: Object.keys(user || {})
+      });
+
+      // Try different property names that might be used
+      const userId = user?.id || user?.userId;
+      let departmentId = user?.department_id || user?.departmentId;
+      let collegeId = user?.college_id || user?.collegeId;
+
+      // Validate critical user ID field
+      if (!userId) {
+        alert('User information is incomplete. Missing user ID. Please log in again.');
+        console.error('❌ Missing user ID in user object:', user);
+        return;
+      }
+
+      // If department or college is missing, try to fetch from API using batch for this semester
+      if (!departmentId || !collegeId) {
+        console.warn('⚠️ User missing department_id or college_id, will let API derive from batch');
+        console.log('📍 User fields:', { userId, departmentId, collegeId });
+      }
+
+      // Build payload - API will derive college/department from batch if not provided
+      const payload = {
+        assignments,
+        createdBy: userId,
+        academicYear: '2025-26',
+        semester: selectedSemester,
+        // Only include department/college if available
+        ...(departmentId && { departmentId }),
+        ...(collegeId && { collegeId }),
+        title: timetableTitle.trim()
+      };
+
+      console.log('📤 Sending timetable save request:', payload);
+
+      const response = await fetch('/api/timetables', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+      console.log('📥 Save response:', data);
+      console.log('📥 Response status:', response.status);
+      console.log('📥 Full response data:', JSON.stringify(data, null, 2));
+
+      if (data.success) {
+        alert(`Timetable saved successfully! You can now submit it for review.`);
+        // Optionally reset the form or redirect
+        // setAssignments([]);
+        // setTimetableTitle('');
+      } else {
+        console.error('❌ Save failed with error:', data.error);
+        console.error('❌ Error details:', data.details);
+        console.error('❌ Error hint:', data.hint);
+        console.error('❌ Error code:', data.code);
+        alert(`Error saving timetable: ${data.error}\n\nDetails: ${data.details || 'No details'}\n\nHint: ${data.hint || 'No hint'}`);
+      }
     } catch (error) {
-      console.error('Error saving schedule:', error);
-      alert('Error saving schedule');
+      console.error('❌ Exception during save:', error);
+      alert('Error saving schedule. Please try again.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const submitForReview = async () => {
+    setSubmitting(true);
+    try {
+      if (assignments.length === 0) {
+        alert('Please create at least one assignment before submitting.');
+        return;
+      }
+
+      if (!timetableTitle.trim()) {
+        alert('Please enter a title for the timetable.');
+        return;
+      }
+
+      // Log the full user object to see what we're working with
+      console.log('👤 Full user object (submit):', user);
+
+      // Try different property names that might be used
+      const userId = user?.id || user?.userId;
+      let departmentId = user?.department_id || user?.departmentId;
+      let collegeId = user?.college_id || user?.collegeId;
+
+      // Validate critical user ID field
+      if (!userId) {
+        alert('User information is incomplete. Missing user ID. Please log in again.');
+        console.error('❌ Missing user ID in user object:', user);
+        return;
+      }
+
+      // If department or college is missing, let API derive from batch
+      if (!departmentId || !collegeId) {
+        console.warn('⚠️ User missing department_id or college_id, will let API derive from batch');
+        console.log('📍 User fields:', { userId, departmentId, collegeId });
+      }
+
+      // Build payload - API will derive college/department from batch if not provided
+      const payload = {
+        assignments,
+        createdBy: userId,
+        academicYear: '2025-26',
+        semester: selectedSemester,
+        // Only include department/college if available
+        ...(departmentId && { departmentId }),
+        ...(collegeId && { collegeId }),
+        title: timetableTitle.trim()
+      };
+
+      console.log('📤 Sending timetable save request for review:', payload);
+
+      // First save the timetable
+      const saveResponse = await fetch('/api/timetables', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const saveData = await saveResponse.json();
+      console.log('📥 Save response:', saveData);
+
+      if (!saveData.success) {
+        alert(`Error saving timetable: ${saveData.error}`);
+        return;
+      }
+
+      // Then submit for review
+      const publishResponse = await fetch('/api/timetables/publish', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          timetableId: saveData.timetable.id,
+          action: 'submit_for_review',
+          publisherId: userId // Use the flexible userId variable
+        }),
+      });
+
+      const publishData = await publishResponse.json();
+
+      if (publishData.success) {
+        alert('Timetable submitted for review successfully! Publishers will be notified.');
+        // Reset form
+        setAssignments([]);
+        setTimetableTitle('');
+        setSelectedFaculty(null);
+        setSelectedSubject(null);
+      } else {
+        alert(`Error submitting for review: ${publishData.error}`);
+      }
+    } catch (error) {
+      console.error('Error submitting for review:', error);
+      alert('Error submitting for review. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -440,7 +690,70 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
             ))}
           </select>
           <div className="text-sm text-gray-600">
-            Showing {filteredSubjects.length} subjects and {filteredFaculty.length} qualified faculty for Semester {selectedSemester}
+            Showing {filteredSubjects.length} subjects and {filteredFaculty.length} faculty for Semester {selectedSemester} | {assignments.length} assignments created
+          </div>
+        </div>
+      </div>
+
+      {/* Timetable Title and Actions */}
+      <div className="mb-6 p-4 bg-white rounded-lg shadow-sm border">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex-1">
+            <label htmlFor="timetableTitle" className="block text-sm font-medium text-gray-700 mb-2">
+              Timetable Title
+            </label>
+            <input
+              id="timetableTitle"
+              type="text"
+              value={timetableTitle}
+              onChange={(e) => setTimetableTitle(e.target.value)}
+              placeholder={`Semester ${selectedSemester} Timetable - 2025-26`}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-600">
+              {assignments.length} assignment{assignments.length !== 1 ? 's' : ''}
+            </span>
+            <button
+              onClick={saveSchedule}
+              disabled={saving || assignments.length === 0 || !timetableTitle.trim()}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {saving ? (
+                <>
+                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd"/>
+                  </svg>
+                  Save Draft
+                </>
+              )}
+            </button>
+            <button
+              onClick={submitForReview}
+              disabled={submitting || assignments.length === 0 || !timetableTitle.trim()}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {submitting ? (
+                <>
+                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.293l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clipRule="evenodd"/>
+                  </svg>
+                  Submit for Review
+                </>
+              )}
+            </button>
           </div>
         </div>
       </div>
@@ -453,7 +766,7 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
               <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z"/>
               </svg>
-              <span className="font-medium">Selected Faculty:</span>
+              <span className="font-medium text-gray-700">Selected Faculty:</span>
               <span className={selectedFaculty ? 'text-green-600 font-medium' : 'text-gray-400'}>
                 {selectedFaculty ? `${selectedFaculty.firstName} ${selectedFaculty.lastName}` : 'None selected'}
               </span>
@@ -463,22 +776,11 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
               <svg className="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M12 1.586l-4 4v12.828l4-4V1.586zM3.707 3.293A1 1 0 002 4v10a1 1 0 00.293.707L6 18.414V5.586L3.707 3.293zM17.707 5.293L14 1.586v12.828l2.293 2.293A1 1 0 0018 16V6a1 1 0 00-.293-.707z" clipRule="evenodd"/>
               </svg>
-              <span className="font-medium">Selected Subject:</span>
+              <span className="font-medium text-gray-700">Selected Subject:</span>
               <span className={selectedSubject ? 'text-green-600 font-medium' : 'text-gray-400'}>
                 {selectedSubject ? `${selectedSubject.name} (${selectedSubject.code}) - Sem ${selectedSubject.semester}` : 'None selected'}
               </span>
             </div>
-          </div>
-          
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">Assignments: {assignments.length}</span>
-            <button
-              onClick={saveSchedule}
-              disabled={saving || assignments.length === 0}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving ? 'Saving...' : 'Save Schedule'}
-            </button>
           </div>
         </div>
       </div>
@@ -493,7 +795,7 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
                 <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z"/>
                 </svg>
-                Faculty Qualified for Sem {selectedSemester} ({filteredFaculty.length})
+                Faculty for Sem {selectedSemester} ({filteredFaculty.length})
               </h3>
             </div>
             <div className="p-4 max-h-80 overflow-y-auto">
@@ -514,12 +816,15 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
                   </div>
                   <div className="text-sm text-gray-500">{facultyMember.email}</div>
                   <div className="text-xs text-blue-600 mt-1">
-                    {facultyMember.qualifiedSubjects.filter(s => s.semester === selectedSemester).length} subjects for Sem {selectedSemester}
+                    {facultyMember.qualifiedSubjects.length > 0 
+                      ? `${facultyMember.qualifiedSubjects.filter(s => s.semester === selectedSemester).length} qualified subjects for Sem ${selectedSemester}`
+                      : 'No qualifications set up yet'
+                    }
                   </div>
                 </div>
               )) : (
                 <div className="text-center text-gray-500 py-4">
-                  No faculty qualified for Semester {selectedSemester} subjects
+                  No faculty available for Semester {selectedSemester}
                 </div>
               )}
             </div>
@@ -558,6 +863,11 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
                     <span className="text-xs px-2 py-1 bg-purple-100 text-purple-600 rounded">
                       Sem {subject.semester}
                     </span>
+                    {(subject.requiresLab || subject.subjectType.toLowerCase().includes('lab')) && (
+                      <span className="text-xs px-2 py-1 bg-orange-100 text-orange-600 rounded">
+                        Lab (2hrs)
+                      </span>
+                    )}
                   </div>
                 </div>
               )) : (
@@ -609,7 +919,7 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
                           return (
                             <td
                               key={`${day}-${slotIndex}`}
-                              className={`p-1 border-r border-b h-20 relative ${
+                              className={`p-1 border-r border-b h-24 relative ${
                                 isBreakOrLunch
                                   ? (timeSlot?.isBreak ? 'bg-orange-50' : 'bg-yellow-50')
                                   : 'bg-gray-50'
@@ -627,18 +937,35 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
                                   </span>
                                 </div>
                               ) : assignment ? (
-                                <div className="bg-blue-500 text-white p-2 rounded text-xs h-full flex flex-col justify-between">
-                                  <div>
-                                    <div className="font-medium truncate">{assignment.subject.code}</div>
-                                    <div className="truncate">{assignment.faculty.firstName} {assignment.faculty.lastName}</div>
+                                <div className={`text-white p-2 rounded text-xs h-full flex flex-col justify-between ${
+                                  assignment.isLab ? 'bg-purple-500' : 'bg-blue-500'
+                                }`}>
+                                  <div className="flex-1">
+                                    <div className="font-bold text-sm mb-1">{assignment.subject.name}</div>
+                                    <div className="text-xs opacity-90">{assignment.subject.code}</div>
+                                    <div className="text-xs opacity-90 mt-1">
+                                      {assignment.faculty.firstName} {assignment.faculty.lastName}
+                                    </div>
+                                    {assignment.isLab && (
+                                      <div className="text-xs bg-white bg-opacity-20 px-1 rounded mt-1">
+                                        Lab (2hrs)
+                                      </div>
+                                    )}
+                                    {assignment.isLab && assignment.timeSlot.slotIndex === slotIndex && (
+                                      <div className="text-xs opacity-75 mt-1">
+                                        {assignment.timeSlot.time.split('-')[0]} - {timeSlots.find(ts => ts.day === day && ts.slotIndex === slotIndex + 1)?.time.split('-')[1]}
+                                      </div>
+                                    )}
                                   </div>
-                                  <button
-                                    onClick={() => handleRemoveAssignment(assignment.id)}
-                                    className="text-white hover:text-red-200 self-end"
-                                    title="Remove assignment"
-                                  >
-                                    ✕
-                                  </button>
+                                  {assignment.timeSlot.slotIndex === slotIndex && (
+                                    <button
+                                      onClick={() => handleRemoveAssignment(assignment.id)}
+                                      className="text-white hover:text-red-200 self-end mt-1"
+                                      title="Remove assignment"
+                                    >
+                                      ✕
+                                    </button>
+                                  )}
                                 </div>
                               ) : (
                                 <div className="flex items-center justify-center h-full text-gray-400 text-xs">

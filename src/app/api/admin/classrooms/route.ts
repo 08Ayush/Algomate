@@ -25,7 +25,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Failed to fetch classrooms' }, { status: 500 });
     }
 
-    return NextResponse.json(classrooms);
+    return NextResponse.json({ classrooms: classrooms || [] });
   } catch (error) {
     console.error('Server error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -92,6 +92,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get college_id from the first available college
+    // In a multi-college system, this should come from the logged-in user's context
+    const { data: colleges } = await supabaseAdmin
+      .from('colleges')
+      .select('id')
+      .limit(1)
+      .single();
+
+    if (!colleges) {
+      return NextResponse.json(
+        { error: 'No college found. Please contact administrator.' },
+        { status: 400 }
+      );
+    }
+
     // Prepare classroom data
     const classroomData = {
       name: name.trim(),
@@ -99,6 +114,7 @@ export async function POST(request: NextRequest) {
       floor_number: body.floor_number || 1,
       capacity,
       type,
+      college_id: colleges.id,  // CRITICAL: Include college_id
       has_projector: body.has_projector || false,
       has_ac: body.has_ac || false,
       has_computers: body.has_computers || false,
@@ -122,7 +138,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create classroom' }, { status: 500 });
     }
 
-    return NextResponse.json(classroom, { status: 201 });
+    return NextResponse.json({ 
+      message: 'Classroom created successfully',
+      classroom 
+    }, { status: 201 });
   } catch (error) {
     console.error('Server error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

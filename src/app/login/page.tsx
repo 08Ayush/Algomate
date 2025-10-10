@@ -88,14 +88,24 @@ export default function LoginPage() {
       // Store user data in localStorage for now (in production, use proper session management)
       localStorage.setItem('user', JSON.stringify(data.userData));
       
-      // Redirect based on user role
+      // Redirect based on user role and faculty type
       const role = data.userData.role;
+      const facultyType = data.userData.faculty_type;
+      
       switch (role) {
         case 'admin':
+        case 'college_admin':
           router.push('/admin/dashboard');
           break;
         case 'faculty':
-          router.push('/faculty/dashboard');
+          // Creator and Publisher go to faculty dashboard
+          // General and Guest faculty go to student dashboard (view-only)
+          if (facultyType === 'creator' || facultyType === 'publisher') {
+            router.push('/faculty/dashboard');
+          } else {
+            // General, Guest, or no faculty_type → student-like dashboard
+            router.push('/student/dashboard');
+          }
           break;
         case 'student':
           router.push('/student/dashboard');

@@ -31,29 +31,17 @@ async function createAdminUser() {
     // Get a department for the admin
     const { data: department } = await supabaseAdmin
       .from('departments')
-      .select('id, name')
+      .select('id, name, college_id')
       .limit(1)
       .single();
 
     if (!department) {
-      console.log('No departments found. Creating one...');
-      const { data: newDept, error: deptError } = await supabaseAdmin
-        .from('departments')
-        .insert({
-          name: 'Administration',
-          code: 'ADMIN',
-          description: 'Administrative Department'
-        })
-        .select()
-        .single();
-
-      if (deptError) {
-        console.error('Failed to create department:', deptError);
-        return;
-      }
-      
-      department = newDept;
+      console.log('No departments found. Please ensure departments exist first.');
+      return;
     }
+
+    console.log('Using department:', department.name);
+    console.log('College ID:', department.college_id);
 
     // Hash password
     const password = 'admin123';
@@ -71,6 +59,7 @@ async function createAdminUser() {
         role: 'admin',
         faculty_type: null, // Admin users don't have faculty_type
         department_id: department.id,
+        college_id: department.college_id, // Add college_id
         is_active: true,
         email_verified: true
       })

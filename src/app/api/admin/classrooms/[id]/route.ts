@@ -121,7 +121,10 @@ export async function PUT(
       return NextResponse.json({ error: 'Failed to update classroom' }, { status: 500 });
     }
 
-    return NextResponse.json(classroom);
+    return NextResponse.json({ 
+      message: 'Classroom updated successfully',
+      classroom 
+    });
   } catch (error) {
     console.error('Server error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

@@ -69,13 +69,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get college_id from the first available college
+    // In a multi-college system, this should come from the logged-in user's context
+    const { data: colleges } = await supabaseAdmin
+      .from('colleges')
+      .select('id')
+      .limit(1)
+      .single();
+
+    if (!colleges) {
+      return NextResponse.json(
+        { error: 'No college found. Please contact administrator.' },
+        { status: 400 }
+      );
+    }
+
     // Create department
     const { data: newDept, error } = await supabaseAdmin
       .from('departments')
       .insert({
         name,
         code: code.toUpperCase(),
-        description: description || null
+        description: description || null,
+        college_id: colleges.id  // CRITICAL: Include college_id
       })
       .select()
       .single();

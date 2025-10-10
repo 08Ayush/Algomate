@@ -41,19 +41,43 @@ Open [http://localhost:3000](http://localhost:3000) (or the port shown in your t
 ```
 src/
 ├── app/
-│   ├── api/
-│   │   ├── students/          # Student management API
-│   │   └── recommendations/   # AI-powered recommendations API
+│   ├── api/                   # API Routes
+│   │   ├── auth/             # Authentication endpoints
+│   │   └── admin/            # Admin management endpoints
+│   ├── admin/                # Admin dashboard pages
+│   ├── faculty/              # Faculty dashboard pages
+│   ├── student/              # Student dashboard pages
+│   ├── login/                # Login page
 │   ├── globals.css           # Global styles
 │   ├── layout.tsx            # Root layout component
-│   └── page.tsx              # Home page
-└── components/
-    ├── Header.tsx            # Navigation header
-    ├── Hero.tsx              # Hero section
-    ├── Features.tsx          # Features showcase
-    ├── About.tsx             # About section
-    ├── CTA.tsx               # Call-to-action section
-    └── Footer.tsx            # Footer component
+│   └── page.tsx              # Landing page
+├── components/               # Reusable React components
+│   ├── Header.tsx           # Navigation header with auth
+│   └── ...
+├── contexts/                # React Context providers
+│   └── ThemeContext.tsx     # Dark mode theme provider
+└── lib/                     # Utility libraries
+    └── supabase.ts          # Supabase client & types
+
+database/                    # 🗄️ SQL Scripts & Schema
+├── schema.sql              # Original database schema
+├── new_schema.sql          # Enhanced schema
+├── fix-*.sql               # Database fix scripts
+├── insert-*.sql            # Data insertion scripts
+├── verify-*.sql            # Verification scripts
+├── README.md               # Database documentation
+└── README-SQL-SCRIPTS.md   # SQL scripts guide
+
+scripts/                    # 🔧 Utility JavaScript Scripts
+├── check-*.js             # Verification scripts
+├── debug-*.js             # Debugging tools
+├── fix-*.js               # Database fix scripts
+├── setup-*.js             # Setup & initialization
+├── test-*.js              # Testing scripts
+└── README.md              # Scripts documentation
+
+refrance/                  # Reference implementations
+public/                    # Static assets
 ```
 
 ## 🔌 API Endpoints
@@ -90,7 +114,59 @@ npm start
 
 The project is optimized for deployment on Vercel, Netlify, or any other modern hosting platform.
 
-## 📝 Customization
+## � Organized Folders
+
+### 🗄️ `database/` - SQL Scripts & Schema
+All SQL files for database management are organized here:
+- Schema definitions (`schema.sql`, `new_schema.sql`)
+- Setup scripts (`setup-*.sql`)
+- Fix scripts (`fix-*.sql`)
+- Data insertion (`insert-*.sql`)
+- Verification scripts (`verify-*.sql`)
+
+📖 **See**: `database/README-SQL-SCRIPTS.md` for detailed documentation
+
+### 🔧 `scripts/` - Utility Scripts
+All JavaScript utility scripts are organized here:
+- Authentication scripts (`check-admin-role.js`, `create-admin.js`)
+- Debugging tools (`debug-*.js`)
+- Database management (`fix-*.js`, `deploy-schema.js`)
+- Testing utilities (`test-*.js`)
+- Setup scripts (`setup-*.js`)
+
+📖 **See**: `scripts/README.md` for detailed documentation
+
+### 🎨 `refrance/` - Reference Files
+Reference implementations and examples from previous versions.
+
+## 🗄️ Database Setup
+
+1. **Create Supabase Project**: [supabase.com/dashboard](https://supabase.com/dashboard)
+2. **Run Schema**: Execute `database/new_schema.sql` in SQL Editor
+3. **Setup Permissions**: Run `database/complete_schema_with_permissions.sql`
+4. **Insert Data**: Run `database/insert_full_cse_curriculum.sql`
+5. **Configure Environment**: Add Supabase credentials to `.env.local`
+
+For detailed instructions, see `database/README.md`
+
+## 🔧 Utility Scripts
+
+Run scripts from the project root:
+
+```bash
+# Check admin role
+node scripts/check-admin-role.js
+
+# Show system summary
+node scripts/show-system-summary.js
+
+# Fix admin access
+node scripts/fix-admin-access-level.js
+```
+
+**Note**: Scripts require Supabase credentials in `.env.local`
+
+## �📝 Customization
 
 The landing page is fully customizable:
 

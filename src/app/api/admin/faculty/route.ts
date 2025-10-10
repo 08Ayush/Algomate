@@ -29,6 +29,7 @@ export async function GET() {
         role,
         faculty_type,
         department_id,
+        college_id,
         is_active,
         departments!users_department_id_fkey(id, name, code)
       `)
@@ -101,16 +102,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if department exists
+    // Check if department exists and get college_id
     const { data: department } = await supabaseAdmin
       .from('departments')
-      .select('id, code')
+      .select('id, code, college_id')
       .eq('id', department_id)
       .single();
 
     if (!department) {
       return NextResponse.json(
         { error: 'Department not found' },
+        { status: 400 }
+      );
+    }
+
+    if (!department.college_id) {
+      return NextResponse.json(
+        { error: 'Department does not have a college_id assigned' },
         { status: 400 }
       );
     }
@@ -137,6 +145,7 @@ export async function POST(request: NextRequest) {
         role,
         faculty_type: faculty_type || 'general',
         department_id,
+        college_id: department.college_id,  // CRITICAL: Include college_id from department
         is_active: is_active !== undefined ? is_active : true,
         email_verified: false
       })
@@ -150,6 +159,7 @@ export async function POST(request: NextRequest) {
         role,
         faculty_type,
         department_id,
+        college_id,
         is_active,
         departments!users_department_id_fkey(id, name, code)
       `)

@@ -1,0 +1,124 @@
+import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from 'next/server';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+// GET - Fetch faculty members
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const departmentCode = searchParams.get('department_code');
+    const departmentId = searchParams.get('department_id');
+
+    console.log('Fetching faculty with params:', { departmentCode, departmentId });
+
+    // Build query to fetch faculty with department info
+    let query = supabase
+      .from('users')
+      .select(`
+        id,
+        first_name,
+        last_name,
+        email,
+        phone,
+        college_uid,
+        faculty_type,
+        department_id,
+        max_hours_per_day,
+        max_hours_per_week,
+        is_active,
+        created_at,
+        department:departments!users_department_id_fkey(id, name, code)
+      `)
+      .eq('role', 'faculty')
+      .eq('is_active', true);
+
+    // Filter by department if provided
+    if (departmentId) {
+      query = query.eq('department_id', departmentId);
+    } else if (departmentCode) {
+      // First get the department ID from code
+      const { data: deptData, error: deptError } = await supabase
+        .from('departments')
+        .select('id')
+        .eq('code', departmentCode)
+        .single();
+
+      if (deptError) {
+        console.error('Error fetching department:', deptError);
+        return NextResponse.json({ 
+          success: false, 
+          error: 'Department not found',
+          data: [] 
+        });
+      }
+
+      if (deptData) {
+        query = query.eq('department_id', deptData.id);
+      }
+    }
+
+    const { data: facultyData, error: facultyError } = await query.order('first_name', { ascending: true });
+
+    if (facultyError) {
+      console.error('Error fetching faculty:', facultyError);
+      return NextResponse.json({ 
+        success: false, 
+        error: facultyError.message,
+        data: [] 
+      }, { status: 500 });
+    }
+
+    console.log(`Found ${facultyData?.length || 0} faculty members`);
+
+    // Fetch subjects for each faculty
+    const facultyWithSubjects = await Promise.all(
+      (facultyData || []).map(async (faculty) => {
+        const { data: subjectsData } = await supabase
+          .from('faculty_qualified_subjects')
+          .select(`
+            subject:subjects(name, code)
+          `)
+          .eq('faculty_id', faculty.id);
+
+        const subjects = subjectsData?.map((s: any) => s.subject?.name || s.subject?.code).filter(Boolean) || [];
+
+        const department = Array.isArray(faculty.department) ? faculty.department[0] : faculty.department;
+        
+        return {
+          id: faculty.id,
+          first_name: faculty.first_name,
+          last_name: faculty.last_name,
+          email: faculty.email,
+          phone: faculty.phone,
+          college_uid: faculty.college_uid,
+          faculty_type: faculty.faculty_type,
+          department_id: faculty.department_id,
+          department_name: department?.name || '',
+          department_code: department?.code || '',
+          max_hours_per_day: faculty.max_hours_per_day,
+          max_hours_per_week: faculty.max_hours_per_week,
+          is_active: faculty.is_active,
+          subjects: subjects,
+          created_at: faculty.created_at
+        };
+      })
+    );
+
+    return NextResponse.json({ 
+      success: true, 
+      data: facultyWithSubjects,
+      count: facultyWithSubjects.length
+    });
+  } catch (error: any) {
+    console.error('Unexpected error:', error);
+    return NextResponse.json({ 
+      success: false, 
+      error: 'Internal server error',
+      data: []
+    }, { status: 500 });
+  }
+}

@@ -40,6 +40,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Reference folder (not to be pushed)
+/refrance/
+
 # IDE/Editor files
 .vscode/
 .idea/

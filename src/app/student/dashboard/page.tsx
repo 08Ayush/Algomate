@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useRouter } from 'next/navigation';
+import { Header } from '@/components/Header';
 import { 
   Calendar, 
   Clock, 
@@ -155,7 +156,15 @@ export default function StudentDashboard() {
     }
 
     const parsedUser = JSON.parse(userData);
-    if (parsedUser.role !== 'student') {
+    
+    // Allow students and general/guest faculty to access this dashboard
+    const isStudent = parsedUser.role === 'student';
+    const isGeneralFaculty = parsedUser.role === 'faculty' && 
+                            (parsedUser.faculty_type === 'general' || 
+                             parsedUser.faculty_type === 'guest' || 
+                             !parsedUser.faculty_type);
+    
+    if (!isStudent && !isGeneralFaculty) {
       router.push('/login');
       return;
     }
@@ -290,19 +299,23 @@ export default function StudentDashboard() {
   }
 
   return (
-    <div className="space-y-6 p-6">
-      {/* Welcome Section */}
-      <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-950/20 dark:via-indigo-950/20 dark:to-purple-950/20 rounded-2xl p-6 border border-blue-100 dark:border-blue-800">
+    <>
+      <Header />
+      <div className="space-y-6 p-6">
+        {/* Welcome Section */}
+        <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-950/20 dark:via-indigo-950/20 dark:to-purple-950/20 rounded-2xl p-6 border border-blue-100 dark:border-blue-800">
         <div className="flex items-center gap-4">
           <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
             <GraduationCap className="h-8 w-8 text-white" />
           </div>
           <div className="flex-1">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-              Welcome back, {user?.first_name || user?.name || 'Student'}! 👋
+              Welcome back, {user?.first_name || user?.name || (user?.role === 'faculty' ? 'Faculty' : 'Student')}! 👋
             </h1>
             <p className="text-gray-600 dark:text-gray-300 mt-1">
-              Ready to explore your Computer Science Engineering dashboard
+              {user?.role === 'faculty' 
+                ? 'View your teaching schedule and department information'
+                : 'Ready to explore your Computer Science Engineering dashboard'}
             </p>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
@@ -659,6 +672,7 @@ export default function StudentDashboard() {
           </div>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </>
   );
 }

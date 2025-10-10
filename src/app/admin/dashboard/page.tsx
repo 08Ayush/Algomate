@@ -20,7 +20,7 @@ interface Faculty {
   email: string;
   college_uid: string;
   phone?: string;
-  role: 'admin' | 'faculty';
+  role: 'admin' | 'college_admin' | 'faculty';
   faculty_type?: 'creator' | 'publisher' | 'general' | 'guest';
   department_id: string;
   is_active: boolean;
@@ -77,7 +77,7 @@ export default function AdminDashboard() {
     last_name: '',
     email: '',
     phone: '',
-    role: 'faculty' as 'admin' | 'faculty',
+    role: 'faculty' as 'admin' | 'college_admin' | 'faculty',
     faculty_type: 'general' as 'creator' | 'publisher' | 'general' | 'guest',
     department_id: '',
     is_active: true
@@ -113,7 +113,7 @@ export default function AdminDashboard() {
     }
 
     const user = JSON.parse(userData);
-    if (user.role !== 'admin') {
+    if (user.role !== 'admin' && user.role !== 'college_admin') {
       router.push('/login?message=Access denied');
       return;
     }
@@ -655,10 +655,11 @@ export default function AdminDashboard() {
                           <label className="block text-sm font-medium text-gray-700">Role</label>
                           <select
                             value={facultyForm.role}
-                            onChange={(e) => setFacultyForm({...facultyForm, role: e.target.value as 'admin' | 'faculty'})}
+                            onChange={(e) => setFacultyForm({...facultyForm, role: e.target.value as 'admin' | 'college_admin' | 'faculty'})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                           >
                             <option value="faculty">Faculty</option>
+                            <option value="college_admin">College Admin</option>
                             <option value="admin">Admin</option>
                           </select>
                         </div>
