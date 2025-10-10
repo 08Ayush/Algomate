@@ -67,15 +67,22 @@ Just tell me what semester or batch you'd like to schedule, and I'll generate an
 
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const timeSlots = [
-    '9:00-10:00',
-    '10:00-11:00',
-    '11:00-11:20',
-    '11:20-12:20',
-    '12:20-1:20',
-    '1:20-2:20',
-    '2:20-3:20',
-    '3:20-4:20'
+    '09:00',
+    '10:00',
+    '11:15',
+    '12:15',
+    '14:15',
+    '15:15'
   ];
+
+  const timeSlotDisplay: Record<string, string> = {
+    '09:00': '9:00-10:00',
+    '10:00': '10:00-11:00',
+    '11:15': '11:15-12:15',
+    '12:15': '12:15-1:15',
+    '14:15': '2:15-3:15',
+    '15:15': '3:15-4:15'
+  };
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || isProcessing) return;
@@ -304,10 +311,6 @@ What would you like to do?`;
   const getScheduleForSlot = (day: string, time: string) => {
     if (!generatedTimetable) return null;
     return generatedTimetable.schedule.find(s => s.day === day && s.time === time);
-  };
-
-  const isBreakSlot = (time: string) => {
-    return time === '11:00-11:20' || time === '1:20-2:20';
   };
 
   return (
@@ -561,23 +564,18 @@ What would you like to do?`;
                     {timeSlots.map(time => (
                       <tr key={time}>
                         <td className="border border-gray-300 dark:border-slate-600 p-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-slate-800">
-                          {time}
+                          {timeSlotDisplay[time] || time}
                         </td>
                         {days.map(day => {
                           const scheduleItem = getScheduleForSlot(day, time);
-                          const isBreak = isBreakSlot(time);
 
                           return (
                             <td key={`${day}-${time}`} className="border border-gray-300 dark:border-slate-600 p-2 text-xs">
-                              {isBreak ? (
-                                <div className="bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300 p-2 rounded text-center font-medium">
-                                  {time === '11:00-11:20' ? 'Break' : 'Lunch'}
-                                </div>
-                              ) : scheduleItem ? (
+                              {scheduleItem ? (
                                 <div className={`p-2 rounded ${scheduleItem.is_lab ? 'bg-purple-100 dark:bg-purple-900/30 border-l-4 border-purple-600' : 'bg-blue-100 dark:bg-blue-900/30 border-l-4 border-blue-600'}`}>
                                   <div className="font-semibold text-gray-900 dark:text-white">{scheduleItem.subject_code}</div>
-                                  <div className="text-gray-700 dark:text-gray-300">{scheduleItem.subject_name}</div>
-                                  <div className="text-gray-600 dark:text-gray-400 mt-1">{scheduleItem.faculty_name}</div>
+                                  <div className="text-gray-700 dark:text-gray-300 text-xs">{scheduleItem.subject_name}</div>
+                                  <div className="text-gray-600 dark:text-gray-400 mt-1 text-xs">{scheduleItem.faculty_name}</div>
                                   <div className="text-gray-500 dark:text-gray-500 text-xs">{scheduleItem.classroom_name}</div>
                                   {scheduleItem.is_lab && <div className="text-purple-600 dark:text-purple-400 text-xs font-medium mt-1">LAB</div>}
                                 </div>
@@ -626,14 +624,17 @@ What would you like to do?`;
                   <Upload className="w-4 h-4" />
                   <span>{savingTimetable ? 'Submitting...' : 'Submit for Approval'}</span>
                 </button>
-                <button
-                  onClick={() => handleSaveTimetable('published')}
-                  disabled={publishingTimetable}
-                  className="flex items-center space-x-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all disabled:opacity-50"
-                >
-                  <CheckCircle className="w-4 h-4" />
-                  <span>{publishingTimetable ? 'Publishing...' : 'Publish Now'}</span>
-                </button>
+                {/* Only publishers can see Publish button */}
+                {user?.faculty_type === 'publisher' && (
+                  <button
+                    onClick={() => handleSaveTimetable('published')}
+                    disabled={publishingTimetable}
+                    className="flex items-center space-x-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all disabled:opacity-50"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    <span>{publishingTimetable ? 'Publishing...' : 'Publish Now'}</span>
+                  </button>
+                )}
               </div>
             </div>
           )}

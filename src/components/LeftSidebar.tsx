@@ -92,6 +92,12 @@ export default function LeftSidebar() {
       facultyTypes: ['creator', 'publisher']
     },
     { 
+      href: '/faculty/qualifications', 
+      icon: Sparkles, 
+      label: 'Qualifications',
+      facultyTypes: ['creator', 'publisher']
+    },
+    { 
       href: '/faculty/subjects', 
       icon: BookOpen, 
       label: 'Subjects',

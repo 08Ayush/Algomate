@@ -55,6 +55,8 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
   const [selectedFaculty, setSelectedFaculty] = useState<Faculty | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [selectedSemester, setSelectedSemester] = useState<number>(1);
+  const [selectedBatch, setSelectedBatch] = useState<any>(null);
+  const [batches, setBatches] = useState<any[]>([]);
   const [filteredSubjects, setFilteredSubjects] = useState<Subject[]>([]);
   const [filteredFaculty, setFilteredFaculty] = useState<Faculty[]>([]);
   const [draggedItem, setDraggedItem] = useState<{ type: 'faculty' | 'subject', item: any } | null>(null);
@@ -128,6 +130,11 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
     loadFacultyAndSubjects();
   }, [user]);
 
+  // Load batches when semester changes
+  useEffect(() => {
+    loadBatches();
+  }, [selectedSemester, user]);
+
   // Filter subjects and faculty based on selected semester
   useEffect(() => {
     if (subjects.length > 0) {
@@ -157,6 +164,37 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
       setSelectedSubject(null);
     }
   }, [selectedSemester, subjects, faculty]);
+
+  const loadBatches = async () => {
+    try {
+      console.log('🔍 Loading batches for semester:', selectedSemester);
+      
+      // Load batches for the selected semester
+      const { data: batchData, error: batchError } = await supabase
+        .from('batches')
+        .select('id, name, semester, academic_year, department_id, college_id')
+        .eq('semester', selectedSemester)
+        .eq('is_active', true);
+
+      if (batchError) {
+        console.error('❌ Error loading batches:', batchError);
+        return;
+      }
+
+      console.log('✅ Loaded batches:', batchData);
+      setBatches(batchData || []);
+      
+      // Auto-select first batch if available
+      if (batchData && batchData.length > 0) {
+        setSelectedBatch(batchData[0]);
+        console.log('✅ Auto-selected batch:', batchData[0]);
+      } else {
+        setSelectedBatch(null);
+      }
+    } catch (error) {
+      console.error('❌ Error in loadBatches:', error);
+    }
+  };
 
   const loadFacultyAndSubjects = async () => {
     try {
@@ -502,18 +540,25 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
         return;
       }
 
+      // Check if batch is selected
+      if (!selectedBatch) {
+        alert('Please wait for batch information to load, or create a batch for this semester first.');
+        return;
+      }
+
       // If department or college is missing, try to fetch from API using batch for this semester
       if (!departmentId || !collegeId) {
-        console.warn('⚠️ User missing department_id or college_id, will let API derive from batch');
+        console.warn('⚠️ User missing department_id or college_id, will use batch info');
         console.log('📍 User fields:', { userId, departmentId, collegeId });
       }
 
-      // Build payload - API will derive college/department from batch if not provided
+      // Build payload - include batchId so API can derive everything from it
       const payload = {
         assignments,
         createdBy: userId,
         academicYear: '2025-26',
         semester: selectedSemester,
+        batchId: selectedBatch.id,
         // Only include department/college if available
         ...(departmentId && { departmentId }),
         ...(collegeId && { collegeId }),
@@ -583,18 +628,25 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
         return;
       }
 
-      // If department or college is missing, let API derive from batch
+      // Check if batch is selected
+      if (!selectedBatch) {
+        alert('Please wait for batch information to load, or create a batch for this semester first.');
+        return;
+      }
+
+      // If department or college is missing, use batch info
       if (!departmentId || !collegeId) {
-        console.warn('⚠️ User missing department_id or college_id, will let API derive from batch');
+        console.warn('⚠️ User missing department_id or college_id, will use batch info');
         console.log('📍 User fields:', { userId, departmentId, collegeId });
       }
 
-      // Build payload - API will derive college/department from batch if not provided
+      // Build payload - include batchId so API can derive everything from it
       const payload = {
         assignments,
         createdBy: userId,
         academicYear: '2025-26',
         semester: selectedSemester,
+        batchId: selectedBatch.id,
         // Only include department/college if available
         ...(departmentId && { departmentId }),
         ...(collegeId && { collegeId }),
@@ -692,6 +744,22 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
           <div className="text-sm text-gray-600">
             Showing {filteredSubjects.length} subjects and {filteredFaculty.length} faculty for Semester {selectedSemester} | {assignments.length} assignments created
           </div>
+          {selectedBatch && (
+            <div className="flex items-center gap-2 px-3 py-1 bg-green-50 text-green-700 rounded-lg border border-green-200">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
+              </svg>
+              <span className="text-sm font-medium">Batch: {selectedBatch.name}</span>
+            </div>
+          )}
+          {!selectedBatch && batches.length === 0 && (
+            <div className="flex items-center gap-2 px-3 py-1 bg-red-50 text-red-700 rounded-lg border border-red-200">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"/>
+              </svg>
+              <span className="text-sm font-medium">No batch found - Please create a batch first</span>
+            </div>
+          )}
         </div>
       </div>
 

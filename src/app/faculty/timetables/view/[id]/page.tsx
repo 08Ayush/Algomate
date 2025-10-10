@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
   ArrowLeft,
   Download,
@@ -29,6 +31,9 @@ interface ScheduledClass {
   subject_code?: string;
   faculty_name?: string;
   classroom_name?: string;
+  notes?: string;
+  session_duration?: number;
+  class_type?: string;
 }
 
 interface TimetableDetails {
@@ -107,7 +112,7 @@ export default function ViewTimetablePage() {
       // Fetch scheduled classes with time slot info
       const { data: classesData, error: classesError } = await supabase
         .from('scheduled_classes')
-        .select('*')
+        .select('id, timetable_id, subject_id, faculty_id, classroom_id, time_slot_id, notes, session_duration, class_type')
         .eq('timetable_id', timetableId);
 
       if (classesError) throw classesError;
@@ -151,7 +156,10 @@ export default function ViewTimetablePage() {
             subject_name: subject?.name || 'Unknown',
             subject_code: subject?.code || '',
             faculty_name: faculty ? `${faculty.first_name} ${faculty.last_name}` : 'Unknown',
-            classroom_name: classroom?.name || 'Unknown'
+            classroom_name: classroom?.name || 'Unknown',
+            notes: cls.notes || '',
+            session_duration: cls.session_duration || 60,
+            class_type: cls.class_type || 'THEORY'
           };
         })
       );
@@ -183,6 +191,15 @@ export default function ViewTimetablePage() {
     );
   };
 
+  const isLabContinuation = (classInfo: ScheduledClass): boolean => {
+    return classInfo.notes?.includes('Continuation') || classInfo.notes?.includes('cont.') || false;
+  };
+
+  const isLabStart = (classInfo: ScheduledClass): boolean => {
+    return (classInfo.class_type === 'LAB' || classInfo.class_type === 'PRACTICAL') && 
+           classInfo.session_duration === 120;
+  };
+
   const getStatusBadge = (status: string) => {
     const badges = {
       draft: 'bg-gray-100 text-gray-700',
@@ -191,6 +208,115 @@ export default function ViewTimetablePage() {
       rejected: 'bg-red-100 text-red-700'
     };
     return badges[status as keyof typeof badges] || 'bg-gray-100 text-gray-700';
+  };
+
+  const exportToPDF = () => {
+    if (!timetable) return;
+
+    const doc = new jsPDF('l', 'mm', 'a4'); // Landscape orientation
+    const pageWidth = doc.internal.pageSize.getWidth();
+
+    // Add title
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text(timetable.title, pageWidth / 2, 15, { align: 'center' });
+
+    // Add metadata
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    const metaY = 25;
+    doc.text(`Batch: ${timetable.batch_name || 'N/A'}`, 14, metaY);
+    doc.text(`Semester: ${timetable.semester}`, 80, metaY);
+    doc.text(`Academic Year: ${timetable.academic_year}`, 140, metaY);
+    doc.text(`Created: ${new Date(timetable.created_at).toLocaleDateString()}`, 210, metaY);
+
+    // Prepare table data
+    const tableData: any[] = [];
+    
+    DAYS.forEach(day => {
+      const rowData: any[] = [day];
+      
+      timeSlots.forEach(slot => {
+        const classInfo = getClassForSlot(day, slot);
+        if (classInfo) {
+          const cellContent = `${classInfo.subject_code || ''}\n${classInfo.subject_name || ''}\n${classInfo.faculty_name || ''}\n${classInfo.classroom_name || ''}`;
+          rowData.push(cellContent);
+        } else {
+          rowData.push('-');
+        }
+      });
+      
+      tableData.push(rowData);
+    });
+
+    // Prepare headers
+    const headers = ['Day / Time'];
+    timeSlots.forEach(slot => {
+      const [start, end] = slot.split('-');
+      headers.push(`${start}\n${end}`);
+    });
+
+    // Generate table
+    autoTable(doc, {
+      head: [headers],
+      body: tableData,
+      startY: 35,
+      theme: 'grid',
+      styles: {
+        fontSize: 8,
+        cellPadding: 3,
+        overflow: 'linebreak',
+        valign: 'middle',
+        halign: 'center'
+      },
+      headStyles: {
+        fillColor: [59, 130, 246], // Blue color
+        textColor: 255,
+        fontStyle: 'bold',
+        halign: 'center'
+      },
+      columnStyles: {
+        0: { 
+          fontStyle: 'bold', 
+          fillColor: [243, 244, 246], // Gray background for day column
+          halign: 'left',
+          cellWidth: 25
+        }
+      },
+      didDrawCell: (data) => {
+        // Add some padding for better readability
+        if (data.section === 'body' && data.column.index > 0) {
+          const cellValue = data.cell.raw as string;
+          if (cellValue && cellValue !== '-') {
+            // Make subject name bold
+            data.cell.styles.fontStyle = 'normal';
+          }
+        }
+      }
+    });
+
+    // Add footer
+    const pageCount = doc.getNumberOfPages();
+    doc.setFontSize(8);
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.text(
+        `Page ${i} of ${pageCount}`,
+        pageWidth / 2,
+        doc.internal.pageSize.getHeight() - 10,
+        { align: 'center' }
+      );
+      doc.text(
+        `Generated on ${new Date().toLocaleString()}`,
+        pageWidth - 14,
+        doc.internal.pageSize.getHeight() - 10,
+        { align: 'right' }
+      );
+    }
+
+    // Save the PDF
+    const fileName = `${timetable.title.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+    doc.save(fileName);
   };
 
   if (loading) {
@@ -283,7 +409,7 @@ export default function ViewTimetablePage() {
           <div className="flex gap-3 mt-6 pt-6 border-t">
             {timetable.status === 'draft' && (
               <button
-                onClick={() => router.push(`/faculty/manual-scheduling?edit=${timetableId}`)}
+                onClick={() => router.push('/faculty/ai-timetable-creator')}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
               >
                 <Edit className="w-4 h-4" />
@@ -291,7 +417,7 @@ export default function ViewTimetablePage() {
               </button>
             )}
             <button
-              onClick={() => alert('Export feature coming soon!')}
+              onClick={exportToPDF}
               className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
             >
               <Download className="w-4 h-4" />
@@ -337,15 +463,38 @@ export default function ViewTimetablePage() {
                       </td>
                       {timeSlots.map((slot) => {
                         const classInfo = getClassForSlot(day, slot);
+                        const isContinuation = classInfo && isLabContinuation(classInfo);
+                        const isLabStartSlot = classInfo && isLabStart(classInfo);
+                        
                         return (
                           <td key={`${day}-${slot}`} className="border border-gray-200 p-2">
                             {classInfo ? (
-                              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 hover:bg-blue-100 transition-colors">
-                                <div className="font-semibold text-sm text-blue-900 mb-1">
+                              <div className={`${
+                                isContinuation 
+                                  ? 'bg-purple-50 border-l-4 border-l-purple-500 border-t border-r border-b border-purple-200' 
+                                  : isLabStartSlot
+                                  ? 'bg-purple-50 border-l border-t border-r border-b-0 border-purple-200'
+                                  : 'bg-blue-50 border border-blue-200'
+                              } rounded-lg p-3 hover:bg-opacity-80 transition-colors relative`}>
+                                {isLabStartSlot && (
+                                  <div className="absolute top-1 right-1 bg-purple-600 text-white text-xs px-2 py-0.5 rounded-full">
+                                    2hr
+                                  </div>
+                                )}
+                                {isContinuation && (
+                                  <div className="absolute top-1 right-1 bg-purple-600 text-white text-xs px-2 py-0.5 rounded-full">
+                                    ↓
+                                  </div>
+                                )}
+                                <div className={`font-semibold text-sm ${
+                                  isContinuation ? 'text-purple-900' : isLabStartSlot ? 'text-purple-900' : 'text-blue-900'
+                                } mb-1`}>
                                   {classInfo.subject_name}
                                 </div>
                                 {classInfo.subject_code && (
-                                  <div className="text-xs text-blue-700 mb-2">
+                                  <div className={`text-xs ${
+                                    isContinuation ? 'text-purple-700' : isLabStartSlot ? 'text-purple-700' : 'text-blue-700'
+                                  } mb-2`}>
                                     {classInfo.subject_code}
                                   </div>
                                 )}
@@ -371,6 +520,29 @@ export default function ViewTimetablePage() {
                 </tbody>
               </table>
             )}
+          </div>
+        </div>
+
+        {/* Legend */}
+        <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Legend</h3>
+          <div className="flex flex-wrap gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 bg-blue-50 border border-blue-200 rounded"></div>
+              <span className="text-sm text-gray-600">Theory Class (1 hour)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 bg-purple-50 border border-purple-200 rounded relative">
+                <span className="absolute -top-1 -right-1 bg-purple-600 text-white text-[8px] px-1 rounded-full">2hr</span>
+              </div>
+              <span className="text-sm text-gray-600">Lab Start (2-hour session)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 bg-purple-50 border-l-4 border-l-purple-500 border-t border-r border-b border-purple-200 rounded relative">
+                <span className="absolute -top-1 -right-1 bg-purple-600 text-white text-[8px] px-1 rounded-full">↓</span>
+              </div>
+              <span className="text-sm text-gray-600">Lab Continuation</span>
+            </div>
           </div>
         </div>
 
