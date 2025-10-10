@@ -43,6 +43,9 @@ next-env.d.ts
 # Reference folder (not to be pushed)
 /refrance/
 
+# Scripts with credentials (security)
+/scripts/fix-batches-permissions.js
+
 # IDE/Editor files
 .vscode/
 .idea/
