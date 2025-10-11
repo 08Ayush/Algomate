@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
           id,
           name,
           building,
-          floor,
+          floor_number,
           capacity
         ),
         time_slots (
@@ -58,9 +58,7 @@ export async function GET(request: NextRequest) {
           is_lunch_time
         )
       `)
-      .eq('timetable_id', timetableId)
-      .order('time_slots(day)', { ascending: true })
-      .order('time_slots(start_time)', { ascending: true });
+      .eq('timetable_id', timetableId);
 
     if (classesError) {
       console.error('Error fetching scheduled classes:', classesError);
@@ -85,7 +83,7 @@ export async function GET(request: NextRequest) {
       classroomId: cls.classroom_id,
       classroomName: cls.classrooms?.name || 'TBA',
       building: cls.classrooms?.building || '',
-      floor: cls.classrooms?.floor || 0,
+      floor: cls.classrooms?.floor_number || 0,
       day: cls.time_slots?.day || '',
       startTime: cls.time_slots?.start_time || '',
       endTime: cls.time_slots?.end_time || '',

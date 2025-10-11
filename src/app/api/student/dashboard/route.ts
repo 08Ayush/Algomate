@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
         .from('student_batch_enrollment')
         .select(`
           batch_id,
-          batches (
+          batch:batches!batch_id (
             id,
             name,
             section,
@@ -76,8 +76,10 @@ export async function GET(request: NextRequest) {
         .single();
 
       if (enrollmentData && !enrollmentError) {
-        additionalData.batch = enrollmentData.batches;
+        additionalData.batch = enrollmentData.batch;
         additionalData.batchId = enrollmentData.batch_id;
+      } else {
+        console.error('Error fetching enrollment:', enrollmentError);
       }
     }
 
