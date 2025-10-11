@@ -33,12 +33,26 @@ interface Subject {
   semester: number;
 }
 
+interface Classroom {
+  id: string;
+  name: string;
+  building: string;
+  capacity: number;
+  type: string;
+  hasProjector: boolean;
+  hasAc: boolean;
+  hasComputers: boolean;
+  hasLabEquipment: boolean;
+  isSmartClassroom: boolean;
+  departmentId?: string;
+}
+
 interface Assignment {
   id: string;
   faculty: Faculty;
   subject: Subject;
   timeSlot: TimeSlot;
-  classroom?: string;
+  classroom?: Classroom;
   isLab?: boolean;
   duration?: number; // Duration in hours (1 for regular class, 2 for lab)
   endSlotIndex?: number; // For lab sessions that span multiple slots
@@ -51,17 +65,21 @@ interface ManualSchedulingComponentProps {
 export default function ManualSchedulingComponent({ user }: ManualSchedulingComponentProps) {
   const [faculty, setFaculty] = useState<Faculty[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [selectedFaculty, setSelectedFaculty] = useState<Faculty | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
+  const [selectedClassroom, setSelectedClassroom] = useState<Classroom | null>(null);
   const [selectedSemester, setSelectedSemester] = useState<number>(1);
   const [selectedBatch, setSelectedBatch] = useState<any>(null);
   const [batches, setBatches] = useState<any[]>([]);
   const [filteredSubjects, setFilteredSubjects] = useState<Subject[]>([]);
   const [filteredFaculty, setFilteredFaculty] = useState<Faculty[]>([]);
+  const [filteredClassrooms, setFilteredClassrooms] = useState<Classroom[]>([]);
   const [draggedItem, setDraggedItem] = useState<{ type: 'faculty' | 'subject', item: any } | null>(null);
   const [dragOverSlot, setDragOverSlot] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingClassrooms, setLoadingClassrooms] = useState(false);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [timetableTitle, setTimetableTitle] = useState('');
@@ -162,8 +180,20 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
       // Clear selections when semester changes
       setSelectedFaculty(null);
       setSelectedSubject(null);
+      setSelectedClassroom(null);
     }
   }, [selectedSemester, subjects, faculty]);
+
+  // Load classrooms when subject is selected
+  useEffect(() => {
+    if (selectedSubject) {
+      loadClassrooms();
+    } else {
+      setClassrooms([]);
+      setFilteredClassrooms([]);
+      setSelectedClassroom(null);
+    }
+  }, [selectedSubject, user]);
 
   const loadBatches = async () => {
     try {
@@ -349,6 +379,130 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
     }
   };
 
+  const loadClassrooms = async () => {
+    try {
+      setLoadingClassrooms(true);
+      console.log('🏫 Loading classrooms for selected subject:', selectedSubject);
+      
+      if (!selectedSubject || !user?.department_id) {
+        console.log('⚠ Missing selected subject or user department');
+        return;
+      }
+
+      // Determine classroom requirements based on subject
+      const isLabSubject = selectedSubject.requiresLab || 
+                          selectedSubject.subjectType.toLowerCase().includes('lab') ||
+                          selectedSubject.subjectType.toLowerCase().includes('practical');
+
+      console.log('📚 Subject requirements:', {
+        isLab: isLabSubject,
+        subjectType: selectedSubject.subjectType,
+        requiresLab: selectedSubject.requiresLab
+      });
+
+      // Load classrooms from API
+      const response = await fetch(`/api/classrooms?department_id=${user.department_id}`);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch classrooms: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('🏫 Classrooms API response:', data);
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to fetch classrooms');
+      }
+
+      const allClassrooms: Classroom[] = data.data?.map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        building: c.building || 'Unknown',
+        capacity: c.capacity || 0,
+        type: c.type || 'Classroom',
+        hasProjector: c.has_projector || false,
+        hasAc: c.has_ac || false,
+        hasComputers: c.has_computers || false,
+        hasLabEquipment: c.has_lab_equipment || false,
+        isSmartClassroom: c.is_smart_classroom || false,
+        departmentId: c.department_id
+      })) || [];
+
+      setClassrooms(allClassrooms);
+
+      // Filter classrooms based on subject requirements
+      let suitable = allClassrooms;
+
+      if (isLabSubject) {
+        // For lab subjects, prefer classrooms with lab equipment or computers
+        const labClassrooms = suitable.filter(c => 
+          c.hasLabEquipment || 
+          c.hasComputers || 
+          c.type.toLowerCase().includes('lab')
+        );
+        
+        // If we have specific lab classrooms, use them; otherwise, use all
+        if (labClassrooms.length > 0) {
+          suitable = labClassrooms;
+        }
+      } else {
+        // For theory subjects, prefer lecture halls and regular classrooms
+        suitable = suitable.filter(c => 
+          !c.type.toLowerCase().includes('lab') || 
+          c.type.toLowerCase().includes('lecture') ||
+          c.type === 'Classroom'
+        );
+      }
+
+      // Sort by suitability score
+      suitable.sort((a, b) => {
+        let scoreA = 0;
+        let scoreB = 0;
+
+        // Prefer same department classrooms
+        if (a.departmentId === user.department_id) scoreA += 10;
+        if (b.departmentId === user.department_id) scoreB += 10;
+
+        // For lab subjects, prioritize lab features
+        if (isLabSubject) {
+          if (a.hasLabEquipment) scoreA += 5;
+          if (b.hasLabEquipment) scoreB += 5;
+          if (a.hasComputers) scoreA += 3;
+          if (b.hasComputers) scoreB += 3;
+        } else {
+          // For theory subjects, prioritize presentation features
+          if (a.hasProjector) scoreA += 3;
+          if (b.hasProjector) scoreB += 3;
+          if (a.isSmartClassroom) scoreA += 2;
+          if (b.isSmartClassroom) scoreB += 2;
+        }
+
+        // Consider capacity (moderate preference for larger rooms)
+        scoreA += Math.min(a.capacity / 20, 2);
+        scoreB += Math.min(b.capacity / 20, 2);
+
+        return scoreB - scoreA;
+      });
+
+      setFilteredClassrooms(suitable);
+      console.log(`✅ Filtered ${suitable.length} suitable classrooms out of ${allClassrooms.length} total`);
+
+      // Auto-select first suitable classroom if available
+      if (suitable.length > 0) {
+        setSelectedClassroom(suitable[0]);
+        console.log('🎯 Auto-selected classroom:', suitable[0].name);
+      }
+
+    } catch (error) {
+      console.error('❌ Error loading classrooms:', error);
+      setClassrooms([]);
+      setFilteredClassrooms([]);
+      setSelectedClassroom(null);
+    } finally {
+      setLoadingClassrooms(false);
+    }
+  };
+
   const checkConflicts = useCallback((newAssignment: Assignment) => {
     const conflicts: string[] = [];
     
@@ -372,12 +526,32 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
           }
         }
       }
+
+      // Check for classroom conflicts
+      if (assignment.classroom?.id === newAssignment.classroom?.id && newAssignment.classroom) {
+        // For lab sessions, check all occupied slots
+        const assignmentSlots = assignment.isLab 
+          ? [assignment.timeSlot.slotIndex, assignment.endSlotIndex!]
+          : [assignment.timeSlot.slotIndex];
+          
+        const newAssignmentSlots = newAssignment.isLab 
+          ? [newAssignment.timeSlot.slotIndex, newAssignment.endSlotIndex!]
+          : [newAssignment.timeSlot.slotIndex];
+        
+        // Check if any slots overlap on the same day
+        if (assignment.timeSlot.day === newAssignment.timeSlot.day) {
+          const hasOverlap = assignmentSlots.some(slot => newAssignmentSlots.includes(slot));
+          if (hasOverlap) {
+            conflicts.push(`Classroom ${assignment.classroom?.name} is already booked at ${assignment.timeSlot.day} ${assignment.timeSlot.time}`);
+          }
+        }
+      }
     });
     
     return conflicts;
   }, [assignments]);
 
-  const handleAssignClass = useCallback((faculty: Faculty, subject: Subject, timeSlot: TimeSlot) => {
+  const handleAssignClass = useCallback((faculty: Faculty, subject: Subject, timeSlot: TimeSlot, classroom?: Classroom) => {
     // Check if faculty is qualified for this subject (skip check if no qualifications set up)
     const hasQualifications = faculty.qualifiedSubjects.length > 0;
     if (hasQualifications) {
@@ -386,6 +560,13 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
         console.warn(`${faculty.firstName} ${faculty.lastName} is not qualified to teach ${subject.name}`);
         return;
       }
+    }
+
+    // Use selected classroom or require classroom selection
+    const assignedClassroom = classroom || selectedClassroom;
+    if (!assignedClassroom) {
+      console.warn('Please select a classroom before creating the assignment');
+      return;
     }
 
     const isLab = subject.requiresLab || subject.subjectType.toLowerCase().includes('lab');
@@ -425,6 +606,7 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
       faculty,
       subject,
       timeSlot,
+      classroom: assignedClassroom,
       isLab,
       duration,
       endSlotIndex: isLab ? timeSlot.slotIndex + 1 : undefined
@@ -438,7 +620,7 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
     }
 
     setAssignments(prev => [...prev, newAssignment]);
-  }, [checkConflicts, assignments, timeSlots]);
+  }, [checkConflicts, assignments, timeSlots, selectedClassroom]);
 
   const handleRemoveAssignment = useCallback((assignmentId: string) => {
     setAssignments(prev => prev.filter(a => a.id !== assignmentId));
@@ -548,7 +730,7 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
 
       // If department or college is missing, try to fetch from API using batch for this semester
       if (!departmentId || !collegeId) {
-        console.warn('⚠️ User missing department_id or college_id, will use batch info');
+        console.warn('⚠ User missing department_id or college_id, will use batch info');
         console.log('📍 User fields:', { userId, departmentId, collegeId });
       }
 
@@ -581,7 +763,7 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
       console.log('📥 Full response data:', JSON.stringify(data, null, 2));
 
       if (data.success) {
-        alert(`Timetable saved successfully! You can now submit it for review.`);
+        alert('Timetable saved successfully! You can now submit it for review.');
         // Optionally reset the form or redirect
         // setAssignments([]);
         // setTimetableTitle('');
@@ -636,7 +818,7 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
 
       // If department or college is missing, use batch info
       if (!departmentId || !collegeId) {
-        console.warn('⚠️ User missing department_id or college_id, will use batch info');
+        console.warn('⚠ User missing department_id or college_id, will use batch info');
         console.log('📍 User fields:', { userId, departmentId, collegeId });
       }
 
@@ -849,6 +1031,40 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
                 {selectedSubject ? `${selectedSubject.name} (${selectedSubject.code}) - Sem ${selectedSubject.semester}` : 'None selected'}
               </span>
             </div>
+
+            {selectedSubject && (
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a1 1 0 110 2h-3a1 1 0 01-1-1v-2a1 1 0 00-1-1H9a1 1 0 00-1 1v2a1 1 0 01-1 1H4a1 1 0 110-2V4zm3 1h2v2H7V5zm2 4H7v2h2V9zm2-4h2v2h-2V5zm2 4h-2v2h2V9z" clipRule="evenodd"/>
+                </svg>
+                <span className="font-medium text-gray-700">Selected Classroom:</span>
+                {loadingClassrooms ? (
+                  <span className="text-blue-600 flex items-center gap-1">
+                    <div className="animate-spin h-3 w-3 border border-blue-600 border-t-transparent rounded-full"></div>
+                    Loading...
+                  </span>
+                ) : (
+                  <select
+                    value={selectedClassroom?.id || ''}
+                    onChange={(e) => {
+                      const classroom = filteredClassrooms.find(c => c.id === e.target.value);
+                      setSelectedClassroom(classroom || null);
+                    }}
+                    className="px-3 py-1 border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
+                  >
+                    <option value="">Select classroom...</option>
+                    {filteredClassrooms.map(classroom => (
+                      <option key={classroom.id} value={classroom.id}>
+                        {classroom.name} - {classroom.building} (Cap: {classroom.capacity})
+                        {classroom.hasLabEquipment && ' 🧪'}
+                        {classroom.hasComputers && ' 💻'}
+                        {classroom.hasProjector && ' 📽'}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1014,6 +1230,14 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
                                     <div className="text-xs opacity-90 mt-1">
                                       {assignment.faculty.firstName} {assignment.faculty.lastName}
                                     </div>
+                                    {assignment.classroom && (
+                                      <div className="text-xs opacity-90 mt-1 flex items-center gap-1">
+                                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                          <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a1 1 0 110 2h-3a1 1 0 01-1-1v-2a1 1 0 00-1-1H9a1 1 0 00-1 1v2a1 1 0 01-1 1H4a1 1 0 110-2V4z" clipRule="evenodd"/>
+                                        </svg>
+                                        {assignment.classroom.name}
+                                      </div>
+                                    )}
                                     {assignment.isLab && (
                                       <div className="text-xs bg-white bg-opacity-20 px-1 rounded mt-1">
                                         Lab (2hrs)

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
 import LeftSidebar from '@/components/LeftSidebar';
-import { Book, Plus, Search, BookOpen, Edit, Trash2, Code } from 'lucide-react';
+import { Book, Plus, Search, BookOpen, Edit, Trash2, Code, X, AlertCircle } from 'lucide-react';
 
 interface Subject {
   id: string;
@@ -16,6 +16,20 @@ interface Subject {
   requires_lab: boolean;
   is_core_subject: boolean;
   description?: string;
+}
+
+interface NewSubjectForm {
+  name: string;
+  code: string;
+  semester: number;
+  credits_per_week: number;
+  subject_type: string;
+  preferred_duration: number;
+  max_continuous_hours: number;
+  requires_lab: boolean;
+  requires_projector: boolean;
+  is_core_subject: boolean;
+  description: string;
 }
 
 export default function SubjectsPage() {
@@ -34,6 +48,24 @@ export default function SubjectsPage() {
   const [selectedSemester, setSelectedSemester] = useState<number | 'all'>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Modal state
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [newSubject, setNewSubject] = useState<NewSubjectForm>({
+    name: '',
+    code: '',
+    semester: 1,
+    credits_per_week: 3,
+    subject_type: 'THEORY',
+    preferred_duration: 60,
+    max_continuous_hours: 1,
+    requires_lab: false,
+    requires_projector: false,
+    is_core_subject: true,
+    description: ''
+  });
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -64,34 +96,102 @@ export default function SubjectsPage() {
 
   // Fetch subjects
   useEffect(() => {
-    async function fetchSubjects() {
-      try {
-        if (!user) return;
-        
-        console.log('Fetching subjects for CSE department...');
-        const departmentCode = 'CSE';
-        const response = await fetch(`/api/subjects?department_code=${departmentCode}`);
-        
-        const result = await response.json();
-        console.log('Subjects API Result:', result);
-        
-        if (result.success) {
-          setSubjects(result.data || []);
-          setGroupedSubjects(result.groupedBySemester || {});
-          setStatistics(result.statistics || {
-            totalSubjects: 0,
-            totalCredits: 0,
-            coreSubjects: 0,
-            theorySubjects: 0,
-            labSubjects: 0
-          });
-        }
-      } catch (error) {
-        console.error('Error fetching subjects:', error);
-      }
-    }
     fetchSubjects();
   }, [user]);
+
+  async function fetchSubjects() {
+    try {
+      if (!user) return;
+      
+      console.log('Fetching subjects for CSE department...');
+      const departmentCode = 'CSE';
+      const response = await fetch(`/api/subjects?department_code=${departmentCode}`);
+      
+      const result = await response.json();
+      console.log('Subjects API Result:', result);
+      
+      if (result.success) {
+        setSubjects(result.data || []);
+        setGroupedSubjects(result.groupedBySemester || {});
+        setStatistics(result.statistics || {
+          totalSubjects: 0,
+          totalCredits: 0,
+          coreSubjects: 0,
+          theorySubjects: 0,
+          labSubjects: 0
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching subjects:', error);
+    }
+  }
+
+  const handleAddSubject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+    setSubmitting(true);
+
+    try {
+      // Get department ID for CSE
+      const departmentCode = 'CSE';
+      const deptResponse = await fetch(`/api/subjects?department_code=${departmentCode}`);
+      const deptResult = await deptResponse.json();
+      
+      if (!deptResult.success || !deptResult.data || deptResult.data.length === 0) {
+        setFormError('Could not find department information');
+        setSubmitting(false);
+        return;
+      }
+
+      const department_id = deptResult.data[0].department_id;
+      const college_id = user.college_id;
+
+      const response = await fetch('/api/subjects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...newSubject,
+          department_id,
+          college_id
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert('✅ Subject created successfully!');
+        setShowAddModal(false);
+        // Reset form
+        setNewSubject({
+          name: '',
+          code: '',
+          semester: 1,
+          credits_per_week: 3,
+          subject_type: 'THEORY',
+          preferred_duration: 60,
+          max_continuous_hours: 1,
+          requires_lab: false,
+          requires_projector: false,
+          is_core_subject: true,
+          description: ''
+        });
+        // Refresh subjects list
+        fetchSubjects();
+      } else {
+        setFormError(result.error || 'Failed to create subject');
+      }
+    } catch (error: any) {
+      console.error('Error creating subject:', error);
+      setFormError('An error occurred while creating the subject');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleInputChange = (field: keyof NewSubjectForm, value: any) => {
+    setNewSubject(prev => ({ ...prev, [field]: value }));
+    setFormError(null);
+  };
 
   if (loading) {
     return (
@@ -154,7 +254,10 @@ export default function SubjectsPage() {
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Subjects Management</h1>
                 <p className="text-gray-600 dark:text-gray-300">Computer Science Engineering - All Semesters</p>
               </div>
-              <button className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+              <button 
+                onClick={() => setShowAddModal(true)}
+                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
                 <Plus className="w-5 h-5 mr-2" />
                 Add Subject
               </button>
@@ -347,6 +450,239 @@ export default function SubjectsPage() {
           </div>
         </main>
       </div>
+
+      {/* Add Subject Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Add New Subject</h2>
+              <button
+                onClick={() => {
+                  setShowAddModal(false);
+                  setFormError(null);
+                }}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+              >
+                <X className="w-6 h-6 text-gray-500" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddSubject} className="p-6 space-y-6">
+              {formError && (
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start space-x-3">
+                  <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h3 className="text-sm font-semibold text-red-800 dark:text-red-300">Error</h3>
+                    <p className="text-sm text-red-700 dark:text-red-400 mt-1">{formError}</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Subject Name */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Subject Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newSubject.name}
+                    onChange={(e) => handleInputChange('name', e.target.value)}
+                    placeholder="e.g., Data Structures and Algorithms"
+                    required
+                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                  />
+                </div>
+
+                {/* Subject Code */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Subject Code <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newSubject.code}
+                    onChange={(e) => handleInputChange('code', e.target.value.toUpperCase())}
+                    placeholder="e.g., CS301"
+                    required
+                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white uppercase"
+                  />
+                </div>
+
+                {/* Semester */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Semester <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={newSubject.semester}
+                    onChange={(e) => handleInputChange('semester', parseInt(e.target.value))}
+                    required
+                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
+                      <option key={sem} value={sem}>Semester {sem}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Credits */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Credits per Week <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={newSubject.credits_per_week}
+                    onChange={(e) => handleInputChange('credits_per_week', parseInt(e.target.value))}
+                    min="1"
+                    max="10"
+                    required
+                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                  />
+                </div>
+
+                {/* Subject Type */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Subject Type <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={newSubject.subject_type}
+                    onChange={(e) => {
+                      handleInputChange('subject_type', e.target.value);
+                      // Auto-set requires_lab and preferred_duration based on type
+                      if (e.target.value === 'LAB' || e.target.value === 'PRACTICAL') {
+                        handleInputChange('requires_lab', true);
+                        handleInputChange('preferred_duration', 120);
+                        handleInputChange('max_continuous_hours', 2);
+                      } else {
+                        handleInputChange('requires_lab', false);
+                        handleInputChange('preferred_duration', 60);
+                        handleInputChange('max_continuous_hours', 1);
+                      }
+                    }}
+                    required
+                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                  >
+                    <option value="THEORY">Theory</option>
+                    <option value="LAB">Lab</option>
+                    <option value="PRACTICAL">Practical</option>
+                  </select>
+                </div>
+
+                {/* Preferred Duration */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Preferred Duration (minutes)
+                  </label>
+                  <select
+                    value={newSubject.preferred_duration}
+                    onChange={(e) => handleInputChange('preferred_duration', parseInt(e.target.value))}
+                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                  >
+                    <option value="60">60 minutes (1 hour)</option>
+                    <option value="120">120 minutes (2 hours)</option>
+                  </select>
+                </div>
+
+                {/* Max Continuous Hours */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Max Continuous Hours
+                  </label>
+                  <input
+                    type="number"
+                    value={newSubject.max_continuous_hours}
+                    onChange={(e) => handleInputChange('max_continuous_hours', parseInt(e.target.value))}
+                    min="1"
+                    max="4"
+                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                  />
+                </div>
+
+                {/* Checkboxes */}
+                <div className="md:col-span-2 space-y-3">
+                  <label className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      checked={newSubject.requires_lab}
+                      onChange={(e) => handleInputChange('requires_lab', e.target.checked)}
+                      className="w-4 h-4 text-blue-600 bg-gray-50 dark:bg-slate-700 border-gray-300 dark:border-slate-600 rounded focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">Requires Lab</span>
+                  </label>
+
+                  <label className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      checked={newSubject.requires_projector}
+                      onChange={(e) => handleInputChange('requires_projector', e.target.checked)}
+                      className="w-4 h-4 text-blue-600 bg-gray-50 dark:bg-slate-700 border-gray-300 dark:border-slate-600 rounded focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">Requires Projector</span>
+                  </label>
+
+                  <label className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      checked={newSubject.is_core_subject}
+                      onChange={(e) => handleInputChange('is_core_subject', e.target.checked)}
+                      className="w-4 h-4 text-blue-600 bg-gray-50 dark:bg-slate-700 border-gray-300 dark:border-slate-600 rounded focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">Core Subject</span>
+                  </label>
+                </div>
+
+                {/* Description */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Description (Optional)
+                  </label>
+                  <textarea
+                    value={newSubject.description}
+                    onChange={(e) => handleInputChange('description', e.target.value)}
+                    placeholder="Brief description of the subject..."
+                    rows={3}
+                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white resize-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setFormError(null);
+                  }}
+                  className="px-6 py-2 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-600 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                >
+                  {submitting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                      <span>Creating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4" />
+                      <span>Create Subject</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }

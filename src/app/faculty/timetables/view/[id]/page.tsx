@@ -34,6 +34,9 @@ interface ScheduledClass {
   notes?: string;
   session_duration?: number;
   class_type?: string;
+  is_continuation?: boolean;
+  is_lab?: boolean;
+  session_number?: number;
 }
 
 interface TimetableDetails {
@@ -112,7 +115,7 @@ export default function ViewTimetablePage() {
       // Fetch scheduled classes with time slot info
       const { data: classesData, error: classesError } = await supabase
         .from('scheduled_classes')
-        .select('id, timetable_id, subject_id, faculty_id, classroom_id, time_slot_id, notes, session_duration, class_type')
+        .select('id, timetable_id, subject_id, faculty_id, classroom_id, time_slot_id, notes, session_duration, class_type, is_continuation, is_lab, session_number')
         .eq('timetable_id', timetableId);
 
       if (classesError) throw classesError;
@@ -159,22 +162,29 @@ export default function ViewTimetablePage() {
             classroom_name: classroom?.name || 'Unknown',
             notes: cls.notes || '',
             session_duration: cls.session_duration || 60,
-            class_type: cls.class_type || 'THEORY'
+            class_type: cls.class_type || 'THEORY',
+            is_continuation: cls.is_continuation || false,
+            is_lab: cls.is_lab || false,
+            session_number: cls.session_number || 1
           };
         })
       );
 
       setClasses(enrichedClasses);
 
-      // Extract unique time slots and sort them
-      const uniqueSlots = Array.from(
-        new Set(
-          enrichedClasses
-            .map(cls => `${cls.start_time}-${cls.end_time}`)
-            .filter(slot => slot !== '-')
-        )
-      ).sort();
-      setTimeSlots(uniqueSlots);
+      // Define all possible time slots (matching the schedule structure)
+      const allTimeSlots = [
+        '09:00-10:00',
+        '10:00-11:00',
+        '11:15-12:15',
+        '12:15-13:15',
+        'LUNCH', // Lunch break
+        '14:15-15:15',
+        '15:15-16:15'
+      ];
+
+      // Use all time slots instead of just extracting from scheduled classes
+      setTimeSlots(allTimeSlots);
 
     } catch (err: any) {
       console.error('Error fetching timetable:', err);
@@ -186,16 +196,31 @@ export default function ViewTimetablePage() {
 
   const getClassForSlot = (day: string, timeSlot: string): ScheduledClass | undefined => {
     const [startTime, endTime] = timeSlot.split('-');
+    // Normalize time format: "09:00:00" or "09:00" -> "09:00"
+    const normalizeTime = (time: string) => time.substring(0, 5);
+    
     return classes.find(
-      cls => cls.day === day && cls.start_time === startTime && cls.end_time === endTime
+      cls => cls.day === day && 
+             normalizeTime(cls.start_time) === normalizeTime(startTime) && 
+             normalizeTime(cls.end_time) === normalizeTime(endTime)
     );
   };
 
   const isLabContinuation = (classInfo: ScheduledClass): boolean => {
+    // First check the is_continuation flag (preferred)
+    if (classInfo.is_continuation !== undefined) {
+      return classInfo.is_continuation;
+    }
+    // Fallback to notes check for backward compatibility
     return classInfo.notes?.includes('Continuation') || classInfo.notes?.includes('cont.') || false;
   };
 
   const isLabStart = (classInfo: ScheduledClass): boolean => {
+    // Check if it's a lab and NOT a continuation
+    if (classInfo.is_lab !== undefined) {
+      return classInfo.is_lab && !classInfo.is_continuation;
+    }
+    // Fallback to class_type check
     return (classInfo.class_type === 'LAB' || classInfo.class_type === 'PRACTICAL') && 
            classInfo.session_duration === 120;
   };
@@ -442,6 +467,19 @@ export default function ViewTimetablePage() {
                       Day / Time
                     </th>
                     {timeSlots.map((slot) => {
+                      // Handle lunch break specially
+                      if (slot === 'LUNCH') {
+                        return (
+                          <th key={slot} className="border border-gray-200 p-3 text-center font-semibold text-yellow-700 bg-yellow-50 min-w-[200px]">
+                            <div className="flex flex-col items-center">
+                              <span className="text-2xl mb-1">🍽️</span>
+                              <span className="text-sm">1:15-2:15</span>
+                              <span className="text-xs">Lunch Break</span>
+                            </div>
+                          </th>
+                        );
+                      }
+                      
                       const [start, end] = slot.split('-');
                       return (
                         <th key={slot} className="border border-gray-200 p-3 text-center font-semibold text-gray-700 min-w-[200px]">
@@ -462,6 +500,17 @@ export default function ViewTimetablePage() {
                         {day}
                       </td>
                       {timeSlots.map((slot) => {
+                        // Handle lunch break - show lunch for all days
+                        if (slot === 'LUNCH') {
+                          return (
+                            <td key={`${day}-${slot}`} className="border border-gray-200 p-4 bg-yellow-50">
+                              <div className="text-center text-yellow-700 font-medium text-sm">
+                                🍽️ Lunch
+                              </div>
+                            </td>
+                          );
+                        }
+                        
                         const classInfo = getClassForSlot(day, slot);
                         const isContinuation = classInfo && isLabContinuation(classInfo);
                         const isLabStartSlot = classInfo && isLabStart(classInfo);

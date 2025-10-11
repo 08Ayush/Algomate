@@ -116,14 +116,14 @@ export function Header() {
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center justify-between px-4">
         {/* Left Side - Logo and Title */}
-        <Link href={user ? (user.role === 'admin' || user.role === 'college_admin' ? '/admin/dashboard' : '/dashboard') : '/'} className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
+        <Link href={user ? (user.role === 'admin' || user.role === 'college_admin' ? '/admin/dashboard' : '/faculty/dashboard') : '/'} className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
           <div className="relative">
             <GraduationCap className="h-8 w-8 text-primary" />
             <Sparkles className="h-3 w-3 text-accent absolute -top-1 -right-1 animate-pulse" />
           </div>
           <div className="flex flex-col">
             <span className="text-xl font-bold text-foreground">
-              The Academic Compass
+              Academic Compass
             </span>
             {user && (
               <span className="text-xs text-muted-foreground">

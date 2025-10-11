@@ -408,6 +408,11 @@ export async function POST(request: NextRequest) {
         classroomIndex++;
       }
 
+      // Determine if this is a lab assignment
+      const isLabAssignment = assignment.isLab || 
+                             assignment.subject.requiresLab || 
+                             (assignment.subject.subjectType && assignment.subject.subjectType.toLowerCase().includes('lab'));
+      
       // Schema requires these fields for scheduled_classes table
       const classData = {
         timetable_id: timetable.id,
@@ -417,20 +422,58 @@ export async function POST(request: NextRequest) {
         classroom_id: assignedClassroomId, // REQUIRED by schema - now always has a value
         time_slot_id: dbTimeSlotId, // Use mapped database UUID
         credit_hour_number: scheduledClasses.length + 1, // Sequential based on valid assignments
-        class_type: assignment.subject.subjectType || 'THEORY',
+        class_type: isLabAssignment ? 'LAB' : (assignment.subject.subjectType || 'THEORY'),
         session_duration: (assignment.duration || 1) * 60, // Duration in minutes
         is_recurring: true,
+        is_lab: isLabAssignment, // Mark if this is a lab class
+        is_continuation: false, // This is the main slot, not continuation
+        session_number: assignment.session_number || 1, // Session number for tracking
         notes: `${assignment.subject.name} - ${assignment.faculty.firstName} ${assignment.faculty.lastName}`
       };
       
       if (index === 0) {
         console.log('✅ Sample class data (first assignment):', {
           ...classData,
-          mapped_time_slot: timeSlotKey
+          mapped_time_slot: timeSlotKey,
+          is_lab: isLabAssignment
         });
       }
       
       scheduledClasses.push(classData);
+      
+      // If this is a lab (2-hour session), create a continuation entry for the next slot
+      if (isLabAssignment && assignment.duration === 2 && assignment.endSlotIndex !== undefined) {
+        // Find the next time slot for continuation
+        const nextSlotTime = assignment.timeSlot.time.split('-')[1]; // Get end time of current slot
+        const continuationKey = `${assignment.timeSlot.day}-${normalizeTime(nextSlotTime)}`;
+        const continuationTimeSlotId = timeSlotMap.get(continuationKey);
+        
+        if (continuationTimeSlotId) {
+          console.log(`✅ Creating continuation slot for lab: ${continuationKey}`);
+          
+          const continuationData = {
+            timetable_id: timetable.id,
+            batch_id: finalBatchId,
+            subject_id: assignment.subject.id,
+            faculty_id: assignment.faculty.id,
+            classroom_id: assignedClassroomId,
+            time_slot_id: continuationTimeSlotId,
+            credit_hour_number: scheduledClasses.length + 1,
+            class_type: 'LAB',
+            session_duration: 60, // Second hour
+            is_recurring: true,
+            is_lab: true,
+            is_continuation: true, // Mark as continuation
+            session_number: assignment.session_number || 1,
+            notes: `${assignment.subject.name} - ${assignment.faculty.firstName} ${assignment.faculty.lastName} (Lab Continuation)`
+          };
+          
+          scheduledClasses.push(continuationData);
+          console.log(`✅ Added lab continuation slot for ${assignment.subject.name}`);
+        } else {
+          console.warn(`⚠️ Could not find continuation time slot for ${continuationKey}`);
+        }
+      }
     }
 
     if (scheduledClasses.length === 0) {

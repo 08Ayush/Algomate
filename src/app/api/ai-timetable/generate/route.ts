@@ -155,6 +155,9 @@ function generateOptimalTimetable(data: any) {
   const conflicts: any[] = [];
   const facultyWorkload = new Map<string, number>();
   const subjectHoursAssigned = new Map<string, number>();
+  
+  // CONSTRAINT: Track which days already have labs (max 1 lab per day)
+  const labScheduledDays = new Set<string>();
 
   // Time slots configuration - matching database structure
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -263,6 +266,12 @@ function generateOptimalTimetable(data: any) {
     for (let dayIdx = 0; dayIdx < days.length && sessionsAssigned < minSessionsNeeded; dayIdx++) {
       const day = days[dayIdx];
       
+      // CONSTRAINT: Skip this day if it already has a lab and current subject is a lab
+      if (isLab && labScheduledDays.has(day)) {
+        console.log(`⏭️ Skipping ${day} for ${subject.name} lab (already has a lab)`);
+        continue;
+      }
+      
       for (let slotIdx = 0; slotIdx < timeSlots.length && sessionsAssigned < minSessionsNeeded; slotIdx++) {
         const timeSlot = timeSlots[slotIdx];
 
@@ -335,6 +344,11 @@ function generateOptimalTimetable(data: any) {
               facultyWorkload.set(faculty.id, (facultyWorkload.get(faculty.id) || 0) + 2);
               subjectHoursAssigned.set(subject.id, (subjectHoursAssigned.get(subject.id) || 0) + 2);
               sessionsAssigned += 1;
+              
+              // CONSTRAINT: Mark this day as having a lab
+              labScheduledDays.add(day);
+              console.log(`✅ ${subject.code} LAB: ${day} slots ${slotIdx}-${slotIdx + 1} (2 hours)`);
+              
               slotIdx++;
               continue;
             }
@@ -529,6 +543,12 @@ function generateOptimalTimetable(data: any) {
             const currentHours = subjectHoursAssigned.get(subject.id) || 0;
             const currentSlotIndex = timeSlots.findIndex(ts => ts.time === timeSlot.time);
             
+            // CONSTRAINT: Max 1 lab per day - check in Phase 2 as well
+            if (isLab && labScheduledDays.has(day)) {
+              console.log(`⏭️ Phase 2: Skipping ${day} for ${subject.name} lab (already has a lab this day)`);
+              continue; // Skip this subject, try next eligible subject
+            }
+            
             // For labs in Phase 2, try to find consecutive slots
             if (isLab && currentSlotIndex < timeSlots.length - 1) {
               const nextSlot = timeSlots[currentSlotIndex + 1];
@@ -586,6 +606,9 @@ function generateOptimalTimetable(data: any) {
                 subjectHoursAssigned.set(subject.id, currentHours + 2);
                 slotFilled = true;
                 classAdded = true;
+                
+                // Mark this day as having a lab
+                labScheduledDays.add(day);
                 
                 console.log(`✅ Added 2-hour lab #${schedule.length - 1},${schedule.length}: ${subject.name} on ${day} ${timeSlot.time}-${nextSlot.time} with ${faculty.first_name} in ${classroom.name}`);
                 break; // Successfully added lab, move to next subject

@@ -283,6 +283,11 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Detect if this is a lab
+      const isLabClass = item.is_lab || 
+                         item.subject_type?.toLowerCase().includes('lab') ||
+                         (item.duration && item.duration > 1);
+
       // Schema-aligned structure
       return {
         timetable_id: timetable.id,
@@ -292,9 +297,12 @@ export async function POST(request: NextRequest) {
         classroom_id: item.classroom_id || null,
         time_slot_id: timeSlotId,
         credit_hour_number: index + 1,
-        class_type: item.subject_type || 'THEORY',
+        class_type: isLabClass ? 'LAB' : (item.subject_type || 'THEORY'),
         session_duration: (item.duration || 1) * 60,
         is_recurring: true,
+        is_lab: isLabClass,
+        is_continuation: item.is_continuation || false,
+        session_number: item.session_number || 1,
         notes: item.is_continuation 
           ? `${item.subject_name || 'Class'} (Continuation) - ${item.faculty_name || 'Faculty'}`
           : `${item.subject_name || 'Class'} - ${item.faculty_name || 'Faculty'}${item.duration === 2 ? ' (2-hour session)' : ''}`

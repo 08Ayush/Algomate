@@ -14,139 +14,65 @@ import {
   GraduationCap,
   Building,
   FileText,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ChevronDown,
+  Loader2
 } from "lucide-react";
 
-// Mock student data - replace with actual user data
-interface Student {
-  semester: number;
-  batch: string;
-  department: string;
-  rollNumber: string;
+// Types
+interface DashboardData {
+  user: any;
+  additionalData: {
+    batch?: any;
+    batchId?: string;
+    facultyCount?: number;
+  };
+  events: any[];
 }
 
-// Mock events data
-const mockEvents = [
-  {
-    id: 1,
-    title: "AI/ML Workshop - Machine Learning Fundamentals",
-    type: "Workshop",
-    date: "2025-09-24",
-    time: "10:00 AM",
-    location: "Lab-A",
-    status: "Upcoming",
-    color: "blue"
-  },
-  {
-    id: 2,
-    title: "Technical Symposium - Code Fest 2025",
-    type: "Event", 
-    date: "2025-09-27",
-    time: "9:00 AM",
-    location: "Auditorium",
-    status: "Upcoming",
-    color: "green"
-  },
-  {
-    id: 3,
-    title: "Industry Expert Seminar - Web Development Trends",
-    type: "Seminar",
-    date: "2025-09-29", 
-    time: "2:00 PM",
-    location: "BF-01",
-    status: "Upcoming",
-    color: "purple"
-  },
-  {
-    id: 4,
-    title: "Final Year Project Review - Phase 1 Submissions",
-    type: "Academic",
-    date: "2025-10-02",
-    time: "11:00 AM", 
-    location: "Conference Hall",
-    status: "Upcoming",
-    color: "orange"
-  }
-];
-
-// Hybrid-style timetable structure
-const getHybridTimetableData = (semester: number) => {
-  const timeSlots = [
-    '9:00-10:00', '10:00-11:00', '11:15-12:15', '12:15-1:15', 
-    '2:15-3:15', '3:15-4:15', '4:30-5:30'
-  ];
-  
-  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  
-  const timetable: any = {
-    Monday: {
-      '9:00-10:00': { course_code: '25CE301T', course_title: 'Mathematics for Computer Engineering', faculty: 'Dr. Manoj V. Bramhe', room: 'BF-01', color: 'bg-blue-100 text-blue-800' },
-      '10:00-11:00': { course_code: '25CE302T', course_title: 'Data Structure & Problem Solving', faculty: 'Dr. Sunil M. Wanjari', room: 'BF-02', color: 'bg-green-100 text-green-800' },
-      '11:15-12:15': { course_code: '25CE303T', course_title: 'Object Oriented Programming', faculty: 'Prof. Priya S. Ghuge', room: 'LAB-A', color: 'bg-purple-100 text-purple-800' },
-      '12:15-1:15': { type: 'break', course_title: 'Lunch Break' },
-      '2:15-3:15': { course_code: '25CE304T', course_title: 'Digital Logic Design', faculty: 'Mr. Dhiraj R. Gupta', room: 'BF-01', color: 'bg-orange-100 text-orange-800' },
-      '3:15-4:15': { course_code: '25CE305T', course_title: 'Environmental Studies', faculty: 'Dr. Yogesh G. Golhar', room: 'BF-02', color: 'bg-red-100 text-red-800' },
-      '4:30-5:30': { course_code: '25CE306P', course_title: 'Data Structure Lab', faculty: 'Dr. Sunil M. Wanjari', room: 'LAB-B', color: 'bg-indigo-100 text-indigo-800' }
-    },
-    Tuesday: {
-      '9:00-10:00': { course_code: '25CE302T', course_title: 'Data Structure & Problem Solving', faculty: 'Dr. Sunil M. Wanjari', room: 'BF-02', color: 'bg-green-100 text-green-800' },
-      '10:00-11:00': { course_code: '25CE301T', course_title: 'Mathematics for Computer Engineering', faculty: 'Dr. Manoj V. Bramhe', room: 'BF-01', color: 'bg-blue-100 text-blue-800' },
-      '11:15-12:15': { course_code: '25CE307P', course_title: 'Programming Lab', faculty: 'Prof. Priya S. Ghuge', room: 'LAB-A', color: 'bg-teal-100 text-teal-800' },
-      '12:15-1:15': { type: 'break', course_title: 'Lunch Break' },
-      '2:15-3:15': { course_code: '25CE303T', course_title: 'Object Oriented Programming', faculty: 'Prof. Priya S. Ghuge', room: 'LAB-A', color: 'bg-purple-100 text-purple-800' },
-      '3:15-4:15': { course_code: '25CE304T', course_title: 'Digital Logic Design', faculty: 'Mr. Dhiraj R. Gupta', room: 'BF-01', color: 'bg-orange-100 text-orange-800' },
-      '4:30-5:30': { course_code: '25CE305T', course_title: 'Environmental Studies', faculty: 'Dr. Yogesh G. Golhar', room: 'BF-02', color: 'bg-red-100 text-red-800' }
-    },
-    Wednesday: {
-      '9:00-10:00': { course_code: '25CE303T', course_title: 'Object Oriented Programming', faculty: 'Prof. Priya S. Ghuge', room: 'LAB-A', color: 'bg-purple-100 text-purple-800' },
-      '10:00-11:00': { course_code: '25CE306P', course_title: 'Data Structure Lab', faculty: 'Dr. Sunil M. Wanjari', room: 'LAB-B', color: 'bg-indigo-100 text-indigo-800' },
-      '11:15-12:15': { course_code: '25CE301T', course_title: 'Mathematics for Computer Engineering', faculty: 'Dr. Manoj V. Bramhe', room: 'BF-01', color: 'bg-blue-100 text-blue-800' },
-      '12:15-1:15': { type: 'break', course_title: 'Lunch Break' },
-      '2:15-3:15': { course_code: '25CE305T', course_title: 'Environmental Studies', faculty: 'Dr. Yogesh G. Golhar', room: 'BF-02', color: 'bg-red-100 text-red-800' },
-      '3:15-4:15': { course_code: '25CE302T', course_title: 'Data Structure & Problem Solving', faculty: 'Dr. Sunil M. Wanjari', room: 'BF-02', color: 'bg-green-100 text-green-800' },
-      '4:30-5:30': { course_code: '25CE304T', course_title: 'Digital Logic Design', faculty: 'Mr. Dhiraj R. Gupta', room: 'BF-01', color: 'bg-orange-100 text-orange-800' }
-    },
-    Thursday: {
-      '9:00-10:00': { course_code: '25CE304T', course_title: 'Digital Logic Design', faculty: 'Mr. Dhiraj R. Gupta', room: 'BF-01', color: 'bg-orange-100 text-orange-800' },
-      '10:00-11:00': { course_code: '25CE305T', course_title: 'Environmental Studies', faculty: 'Dr. Yogesh G. Golhar', room: 'BF-02', color: 'bg-red-100 text-red-800' },
-      '11:15-12:15': { course_code: '25CE302T', course_title: 'Data Structure & Problem Solving', faculty: 'Dr. Sunil M. Wanjari', room: 'BF-02', color: 'bg-green-100 text-green-800' },
-      '12:15-1:15': { type: 'break', course_title: 'Lunch Break' },
-      '2:15-3:15': { course_code: '25CE307P', course_title: 'Programming Lab', faculty: 'Prof. Priya S. Ghuge', room: 'LAB-A', color: 'bg-teal-100 text-teal-800' },
-      '3:15-4:15': { course_code: '25CE301T', course_title: 'Mathematics for Computer Engineering', faculty: 'Dr. Manoj V. Bramhe', room: 'BF-01', color: 'bg-blue-100 text-blue-800' },
-      '4:30-5:30': { course_code: '25CE303T', course_title: 'Object Oriented Programming', faculty: 'Prof. Priya S. Ghuge', room: 'LAB-A', color: 'bg-purple-100 text-purple-800' }
-    },
-    Friday: {
-      '9:00-10:00': { course_code: '25CE305T', course_title: 'Environmental Studies', faculty: 'Dr. Yogesh G. Golhar', room: 'BF-02', color: 'bg-red-100 text-red-800' },
-      '10:00-11:00': { course_code: '25CE304T', course_title: 'Digital Logic Design', faculty: 'Mr. Dhiraj R. Gupta', room: 'BF-01', color: 'bg-orange-100 text-orange-800' },
-      '11:15-12:15': { course_code: '25CE306P', course_title: 'Data Structure Lab', faculty: 'Dr. Sunil M. Wanjari', room: 'LAB-B', color: 'bg-indigo-100 text-indigo-800' },
-      '12:15-1:15': { type: 'break', course_title: 'Lunch Break' },
-      '2:15-3:15': { course_code: '25CE301T', course_title: 'Mathematics for Computer Engineering', faculty: 'Dr. Manoj V. Bramhe', room: 'BF-01', color: 'bg-blue-100 text-blue-800' },
-      '3:15-4:15': { course_code: '25CE303T', course_title: 'Object Oriented Programming', faculty: 'Prof. Priya S. Ghuge', room: 'LAB-A', color: 'bg-purple-100 text-purple-800' },
-      '4:30-5:30': { course_code: '25CE307P', course_title: 'Programming Lab', faculty: 'Prof. Priya S. Ghuge', room: 'LAB-A', color: 'bg-teal-100 text-teal-800' }
-    },
-    Saturday: {
-      '9:00-10:00': { course_code: '25CE302T', course_title: 'Data Structure & Problem Solving', faculty: 'Dr. Sunil M. Wanjari', room: 'BF-02', color: 'bg-green-100 text-green-800' },
-      '10:00-11:00': { course_code: '25CE301T', course_title: 'Mathematics for Computer Engineering', faculty: 'Dr. Manoj V. Bramhe', room: 'BF-01', color: 'bg-blue-100 text-blue-800' },
-      '11:15-12:15': { course_code: '25CE303T', course_title: 'Object Oriented Programming', faculty: 'Prof. Priya S. Ghuge', room: 'LAB-A', color: 'bg-purple-100 text-purple-800' },
-      '12:15-1:15': { type: 'break', course_title: 'Lunch Break' },
-      '2:15-3:15': { course_code: '25CE305T', course_title: 'Environmental Studies', faculty: 'Dr. Yogesh G. Golhar', room: 'BF-02', color: 'bg-red-100 text-red-800' },
-      '3:15-4:15': { course_code: '25CE306P', course_title: 'Data Structure Lab', faculty: 'Dr. Sunil M. Wanjari', room: 'LAB-B', color: 'bg-indigo-100 text-indigo-800' },
-      '4:30-5:30': { course_code: '25CE307P', course_title: 'Programming Lab', faculty: 'Prof. Priya S. Ghuge', room: 'LAB-A', color: 'bg-teal-100 text-teal-800' }
-    }
+interface PublishedTimetable {
+  id: string;
+  title: string;
+  academic_year: string;
+  semester: number;
+  fitness_score: number;
+  batches: {
+    id: string;
+    name: string;
+    section: string;
+    semester: number;
   };
+}
 
-  return { timeSlots, days, timetable };
-};
+interface TimetableClass {
+  id: string;
+  subjectCode: string;
+  subjectName: string;
+  subjectType: string;
+  facultyName: string;
+  classroomName: string;
+  building: string;
+  day: string;
+  startTime: string;
+  endTime: string;
+  isBreak: boolean;
+  isLunch: boolean;
+  isLab: boolean;
+  isContinuation: boolean;
+}
 
 export default function StudentDashboard() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
-  const [studentData] = useState<Student>({
-    semester: 3,
-    batch: "A1",
-    department: "Computer Science Engineering",
-    rollNumber: "22CSE001"
-  });
+  const [loading, setLoading] = useState(true);
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [publishedTimetables, setPublishedTimetables] = useState<PublishedTimetable[]>([]);
+  const [availableBatches, setAvailableBatches] = useState<any[]>([]);
+  const [selectedTimetable, setSelectedTimetable] = useState<PublishedTimetable | null>(null);
+  const [timetableClasses, setTimetableClasses] = useState<TimetableClass[]>([]);
+  const [timeSlots, setTimeSlots] = useState<string[]>([]);
+  const [days] = useState(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
+  const [loadingTimetable, setLoadingTimetable] = useState(false);
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -170,16 +96,118 @@ export default function StudentDashboard() {
     }
 
     setUser(parsedUser);
+    fetchDashboardData(parsedUser);
   }, [router]);
 
-  const hybridTimetable = getHybridTimetableData(studentData.semester);
+  const fetchDashboardData = async (user: any) => {
+    try {
+      setLoading(true);
+      
+      // Fetch user profile and events
+      const response = await fetch(
+        `/api/student/dashboard?userId=${user.id}&role=${user.role}`
+      );
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch dashboard data');
+      }
+      
+      const data = await response.json();
+      setDashboardData(data);
+
+      // Fetch published timetables for the department
+      const timetablesResponse = await fetch(
+        `/api/student/published-timetables?departmentId=${user.department_id}${user.role === 'student' && data.additionalData.batch ? `&semester=${data.additionalData.batch.semester}` : ''}`
+      );
+      
+      if (timetablesResponse.ok) {
+        const timetablesData = await timetablesResponse.json();
+        setPublishedTimetables(timetablesData.timetables || []);
+        setAvailableBatches(timetablesData.batches || []);
+        
+        // Auto-select student's own timetable or first available
+        if (user.role === 'student' && data.additionalData.batchId) {
+          const studentTimetable = timetablesData.timetables.find(
+            (tt: PublishedTimetable) => tt.batches?.id === data.additionalData.batchId
+          );
+          if (studentTimetable) {
+            setSelectedTimetable(studentTimetable);
+            fetchTimetableClasses(studentTimetable.id);
+          }
+        } else if (timetablesData.timetables.length > 0) {
+          setSelectedTimetable(timetablesData.timetables[0]);
+          fetchTimetableClasses(timetablesData.timetables[0].id);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchTimetableClasses = async (timetableId: string) => {
+    try {
+      setLoadingTimetable(true);
+      const response = await fetch(
+        `/api/student/timetable-classes?timetableId=${timetableId}`
+      );
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch timetable classes');
+      }
+      
+      const data = await response.json();
+      setTimetableClasses(data.classes || []);
+      setTimeSlots(data.timeSlots || []);
+    } catch (error) {
+      console.error('Error fetching timetable classes:', error);
+    } finally {
+      setLoadingTimetable(false);
+    }
+  };
+
+  const handleTimetableChange = (timetable: PublishedTimetable) => {
+    setSelectedTimetable(timetable);
+    fetchTimetableClasses(timetable.id);
+  };
+
+  const getClassForSlot = (day: string, timeSlot: string): TimetableClass | undefined => {
+    const [startTime] = timeSlot.split('-');
+    const normalizeTime = (time: string) => time.substring(0, 5);
+    
+    return timetableClasses.find(
+      cls => cls.day === day && normalizeTime(cls.startTime) === normalizeTime(startTime)
+    );
+  };
+
+  const getClassColor = (subjectType: string, index: number) => {
+    const colors = [
+      'bg-blue-100 text-blue-800',
+      'bg-green-100 text-green-800',
+      'bg-purple-100 text-purple-800',
+      'bg-orange-100 text-orange-800',
+      'bg-red-100 text-red-800',
+      'bg-indigo-100 text-indigo-800',
+      'bg-teal-100 text-teal-800',
+      'bg-pink-100 text-pink-800',
+    ];
+    
+    if (subjectType === 'LAB') {
+      return 'bg-indigo-100 text-indigo-800';
+    }
+    
+    return colors[index % colors.length];
+  };
 
   // Export to PDF function
   const exportToPDF = () => {
+    if (!selectedTimetable) return;
+    
     let htmlContent = `
       <html>
         <head>
-          <title>Class Timetable - Semester ${studentData.semester}</title>
+          <title>Class Timetable - ${selectedTimetable.batches?.name} ${selectedTimetable.batches?.section}</title>
           <style>
             body { font-family: Arial, sans-serif; margin: 20px; }
             h1 { color: #333; text-align: center; margin-bottom: 30px; }
@@ -197,35 +225,35 @@ export default function StudentDashboard() {
         <body>
           <h1>Weekly Class Schedule</h1>
           <p style="text-align: center; margin-bottom: 20px;">
-            Department of Computer Engineering • Semester ${studentData.semester} • Academic Year 2024-25
+            ${dashboardData?.user.department?.name} • Batch ${selectedTimetable.batches?.name} ${selectedTimetable.batches?.section} • ${selectedTimetable.academic_year}
           </p>
           <table>
             <thead>
               <tr>
                 <th>Time / Day</th>`;
     
-    hybridTimetable.days.forEach(day => {
+    days.forEach(day => {
       htmlContent += `<th>${day}</th>`;
     });
     
     htmlContent += `</tr></thead><tbody>`;
     
-    hybridTimetable.timeSlots.forEach(timeSlot => {
+    timeSlots.forEach(timeSlot => {
       htmlContent += `<tr><td style="font-weight: bold; background-color: #f5f5f5;">${timeSlot}</td>`;
       
-      hybridTimetable.days.forEach(day => {
-        const slot = hybridTimetable.timetable[day][timeSlot];
+      days.forEach(day => {
+        const slot = getClassForSlot(day, timeSlot);
         if (!slot) {
           htmlContent += '<td>-</td>';
-        } else if (slot.type === 'break') {
-          htmlContent += `<td class="break-cell">${slot.course_title}</td>`;
+        } else if (slot.isBreak || slot.isLunch) {
+          htmlContent += `<td class="break-cell">${slot.isLunch ? 'Lunch Break' : 'Break'}</td>`;
         } else {
           htmlContent += `
             <td class="subject-cell">
-              <div class="course-code">${slot.course_code}</div>
-              <div class="course-title">${slot.course_title}</div>
-              <div class="faculty">${slot.faculty}</div>
-              <div class="room">${slot.room}</div>
+              <div class="course-code">${slot.subjectCode}</div>
+              <div class="course-title">${slot.subjectName}</div>
+              <div class="faculty">${slot.facultyName}</div>
+              <div class="room">${slot.classroomName}</div>
             </td>
           `;
         }
@@ -240,7 +268,7 @@ export default function StudentDashboard() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `timetable-semester-${studentData.semester}.html`;
+    link.download = `timetable-${selectedTimetable.batches?.name}-${selectedTimetable.batches?.section}.html`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -249,21 +277,23 @@ export default function StudentDashboard() {
 
   // Export to Excel (CSV format)
   const exportToExcel = () => {
-    let csvContent = `Weekly Class Schedule - Semester ${studentData.semester}\n`;
-    csvContent += `Department of Computer Engineering • Academic Year 2024-25\n\n`;
+    if (!selectedTimetable) return;
     
-    csvContent += 'Time / Day,' + hybridTimetable.days.join(',') + '\n';
+    let csvContent = `Weekly Class Schedule - ${selectedTimetable.batches?.name} ${selectedTimetable.batches?.section}\n`;
+    csvContent += `${dashboardData?.user.department?.name} • ${selectedTimetable.academic_year}\n\n`;
     
-    hybridTimetable.timeSlots.forEach(timeSlot => {
+    csvContent += 'Time / Day,' + days.join(',') + '\n';
+    
+    timeSlots.forEach(timeSlot => {
       let row = timeSlot;
-      hybridTimetable.days.forEach(day => {
-        const slot = hybridTimetable.timetable[day][timeSlot];
+      days.forEach(day => {
+        const slot = getClassForSlot(day, timeSlot);
         if (!slot) {
           row += ',-';
-        } else if (slot.type === 'break') {
-          row += `,"${slot.course_title}"`;
+        } else if (slot.isBreak || slot.isLunch) {
+          row += `,"${slot.isLunch ? 'Lunch Break' : 'Break'}"`;
         } else {
-          row += `,"${slot.course_code} - ${slot.course_title} (${slot.faculty}, ${slot.room})"`;
+          row += `,"${slot.subjectCode} - ${slot.subjectName} (${slot.facultyName}, ${slot.classroomName})"`;
         }
       });
       csvContent += row + '\n';
@@ -273,7 +303,7 @@ export default function StudentDashboard() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `timetable-semester-${studentData.semester}.csv`;
+    link.download = `timetable-${selectedTimetable.batches?.name}-${selectedTimetable.batches?.section}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -290,10 +320,13 @@ export default function StudentDashboard() {
     }
   };
 
-  if (!user) {
+  if (!user || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600 dark:text-gray-300">Loading dashboard...</p>
+        </div>
       </div>
     );
   }
@@ -323,7 +356,9 @@ export default function StudentDashboard() {
           </div>
           <div className="text-right">
             <div className="text-sm text-gray-500 dark:text-gray-400">Your Department</div>
-            <Badge className="bg-blue-500 text-white mt-1">CSE</Badge>
+            <Badge className="bg-blue-500 text-white mt-1">
+              {dashboardData?.user.department?.code || 'N/A'}
+            </Badge>
           </div>
         </div>
       </div>
@@ -333,28 +368,64 @@ export default function StudentDashboard() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <BookOpen className="h-5 w-5 text-blue-600" />
-            Computer Science Engineering
+            {dashboardData?.user.department?.name || 'Department'}
           </CardTitle>
           <div className="text-sm text-gray-600 dark:text-gray-300">
-            Computer Science and Engineering Department
+            {dashboardData?.user.college?.name || 'College'}
           </div>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {user?.role === 'student' && (
+              <>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {dashboardData?.additionalData.batch?.semester || user.current_semester || '-'}
+                  </div>
+                  <div className="text-sm text-gray-500">Current Semester</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">
+                    {dashboardData?.additionalData.batch?.name && dashboardData?.additionalData.batch?.section 
+                      ? `${dashboardData.additionalData.batch.name} ${dashboardData.additionalData.batch.section}`
+                      : '-'}
+                  </div>
+                  <div className="text-sm text-gray-500">Batch</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-purple-600">
+                    {user.email?.split('@')[0]?.toUpperCase() || '-'}
+                  </div>
+                  <div className="text-sm text-gray-500">UID</div>
+                </div>
+              </>
+            )}
+            {user?.role === 'faculty' && (
+              <>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-purple-600">
+                    {user.email?.split('@')[0]?.toUpperCase() || '-'}
+                  </div>
+                  <div className="text-sm text-gray-500">UID</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {user.faculty_type?.toUpperCase() || 'GENERAL'}
+                  </div>
+                  <div className="text-sm text-gray-500">Faculty Type</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">
+                    {dashboardData?.user.departments?.code || '-'}
+                  </div>
+                  <div className="text-sm text-gray-500">Department Code</div>
+                </div>
+              </>
+            )}
             <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">{studentData.semester}</div>
-              <div className="text-sm text-gray-500">Current Semester</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">{studentData.batch}</div>
-              <div className="text-sm text-gray-500">Batch</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-purple-600">{studentData.rollNumber}</div>
-              <div className="text-sm text-gray-500">Roll Number</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-orange-600">15</div>
+              <div className="text-2xl font-bold text-orange-600">
+                {dashboardData?.additionalData.facultyCount || 0}
+              </div>
               <div className="text-sm text-gray-500">Faculty Members</div>
             </div>
           </div>
@@ -367,141 +438,212 @@ export default function StudentDashboard() {
           <CardTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />
             Upcoming Events & Workshops
-            <Badge variant="secondary" className="ml-auto">CSE Only</Badge>
+            <Badge variant="secondary" className="ml-auto">
+              {dashboardData?.events.length || 0} Events
+            </Badge>
           </CardTitle>
           <div className="text-sm text-gray-600 dark:text-gray-300">
-            Important upcoming activities and events in Computer Science Engineering
+            Important upcoming activities and events in {dashboardData?.user.department?.name}
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {mockEvents.map((event) => (
-              <Card key={event.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="p-4">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Badge className={getEventTypeColor(event.type)}>
-                        {event.type}
-                      </Badge>
-                      <Badge variant="outline" className="text-green-600 border-green-200">
-                        {event.status}
-                      </Badge>
-                    </div>
-                    
-                    <div>
-                      <h4 className="font-medium text-sm leading-tight">{event.title}</h4>
-                    </div>
-                    
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 text-xs text-gray-600">
-                        <Calendar className="h-3 w-3" />
-                        <span>{event.date}</span>
+          {dashboardData?.events && dashboardData.events.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {dashboardData.events.map((event: any) => (
+                <Card key={event.id} className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-4">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Badge className={getEventTypeColor(event.event_type || 'other')}>
+                          {event.event_type || 'Event'}
+                        </Badge>
+                        <Badge variant="outline" className="text-green-600 border-green-200">
+                          {event.status || 'Published'}
+                        </Badge>
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-gray-600">
-                        <Clock className="h-3 w-3" />
-                        <span>{event.time}</span>
+                      
+                      <div>
+                        <h4 className="font-medium text-sm leading-tight">{event.title}</h4>
+                        {event.description && (
+                          <p className="text-xs text-gray-500 mt-1 line-clamp-2">{event.description}</p>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-gray-600">
-                        <MapPin className="h-3 w-3" />
-                        <span>{event.location}</span>
+                      
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 text-xs text-gray-600">
+                          <Calendar className="h-3 w-3" />
+                          <span>{new Date(event.start_date).toLocaleDateString()}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-gray-600">
+                          <Clock className="h-3 w-3" />
+                          <span>{event.start_time?.substring(0, 5)} - {event.end_time?.substring(0, 5)}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-gray-600">
+                          <MapPin className="h-3 w-3" />
+                          <span>{event.venue || 'TBA'}</span>
+                        </div>
                       </div>
+                      
+                      {event.creator && (
+                        <div className="text-xs text-gray-500 pt-2 border-t">
+                          By: {event.creator.first_name} {event.creator.last_name}
+                          {event.creator.faculty_type && (
+                            <Badge variant="outline" className="ml-1 text-xs">
+                              {event.creator.faculty_type}
+                            </Badge>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              <Calendar className="h-12 w-12 mx-auto mb-2 opacity-50" />
+              <p>No upcoming events available</p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {/* Weekly Timetable Section */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex-1">
               <CardTitle className="flex items-center gap-2">
                 <Clock className="h-5 w-5" />
-                Weekly Class Schedule
+                Published Timetables
               </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Department of Computer Engineering • Academic Year 2024-25
+              <p className="text-sm text-muted-foreground mt-1">
+                {selectedTimetable 
+                  ? `${selectedTimetable.batches?.name} ${selectedTimetable.batches?.section} • ${selectedTimetable.academic_year}`
+                  : 'Select a batch to view timetable'}
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => exportToPDF()}
-                className="flex items-center gap-1"
-              >
-                <FileText className="h-4 w-4" />
-                PDF
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => exportToExcel()}
-                className="flex items-center gap-1"
-              >
-                <FileSpreadsheet className="h-4 w-4" />
-                Excel
-              </Button>
-              <Badge variant="secondary">25 classes</Badge>
+            
+            {/* Batch Selector */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {publishedTimetables.length > 1 && (
+                <div className="relative">
+                  <select
+                    value={selectedTimetable?.id || ''}
+                    onChange={(e) => {
+                      const selected = publishedTimetables.find(tt => tt.id === e.target.value);
+                      if (selected) handleTimetableChange(selected);
+                    }}
+                    className="px-3 py-2 pr-8 border border-gray-300 rounded-md text-sm appearance-none bg-white dark:bg-gray-800 dark:border-gray-600 cursor-pointer"
+                  >
+                    {publishedTimetables.map((tt) => (
+                      <option key={tt.id} value={tt.id}>
+                        Batch {tt.batches?.name} {tt.batches?.section} (Sem {tt.semester})
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 pointer-events-none" />
+                </div>
+              )}
+              
+              {selectedTimetable && (
+                <>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={exportToPDF}
+                    disabled={loadingTimetable}
+                    className="flex items-center gap-1"
+                  >
+                    <FileText className="h-4 w-4" />
+                    PDF
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={exportToExcel}
+                    disabled={loadingTimetable}
+                    className="flex items-center gap-1"
+                  >
+                    <FileSpreadsheet className="h-4 w-4" />
+                    Excel
+                  </Button>
+                  <Badge variant="secondary">
+                    {timetableClasses.filter(c => !c.isBreak && !c.isLunch).length} classes
+                  </Badge>
+                </>
+              )}
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse border border-gray-300 dark:border-gray-600">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-800">
-                  <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left font-medium min-w-[120px] text-gray-900 dark:text-gray-100">
-                    Time / Day
-                  </th>
-                  {hybridTimetable.days.map((day: string) => (
-                    <th key={day} className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center font-medium min-w-[160px] text-gray-900 dark:text-gray-100">
-                      {day}
+          {loadingTimetable ? (
+            <div className="text-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-2" />
+              <p className="text-gray-500">Loading timetable...</p>
+            </div>
+          ) : !selectedTimetable ? (
+            <div className="text-center py-12 text-gray-500">
+              <Clock className="h-12 w-12 mx-auto mb-2 opacity-50" />
+              <p className="font-medium">No published timetables available</p>
+              <p className="text-sm mt-1">Timetables will appear here once published by faculty</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse border border-gray-300 dark:border-gray-600">
+                <thead>
+                  <tr className="bg-gray-50 dark:bg-gray-800">
+                    <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left font-medium min-w-[120px] text-gray-900 dark:text-gray-100">
+                      Time / Day
                     </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {hybridTimetable.timeSlots.map((timeSlot: string) => (
-                  <tr key={timeSlot} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-                    <td className="border border-gray-300 dark:border-gray-600 px-4 py-3 font-medium bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100">
-                      {timeSlot}
-                    </td>
-                    {hybridTimetable.days.map((day: string) => {
-                      const slot = hybridTimetable.timetable[day][timeSlot];
-                      return (
-                        <td key={`${day}-${timeSlot}`} className="border border-gray-300 dark:border-gray-600 p-2">
-                          {slot ? (
-                            slot.type === 'break' ? (
-                              <div className="text-center py-2 text-gray-500 dark:text-gray-400 italic">
-                                {slot.course_title}
-                              </div>
-                            ) : (
-                              <div className={`p-3 rounded-md text-center ${slot.color}`}>
-                                <div className="font-semibold text-sm">{slot.course_code}</div>
-                                <div className="text-xs mt-1">{slot.course_title}</div>
-                                <div className="text-xs mt-1 opacity-75">{slot.faculty}</div>
-                                <div className="text-xs mt-1 flex items-center justify-center gap-1">
-                                  <Building className="h-3 w-3" />
-                                  {slot.room}
-                                </div>
-                              </div>
-                            )
-                          ) : (
-                            <div className="text-center py-6 text-gray-400 dark:text-gray-500">-</div>
-                          )}
-                        </td>
-                      );
-                    })}
+                    {days.map((day: string) => (
+                      <th key={day} className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center font-medium min-w-[160px] text-gray-900 dark:text-gray-100">
+                        {day}
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {timeSlots.map((timeSlot: string, slotIndex: number) => (
+                    <tr key={timeSlot} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                      <td className="border border-gray-300 dark:border-gray-600 px-4 py-3 font-medium bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100">
+                        {timeSlot}
+                      </td>
+                      {days.map((day: string) => {
+                        const slot = getClassForSlot(day, timeSlot);
+                        return (
+                          <td key={`${day}-${timeSlot}`} className="border border-gray-300 dark:border-gray-600 p-2">
+                            {slot ? (
+                              slot.isBreak || slot.isLunch ? (
+                                <div className="text-center py-2 text-gray-500 dark:text-gray-400 italic bg-gray-100 dark:bg-gray-800 rounded">
+                                  {slot.isLunch ? '🍽️ Lunch Break' : '☕ Break'}
+                                </div>
+                              ) : (
+                                <div className={`p-3 rounded-md text-center ${getClassColor(slot.subjectType, slotIndex)}`}>
+                                  <div className="font-semibold text-sm flex items-center justify-center gap-1">
+                                    {slot.subjectCode}
+                                    {slot.isLab && <Badge variant="secondary" className="text-xs">LAB</Badge>}
+                                  </div>
+                                  <div className="text-xs mt-1 line-clamp-1">{slot.subjectName}</div>
+                                  <div className="text-xs mt-1 opacity-75">{slot.facultyName}</div>
+                                  <div className="text-xs mt-1 flex items-center justify-center gap-1">
+                                    <Building className="h-3 w-3" />
+                                    {slot.classroomName}
+                                  </div>
+                                </div>
+                              )
+                            ) : (
+                              <div className="text-center py-6 text-gray-400 dark:text-gray-500">-</div>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
 

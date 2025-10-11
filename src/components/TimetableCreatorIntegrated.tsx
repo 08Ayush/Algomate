@@ -71,6 +71,7 @@ Just tell me what semester or batch you'd like to schedule, and I'll generate an
     '10:00',
     '11:15',
     '12:15',
+    'LUNCH', // Lunch break indicator
     '14:15',
     '15:15'
   ];
@@ -80,6 +81,7 @@ Just tell me what semester or batch you'd like to schedule, and I'll generate an
     '10:00': '10:00-11:00',
     '11:15': '11:15-12:15',
     '12:15': '12:15-1:15',
+    'LUNCH': '1:15-2:15 (Lunch)',
     '14:15': '2:15-3:15',
     '15:15': '3:15-4:15'
   };
@@ -566,25 +568,35 @@ What would you like to do?`;
                         <td className="border border-gray-300 dark:border-slate-600 p-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-slate-800">
                           {timeSlotDisplay[time] || time}
                         </td>
-                        {days.map(day => {
-                          const scheduleItem = getScheduleForSlot(day, time);
+                        {time === 'LUNCH' ? (
+                          // Lunch break row - spans all days
+                          <td colSpan={days.length} className="border border-gray-300 dark:border-slate-600 p-4 text-center bg-yellow-50 dark:bg-yellow-900/20">
+                            <div className="flex items-center justify-center space-x-2 text-yellow-700 dark:text-yellow-400">
+                              <span className="text-2xl">🍽️</span>
+                              <span className="font-semibold">LUNCH BREAK</span>
+                            </div>
+                          </td>
+                        ) : (
+                          days.map(day => {
+                            const scheduleItem = getScheduleForSlot(day, time);
 
-                          return (
-                            <td key={`${day}-${time}`} className="border border-gray-300 dark:border-slate-600 p-2 text-xs">
-                              {scheduleItem ? (
-                                <div className={`p-2 rounded ${scheduleItem.is_lab ? 'bg-purple-100 dark:bg-purple-900/30 border-l-4 border-purple-600' : 'bg-blue-100 dark:bg-blue-900/30 border-l-4 border-blue-600'}`}>
-                                  <div className="font-semibold text-gray-900 dark:text-white">{scheduleItem.subject_code}</div>
-                                  <div className="text-gray-700 dark:text-gray-300 text-xs">{scheduleItem.subject_name}</div>
-                                  <div className="text-gray-600 dark:text-gray-400 mt-1 text-xs">{scheduleItem.faculty_name}</div>
-                                  <div className="text-gray-500 dark:text-gray-500 text-xs">{scheduleItem.classroom_name}</div>
-                                  {scheduleItem.is_lab && <div className="text-purple-600 dark:text-purple-400 text-xs font-medium mt-1">LAB</div>}
-                                </div>
-                              ) : (
-                                <div className="h-20 bg-gray-50 dark:bg-slate-900"></div>
-                              )}
-                            </td>
-                          );
-                        })}
+                            return (
+                              <td key={`${day}-${time}`} className="border border-gray-300 dark:border-slate-600 p-2 text-xs">
+                                {scheduleItem ? (
+                                  <div className={`p-2 rounded ${scheduleItem.is_lab ? 'bg-purple-100 dark:bg-purple-900/30 border-l-4 border-purple-600' : 'bg-blue-100 dark:bg-blue-900/30 border-l-4 border-blue-600'}`}>
+                                    <div className="font-semibold text-gray-900 dark:text-white">{scheduleItem.subject_code}</div>
+                                    <div className="text-gray-700 dark:text-gray-300 text-xs">{scheduleItem.subject_name}</div>
+                                    <div className="text-gray-600 dark:text-gray-400 mt-1 text-xs">{scheduleItem.faculty_name}</div>
+                                    <div className="text-gray-500 dark:text-gray-500 text-xs">{scheduleItem.classroom_name}</div>
+                                    {scheduleItem.is_lab && <div className="text-purple-600 dark:text-purple-400 text-xs font-medium mt-1">LAB</div>}
+                                  </div>
+                                ) : (
+                                  <div className="h-20 bg-gray-50 dark:bg-slate-900"></div>
+                                )}
+                              </td>
+                            );
+                          })
+                        )}
                       </tr>
                     ))}
                   </tbody>

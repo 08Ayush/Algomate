@@ -397,12 +397,12 @@ CREATE TABLE scheduled_classes (
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT no_batch_time_conflict 
-        EXCLUDE USING gist (batch_id WITH =, time_slot_id WITH =),
-    CONSTRAINT no_faculty_time_conflict 
-        EXCLUDE USING gist (faculty_id WITH =, time_slot_id WITH =),
-    CONSTRAINT no_classroom_time_conflict 
-        EXCLUDE USING gist (classroom_id WITH =, time_slot_id WITH =)
+    CONSTRAINT no_batch_time_conflict_per_timetable 
+        EXCLUDE USING gist (timetable_id WITH =, batch_id WITH =, time_slot_id WITH =),
+    CONSTRAINT no_faculty_time_conflict_per_timetable 
+        EXCLUDE USING gist (timetable_id WITH =, faculty_id WITH =, time_slot_id WITH =),
+    CONSTRAINT no_classroom_time_conflict_per_timetable 
+        EXCLUDE USING gist (timetable_id WITH =, classroom_id WITH =, time_slot_id WITH =)
 );
 
 CREATE TABLE algorithm_execution_metrics (
@@ -692,6 +692,63 @@ INSERT INTO departments (college_id, name, code) VALUES
     ((SELECT id FROM colleges WHERE code = 'SVPCET'), 'Computer Science & Engineering', 'CSE'),
     ((SELECT id FROM colleges WHERE code = 'SVPCET'), 'Information Technology', 'IT'),
     ((SELECT id FROM colleges WHERE code = 'SVPCET'), 'Civil Engineering', 'CE');
+
+-- Insert default constraint rules for timetable generation
+INSERT INTO constraint_rules (rule_name, rule_type, description, rule_parameters, weight, is_active) VALUES
+    -- Hard constraints (must be satisfied)
+    ('no_batch_overlap_per_timetable', 'HARD', 
+     'A batch cannot attend multiple classes simultaneously within the same timetable',
+     '{"scope": "per_timetable", "resource": "batch", "check_type": "time_overlap"}', 100.0, true),
+    
+    ('no_faculty_overlap_per_timetable', 'HARD',
+     'A faculty member cannot teach multiple classes simultaneously within the same timetable',
+     '{"scope": "per_timetable", "resource": "faculty", "check_type": "time_overlap"}', 100.0, true),
+    
+    ('no_classroom_overlap_per_timetable', 'HARD',
+     'A classroom cannot host multiple classes simultaneously within the same timetable',
+     '{"scope": "per_timetable", "resource": "classroom", "check_type": "time_overlap"}', 100.0, true),
+    
+    ('no_continuous_theory_same_faculty', 'HARD',
+     'Theory lectures by the same faculty cannot be scheduled in continuous slots',
+     '{"scope": "per_timetable", "resource": "faculty", "check_type": "continuous_theory", "max_continuous": 1}', 90.0, true),
+    
+    ('lab_requires_continuous_slots', 'HARD',
+     'Lab sessions must be scheduled in 2 continuous time slots',
+     '{"scope": "per_timetable", "resource": "subject", "check_type": "lab_continuity", "required_slots": 2}', 95.0, true),
+    
+    ('max_one_lab_per_day', 'HARD',
+     'Maximum one lab session per day for a batch to ensure even distribution',
+     '{"scope": "per_timetable", "resource": "batch", "check_type": "lab_per_day", "max_labs": 1}', 85.0, true),
+    
+    ('minimum_subject_hours', 'HARD',
+     'Each subject must meet minimum required credit hours per week',
+     '{"scope": "per_timetable", "resource": "subject", "check_type": "minimum_hours"}', 100.0, true),
+    
+    -- Soft constraints (preferences)
+    ('distribute_subjects_evenly', 'SOFT',
+     'Distribute subject classes evenly across the week',
+     '{"scope": "per_timetable", "resource": "subject", "check_type": "even_distribution"}', 50.0, true),
+    
+    ('faculty_preferred_time_slots', 'SOFT',
+     'Schedule faculty during their preferred time slots when possible',
+     '{"scope": "per_timetable", "resource": "faculty", "check_type": "time_preference"}', 30.0, true),
+    
+    ('avoid_first_last_slot_labs', 'SOFT',
+     'Avoid scheduling labs in the first or last slot of the day',
+     '{"scope": "per_timetable", "resource": "subject", "check_type": "lab_timing"}', 20.0, true),
+    
+    ('lunch_break_consideration', 'SOFT',
+     'Respect lunch break timings',
+     '{"scope": "per_timetable", "resource": "batch", "check_type": "break_time"}', 40.0, true),
+    
+    ('faculty_cross_timetable_preference', 'SOFT',
+     'Minimize faculty conflicts across multiple published timetables',
+     '{"scope": "cross_timetable", "resource": "faculty", "check_type": "time_overlap", "applies_to_status": ["published"]}', 10.0, true),
+    
+    ('classroom_cross_timetable_preference', 'SOFT',
+     'Minimize classroom conflicts across multiple published timetables',
+     '{"scope": "cross_timetable", "resource": "classroom", "check_type": "time_overlap", "applies_to_status": ["published"]}', 5.0, true)
+ON CONFLICT (rule_name) DO NOTHING;
 
 -- ============================================================================
 -- SCHEMA VALIDATION AND COMPLETION

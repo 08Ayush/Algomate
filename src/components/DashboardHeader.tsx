@@ -57,7 +57,7 @@ export default function DashboardHeader({ user, onLogout, onToggleSidebar, isSid
               <span className="text-white font-bold text-lg">AC</span>
             </div>
             <div>
-              <h1 className="text-xl font-semibold text-gray-900">The Academic Compass</h1>
+              <h1 className="text-xl font-semibold text-gray-900">Academic Compass</h1>
               <p className="text-sm text-gray-500">AI-Powered Timetables</p>
             </div>
           </div>

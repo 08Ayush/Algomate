@@ -164,3 +164,95 @@ export async function GET(request: NextRequest) {
     }, { status: 500 });
   }
 }
+
+// POST - Create a new subject
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const {
+      name,
+      code,
+      college_id,
+      department_id,
+      semester,
+      credits_per_week,
+      subject_type,
+      preferred_duration,
+      max_continuous_hours,
+      requires_lab,
+      requires_projector,
+      is_core_subject,
+      description
+    } = body;
+
+    console.log('Creating new subject:', { name, code, semester, subject_type });
+
+    // Validate required fields
+    if (!name || !code || !department_id || !semester || !credits_per_week || !subject_type) {
+      return NextResponse.json({
+        success: false,
+        error: 'Missing required fields: name, code, department_id, semester, credits_per_week, subject_type'
+      }, { status: 400 });
+    }
+
+    // Check if subject code already exists in the department
+    const { data: existingSubject } = await supabase
+      .from('subjects')
+      .select('id, code')
+      .eq('code', code)
+      .eq('department_id', department_id)
+      .single();
+
+    if (existingSubject) {
+      return NextResponse.json({
+        success: false,
+        error: `Subject with code "${code}" already exists in this department`
+      }, { status: 409 });
+    }
+
+    // Insert new subject
+    const { data: newSubject, error: insertError } = await supabase
+      .from('subjects')
+      .insert({
+        name: name.trim(),
+        code: code.trim().toUpperCase(),
+        college_id: college_id,
+        department_id: department_id,
+        semester: parseInt(semester),
+        credits_per_week: parseInt(credits_per_week),
+        subject_type: subject_type,
+        preferred_duration: preferred_duration || 60,
+        max_continuous_hours: max_continuous_hours || 1,
+        requires_lab: requires_lab || false,
+        requires_projector: requires_projector || false,
+        is_core_subject: is_core_subject || false,
+        description: description || null,
+        is_active: true
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('Error inserting subject:', insertError);
+      return NextResponse.json({
+        success: false,
+        error: insertError.message
+      }, { status: 500 });
+    }
+
+    console.log('✅ Subject created successfully:', newSubject.id);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Subject created successfully',
+      data: newSubject
+    }, { status: 201 });
+
+  } catch (error: any) {
+    console.error('Unexpected error creating subject:', error);
+    return NextResponse.json({
+      success: false,
+      error: 'Internal server error'
+    }, { status: 500 });
+  }
+}
