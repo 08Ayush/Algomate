@@ -158,19 +158,96 @@ export async function POST(request: NextRequest) {
       console.error('Time slots fetch error:', timeSlotsError);
     }
 
-    // Get classrooms and labs
+    // Get classrooms and labs - FILTER BY DEPARTMENT
     const { data: classrooms, error: classroomsError } = await supabase
       .from('classrooms')
       .select('*')
       .eq('college_id', batchInfo.college_id)
+      .eq('department_id', department_id)  // Only get classrooms for this department!
       .eq('is_available', true);
+
+    if (classroomsError) {
+      console.error('❌ Classrooms fetch error:', classroomsError);
+    }
 
     console.log('✅ Data collected:', {
       faculty: facultyData?.length || 0,
       subjects: subjectsData?.length || 0,
       timeSlots: timeSlots?.length || 0,
-      classrooms: classrooms?.length || 0
+      classrooms: classrooms?.length || 0,
+      department_id: department_id
     });
+
+    // Log classroom names to verify department filter
+    if (classrooms && classrooms.length > 0) {
+      console.log('🏫 Department classrooms:', classrooms.map(c => `${c.name} (${c.type})`).join(', '));
+    } else {
+      console.warn('⚠️ No classrooms found for department:', department_id);
+    }
+
+    // Fetch existing published/approved timetables to avoid classroom conflicts
+    // Only check within the SAME department (different departments can use same time slots)
+    console.log('🔍 Checking existing timetables for classroom conflicts in same department...');
+    const { data: existingTimetables, error: existingError } = await supabase
+      .from('scheduled_classes')
+      .select(`
+        classroom_id,
+        time_slot_id,
+        time_slots!inner (
+          day,
+          start_time
+        ),
+        generated_timetables!inner (
+          id,
+          status,
+          semester,
+          academic_year
+        ),
+        batches!inner (
+          department_id
+        )
+      `)
+      .eq('generated_timetables.academic_year', academic_year)
+      .eq('batches.department_id', department_id)  // Same department only!
+      .in('generated_timetables.status', ['published', 'pending_approval']);
+    
+    // Build a map of occupied classrooms: "day-time" -> Set of classroom IDs
+    const existingClassroomOccupancy = new Map<string, Set<string>>();
+    
+    // Get the IDs of classrooms in this department for filtering
+    const departmentClassroomIds = new Set(classrooms?.map(c => c.id) || []);
+    
+    if (existingTimetables && existingTimetables.length > 0) {
+      console.log(`📋 Found ${existingTimetables.length} existing scheduled classes in same department`);
+      
+      let filteredCount = 0;
+      existingTimetables.forEach((scheduled: any) => {
+        if (scheduled.time_slots && scheduled.classroom_id) {
+          // Only track occupancy for classrooms in THIS department
+          if (departmentClassroomIds.has(scheduled.classroom_id)) {
+            const day = scheduled.time_slots.day;
+            const time = scheduled.time_slots.start_time.substring(0, 5); // "09:00:00" -> "09:00"
+            const key = `${day}-${time}`;
+            
+            if (!existingClassroomOccupancy.has(key)) {
+              existingClassroomOccupancy.set(key, new Set());
+            }
+            existingClassroomOccupancy.get(key)!.add(scheduled.classroom_id);
+            filteredCount++;
+          }
+        }
+      });
+      
+      console.log(`📊 Tracking ${filteredCount} classroom conflicts in department ${department_id}`);
+      
+      // Log sample conflicts
+      const sampleConflicts = Array.from(existingClassroomOccupancy.entries()).slice(0, 3);
+      console.log('📊 Sample existing conflicts:', sampleConflicts.map(([key, classrooms]) => 
+        `${key}: ${classrooms.size} classrooms occupied`
+      ));
+    } else {
+      console.log('✅ No existing conflicts found - fresh timetable generation');
+    }
 
     // PHASE 2: HYBRID ALGORITHM EXECUTION
     console.log('🤖 Phase 2: Starting Hybrid Algorithm...');
@@ -304,6 +381,7 @@ export async function POST(request: NextRequest) {
     const scheduledSlots = new Set<string>(); // "day-timeIndex"
     const facultyDaySlots = new Map<string, Set<number>>(); // "facultyId-day" -> Set of time indices
     const subjectScheduledCount = new Map<string, number>(); // subjectId -> count
+    const classroomOccupancy = new Map<string, Set<string>>(); // "day-timeIndex" -> Set of occupied classroom IDs
     
     // Helper: Check if slot is already taken
     const isSlotTaken = (day: string, timeIndex: number): boolean => {
@@ -344,18 +422,83 @@ export async function POST(request: NextRequest) {
       return null;
     };
     
-    // Helper: Add scheduled class
+    // Helper: Find available classroom for a specific day+time slot
+    const findAvailableClassroom = (day: string, timeIndex: number, isLabClass: boolean): any | null => {
+      const occupancyKey = `${day}-${timeIndex}`;
+      const timeSlot = timeSlotsPerDay[timeIndex];
+      const dayTimeKey = `${day}-${timeSlot?.time}`; // e.g., "Monday-09:00"
+      
+      // Initialize occupancy set for current timetable if not exists
+      if (!classroomOccupancy.has(occupancyKey)) {
+        classroomOccupancy.set(occupancyKey, new Set());
+      }
+      
+      const occupiedClassrooms = classroomOccupancy.get(occupancyKey)!;
+      
+      // ALSO check existing timetables for classroom conflicts
+      const existingOccupied = existingClassroomOccupancy.get(dayTimeKey) || new Set();
+      
+      // Combine both sets to get ALL occupied classrooms
+      const allOccupiedClassrooms = new Set([...occupiedClassrooms, ...existingOccupied]);
+      
+      // Select appropriate classroom pool
+      const availableClassroomPool = isLabClass 
+        ? (labs && labs.length > 0 ? labs : classrooms) 
+        : (regularClassrooms && regularClassrooms.length > 0 ? regularClassrooms : classrooms);
+      
+      if (!availableClassroomPool || availableClassroomPool.length === 0) {
+        console.warn(`⚠️ No classrooms available for ${isLabClass ? 'lab' : 'regular'} class at ${day}-${timeIndex}`);
+        return null;
+      }
+      
+      // Log current state
+      const occupiedNames = Array.from(allOccupiedClassrooms).map(id => {
+        const room = classrooms?.find(c => c.id === id);
+        return room?.name || id.substring(0, 8);
+      });
+      
+      console.log(`🔍 [${day} ${timeSlot?.time}] Finding ${isLabClass ? 'lab' : 'classroom'}: ${allOccupiedClassrooms.size}/${availableClassroomPool.length} occupied ${occupiedNames.length > 0 ? `(${occupiedNames.join(', ')})` : ''}`);
+      
+      // Find first available classroom from appropriate pool
+      for (const classroom of availableClassroomPool) {
+        if (!allOccupiedClassrooms.has(classroom.id)) {
+          // Mark as occupied in CURRENT timetable
+          occupiedClassrooms.add(classroom.id);
+          console.log(`✅ Assigned available ${isLabClass ? 'lab' : 'classroom'}: ${classroom.name}`);
+          return classroom;
+        }
+      }
+      
+      // All classrooms occupied - use first one anyway (conflict unavoidable)
+      console.warn(`⚠️ All ${isLabClass ? 'lab' : 'regular'} classrooms occupied at ${day}-${timeIndex}, assigning ${availableClassroomPool[0]?.name} with conflict`);
+      return availableClassroomPool[0];
+    };
+    
+    // Helper: Add scheduled class (automatically assigns available classroom unless provided)
     const addScheduledClass = (
       day: string,
       timeIndex: number,
       subject: any,
       faculty: any,
-      classroom: any,
       isLab: boolean,
       isContinuation: boolean,
-      sessionNumber: number = 1
+      sessionNumber: number = 1,
+      providedClassroom: any = null // Optional: use for lab continuations
     ) => {
       const timeSlot = timeSlotsPerDay[timeIndex];
+      
+      // Use provided classroom (for continuations) or find available one
+      let classroom = providedClassroom;
+      if (!classroom) {
+        classroom = findAvailableClassroom(day, timeIndex, isLab);
+      } else {
+        // Manually mark as occupied if classroom was provided
+        const occupancyKey = `${day}-${timeIndex}`;
+        if (!classroomOccupancy.has(occupancyKey)) {
+          classroomOccupancy.set(occupancyKey, new Set());
+        }
+        classroomOccupancy.get(occupancyKey)!.add(classroom.id);
+      }
       
       schedule.push({
         id: `schedule-${scheduleIndex++}`,
@@ -384,6 +527,9 @@ export async function POST(request: NextRequest) {
         facultyDaySlots.set(facultyKey, new Set());
       }
       facultyDaySlots.get(facultyKey)!.add(timeIndex);
+      
+      // Return the classroom for continuations
+      return classroom;
     };
     
     // STEP 1: Schedule all LAB sessions (2-hour continuous blocks)
@@ -433,12 +579,6 @@ export async function POST(request: NextRequest) {
       }
       
       const faculty = qualifiedFaculty[0];
-      const lab = labs?.[0] || classrooms?.[0];
-      
-      if (!lab) {
-        console.warn(`⚠️ No lab available for: ${subject.code}`);
-        continue;
-      }
       
       let sessionsScheduled = 0;
       let startDayIndex = 0; // Start searching from Monday
@@ -459,11 +599,11 @@ export async function POST(request: NextRequest) {
         if (continuousSlots.length === 2) {
           const [slot1, slot2] = continuousSlots;
           
-          // Schedule main lab session (displays in first slot)
-          addScheduledClass(day, slot1, subject, faculty, lab, true, false, sessionsScheduled + 1);
+          // Schedule main lab session (displays in first slot) - classroom auto-assigned
+          const assignedLab = addScheduledClass(day, slot1, subject, faculty, true, false, sessionsScheduled + 1);
           
-          // Schedule continuation (displays in second slot - same subject info)
-          addScheduledClass(day, slot2, subject, faculty, lab, true, true, sessionsScheduled + 1);
+          // Schedule continuation (displays in second slot) - SAME classroom
+          addScheduledClass(day, slot2, subject, faculty, true, true, sessionsScheduled + 1, assignedLab);
           
           // Mark this day as having a lab (max 1 lab per day)
           labScheduledDays.add(day);
@@ -541,9 +681,6 @@ export async function POST(request: NextRequest) {
         }
         
         const faculty = qualifiedFaculty[0];
-        const classroom = regularClassrooms?.[scheduleIndex % (regularClassrooms?.length || 1)] || classrooms?.[0];
-        
-        if (!classroom) break;
         
         const nextSlot = findNextTheorySlot(faculty.id, subject.subject_type);
         
@@ -554,7 +691,8 @@ export async function POST(request: NextRequest) {
         
         const { day, timeIndex } = nextSlot;
         
-        addScheduledClass(day, timeIndex, subject, faculty, classroom, false, false, currentCount + 1);
+        // Classroom will be auto-assigned based on availability at this day+time
+        addScheduledClass(day, timeIndex, subject, faculty, false, false, currentCount + 1);
         
         subjectScheduledCount.set(subject.id, currentCount + 1);
         subjectIndex++;
@@ -625,6 +763,7 @@ export async function POST(request: NextRequest) {
           if (slotTaken) continue;
 
           // Try each theory subject with best soft constraint score
+          // NOTE: Classroom will be auto-assigned based on availability
           let bestAssignment: any = null;
           let bestScore = -Infinity;
 
@@ -634,20 +773,23 @@ export async function POST(request: NextRequest) {
             ) || [];
 
             for (const faculty of qualifiedFaculty) {
-              for (const classroom of regularClassrooms) {
-                if (!isHardConstraintViolated(subject, faculty, classroom, day, timeSlot)) {
-                  const score = calculateSoftConstraintScore(subject, faculty, classroom, day, timeSlot);
-                  if (score > bestScore) {
-                    bestScore = score;
-                    bestAssignment = { subject, faculty, classroom };
-                  }
+              // Check with ANY available classroom (will be assigned later)
+              const tempClassroom = regularClassrooms?.[0] || classrooms?.[0];
+              if (tempClassroom && !isHardConstraintViolated(subject, faculty, tempClassroom, day, timeSlot)) {
+                const score = calculateSoftConstraintScore(subject, faculty, tempClassroom, day, timeSlot);
+                if (score > bestScore) {
+                  bestScore = score;
+                  bestAssignment = { subject, faculty };
                 }
               }
             }
           }
 
           if (bestAssignment) {
-            const { subject, faculty, classroom } = bestAssignment;
+            const { subject, faculty } = bestAssignment;
+            
+            // Find available classroom for this day+time using our occupancy tracker
+            const classroom = findAvailableClassroom(day, slotIdx, false);
             
             schedule.push({
               id: `schedule-${scheduleIndex++}`,

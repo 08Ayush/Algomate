@@ -79,11 +79,10 @@ export default function BatchesPage() {
   // Fetch batches
   const fetchBatches = async () => {
     try {
-      if (!user) return;
+      if (!user || !user.department_id) return;
       
-      console.log('Fetching batches for CSE department...');
-      const departmentCode = 'CSE';
-      const response = await fetch(`/api/batches?department_code=${departmentCode}`);
+      console.log('Fetching batches for department:', user.department_id);
+      const response = await fetch(`/api/batches?department_id=${user.department_id}`);
       
       const result = await response.json();
       console.log('Batches API Result:', result);

@@ -335,6 +335,23 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('✅ Found', classrooms.length, 'available classrooms');
+    console.log('📋 Classroom details:', classrooms.map(c => ({ name: c.name, type: c.type, capacity: c.capacity })));
+    
+    // Separate classrooms by type for better assignment
+    // Check for various type names (case-insensitive)
+    const regularClassrooms = classrooms.filter(c => {
+      const type = c.type?.toLowerCase() || '';
+      return type.includes('classroom') || type.includes('lecture') || type.includes('hall') || !c.type;
+    });
+    
+    const labClassrooms = classrooms.filter(c => {
+      const type = c.type?.toLowerCase() || '';
+      return type.includes('lab');
+    });
+    
+    console.log(`📊 Classroom breakdown: ${regularClassrooms.length} regular, ${labClassrooms.length} labs`);
+    console.log(`📋 Regular classrooms: ${regularClassrooms.map(c => c.name).join(', ')}`);
+    console.log(`📋 Lab classrooms: ${labClassrooms.map(c => c.name).join(', ')}`);
 
     // STEP 4: Create scheduled classes for each assignment
     console.log('📝 Creating', assignments.length, 'scheduled classes...');
@@ -353,6 +370,9 @@ export async function POST(request: NextRequest) {
     };
     
     const scheduledClasses: any[] = [];
+    // Track which classrooms are occupied at which time slots to prevent conflicts
+    // Key format: "Day-Time" (e.g., "Monday-09:00") -> Set of occupied classroom IDs
+    const classroomOccupancy = new Map<string, Set<string>>();
     let classroomIndex = 0; // Round-robin classroom assignment
     
     for (let index = 0; index < assignments.length; index++) {
@@ -386,32 +406,92 @@ export async function POST(request: NextRequest) {
       
       console.log(`✅ Matched "${timeSlotKey}" to time slot ${dbTimeSlotId}`);
       
-      // Assign classroom: Use provided one if valid, otherwise round-robin from available classrooms
-      let assignedClassroomId: string;
-      
-      if (assignment.classroom && isValidUUID(assignment.classroom)) {
-        // Validate provided classroom exists in our list
-        const classroomExists = classrooms.some(c => c.id === assignment.classroom);
-        if (classroomExists) {
-          assignedClassroomId = assignment.classroom;
-          console.log(`✅ Using provided classroom: ${assignment.classroom}`);
-        } else {
-          // Provided classroom not in available list, use round-robin
-          assignedClassroomId = classrooms[classroomIndex % classrooms.length].id;
-          console.warn(`⚠️ Provided classroom ${assignment.classroom} not found, using ${assignedClassroomId}`);
-          classroomIndex++;
-        }
-      } else {
-        // No classroom provided or invalid, use round-robin
-        assignedClassroomId = classrooms[classroomIndex % classrooms.length].id;
-        console.log(`✅ Auto-assigned classroom: ${assignedClassroomId} (${classrooms[classroomIndex % classrooms.length].name})`);
-        classroomIndex++;
-      }
-
-      // Determine if this is a lab assignment
+      // Determine if this is a lab assignment FIRST (before classroom selection)
       const isLabAssignment = assignment.isLab || 
                              assignment.subject.requiresLab || 
                              (assignment.subject.subjectType && assignment.subject.subjectType.toLowerCase().includes('lab'));
+      
+      // Select appropriate classroom pool based on subject type
+      let availableClassroomPool: typeof classrooms;
+      
+      if (isLabAssignment) {
+        // For labs, prefer lab classrooms, but use all if no labs available
+        availableClassroomPool = labClassrooms.length > 0 ? labClassrooms : classrooms;
+        console.log(`🔬 Lab assignment detected, using ${availableClassroomPool.length} classrooms`);
+      } else {
+        // For regular classes, prefer lecture halls/classrooms, but use all if none available
+        availableClassroomPool = regularClassrooms.length > 0 ? regularClassrooms : classrooms;
+        console.log(`📚 Regular class, using ${availableClassroomPool.length} classrooms`);
+      }
+      
+      // Assign classroom: Use provided one if valid, otherwise find an available classroom (conflict-free)
+      let assignedClassroomId: string = availableClassroomPool[0].id; // Default to first classroom
+      
+      // Use day+time as occupancy key (NOT just dbTimeSlotId) to track across different batches
+      const occupancyKey = timeSlotKey; // "Monday-09:00" format
+      
+      console.log(`🔍 Available classrooms for ${occupancyKey}: ${availableClassroomPool.map(c => c.name).join(', ')}`);
+      
+      // Initialize occupancy set for this day+time if not exists
+      if (!classroomOccupancy.has(occupancyKey)) {
+        classroomOccupancy.set(occupancyKey, new Set());
+      }
+      const occupiedClassrooms = classroomOccupancy.get(occupancyKey)!;
+      
+      if (assignment.classroom && isValidUUID(assignment.classroom)) {
+        // Validate provided classroom exists and is not occupied at this time
+        const classroomExists = availableClassroomPool.some(c => c.id === assignment.classroom);
+        const isOccupied = occupiedClassrooms.has(assignment.classroom);
+        
+        if (classroomExists && !isOccupied) {
+          assignedClassroomId = assignment.classroom;
+          console.log(`✅ Using provided classroom: ${assignment.classroom}`);
+        } else {
+          // Find first available classroom from the appropriate pool
+          let foundAvailable = false;
+          for (let i = 0; i < availableClassroomPool.length; i++) {
+            const testClassroom = availableClassroomPool[i];
+            if (!occupiedClassrooms.has(testClassroom.id)) {
+              assignedClassroomId = testClassroom.id;
+              foundAvailable = true;
+              console.warn(`⚠️ Provided classroom ${assignment.classroom} ${isOccupied ? 'occupied' : 'not found'}, using ${testClassroom.name}`);
+              break;
+            }
+          }
+          if (!foundAvailable) {
+            // All classrooms in pool occupied - use first one anyway (conflict unavoidable)
+            assignedClassroomId = availableClassroomPool[0].id;
+            console.error(`❌ All ${isLabAssignment ? 'lab' : 'regular'} classrooms occupied at ${timeSlotKey}, assigning with conflict`);
+          }
+        }
+      } else {
+        // No classroom provided - find first available classroom from appropriate pool
+        console.log(`🔍 Finding available classroom for ${occupancyKey}, currently occupied: ${Array.from(occupiedClassrooms).map(id => classrooms.find(c => c.id === id)?.name || id).join(', ')}`);
+        
+        let foundAvailable = false;
+        for (let i = 0; i < availableClassroomPool.length; i++) {
+          const testClassroom = availableClassroomPool[i];
+          console.log(`  - Checking ${testClassroom.name} (${testClassroom.id}): ${occupiedClassrooms.has(testClassroom.id) ? 'OCCUPIED' : 'AVAILABLE'}`);
+          
+          if (!occupiedClassrooms.has(testClassroom.id)) {
+            assignedClassroomId = testClassroom.id;
+            foundAvailable = true;
+            console.log(`✅ Auto-assigned available ${isLabAssignment ? 'lab' : 'classroom'}: ${testClassroom.name}`);
+            break;
+          }
+        }
+        if (!foundAvailable) {
+          // All classrooms in pool occupied - use first one anyway (conflict unavoidable)
+          assignedClassroomId = availableClassroomPool[0].id;
+          console.error(`❌ All ${isLabAssignment ? 'lab' : 'regular'} classrooms occupied at ${timeSlotKey}, assigning with conflict to ${availableClassroomPool[0].name}`);
+        }
+      }
+      
+      // Mark this classroom as occupied at this time slot
+      occupiedClassrooms.add(assignedClassroomId);
+      
+      const assignedClassroom = classrooms.find(c => c.id === assignedClassroomId);
+      console.log(`📍 Classroom assignment for ${occupancyKey}: ${assignedClassroom?.name || assignedClassroomId} (${occupiedClassrooms.size}/${availableClassroomPool.length} ${isLabAssignment ? 'labs' : 'classrooms'} occupied at this time)`);
       
       // Schema requires these fields for scheduled_classes table
       const classData = {

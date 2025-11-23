@@ -72,11 +72,10 @@ export default function ClassroomsPage() {
   useEffect(() => {
     async function fetchClassrooms() {
       try {
-        if (!user) return;
+        if (!user || !user.department_id) return;
         
-        console.log('Fetching classrooms for CSE department...');
-        const departmentCode = 'CSE';
-        const response = await fetch(`/api/classrooms?department_code=${departmentCode}`);
+        console.log('Fetching classrooms for department:', user.department_id);
+        const response = await fetch(`/api/classrooms?department_id=${user.department_id}`);
         
         const result = await response.json();
         console.log('Classrooms API Result:', result);

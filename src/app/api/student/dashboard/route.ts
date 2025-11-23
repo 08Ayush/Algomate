@@ -75,11 +75,17 @@ export async function GET(request: NextRequest) {
         .eq('is_active', true)
         .single();
 
+      console.log('🎓 Batch Enrollment Query:');
+      console.log('  Student ID:', userId);
+      console.log('  Enrollment Data:', JSON.stringify(enrollmentData, null, 2));
+      console.log('  Enrollment Error:', enrollmentError);
+
       if (enrollmentData && !enrollmentError) {
         additionalData.batch = enrollmentData.batch;
         additionalData.batchId = enrollmentData.batch_id;
+        console.log('✅ Batch data set:', additionalData.batch);
       } else {
-        console.error('Error fetching enrollment:', enrollmentError);
+        console.error('❌ Error fetching enrollment:', enrollmentError);
       }
     }
 
@@ -95,7 +101,7 @@ export async function GET(request: NextRequest) {
       additionalData.facultyCount = facultyCount || 0;
     }
 
-    // Get approved events for the department
+    // Get all approved events for the student's department (using actual DB schema)
     const { data: eventsData, error: eventsError } = await supabase
       .from('events')
       .select(`
@@ -103,11 +109,10 @@ export async function GET(request: NextRequest) {
         title,
         description,
         event_type,
-        start_date,
-        end_date,
-        start_time,
+        event_date,
+        event_time,
         end_time,
-        venue,
+        location,
         status,
         created_by,
         creator:users!events_created_by_fkey (
@@ -117,14 +122,21 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('department_id', userData.department_id)
-      .eq('status', 'approved')
-      .gte('start_date', new Date().toISOString().split('T')[0])
-      .order('start_date', { ascending: true })
-      .limit(8);
+      .in('status', ['draft', 'published'])
+      .order('event_date', { ascending: false })
+      .limit(10);
 
     if (eventsError) {
       console.error('Error fetching events:', eventsError);
     }
+
+    // Debug logging
+    console.log('🔍 Dashboard API Response Data:');
+    console.log('  User ID:', userData.id);
+    console.log('  Department:', userData.department);
+    console.log('  College:', userData.college);
+    console.log('  Additional Data:', JSON.stringify(additionalData, null, 2));
+    console.log('  Approved Events for Department:', eventsData?.length || 0);
 
     return NextResponse.json({
       success: true,

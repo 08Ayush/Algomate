@@ -53,7 +53,7 @@ export default function TimetablesPage() {
       }
       
       setUser(parsedUser);
-      fetchTimetables(parsedUser.id, parsedUser.faculty_type);
+      fetchTimetables(parsedUser.id, parsedUser.faculty_type, parsedUser.department_id);
     } catch (error) {
       console.error('Error parsing user data:', error);
       localStorage.removeItem('user');
@@ -61,9 +61,26 @@ export default function TimetablesPage() {
     }
   }, [router]);
 
-  const fetchTimetables = async (userId: string, facultyType?: string) => {
+  const fetchTimetables = async (userId: string, facultyType?: string, departmentId?: string) => {
     try {
-      console.log('🔍 Fetching timetables for user:', userId, 'Faculty Type:', facultyType);
+      console.log('🔍 Fetching timetables for user:', userId, 'Faculty Type:', facultyType, 'Department:', departmentId);
+      
+      // Get user's department if not provided
+      let userDepartmentId = departmentId;
+      if (!userDepartmentId) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('department_id')
+          .eq('id', userId)
+          .single();
+        userDepartmentId = userData?.department_id;
+      }
+
+      if (!userDepartmentId) {
+        console.error('❌ No department ID found for user');
+        setLoading(false);
+        return;
+      }
       
       // Check if user is a publisher
       const isPublisher = facultyType === 'publisher';
@@ -71,11 +88,14 @@ export default function TimetablesPage() {
       let timetablesData;
       
       if (isPublisher) {
-        // Publishers see ALL timetables (regardless of creator)
-        console.log('📊 Publisher mode: Fetching all timetables');
+        // Publishers see ALL timetables from their department only
+        console.log('📊 Publisher mode: Fetching all timetables from department:', userDepartmentId);
         const { data, error } = await supabase
           .from('generated_timetables')
-          .select('*')
+          .select(`
+            *,
+            batch:batches(id, name, department_id)
+          `)
           .order('created_at', { ascending: false });
         
         if (error) {
@@ -83,13 +103,26 @@ export default function TimetablesPage() {
           setLoading(false);
           return;
         }
-        timetablesData = data;
+        // Log fetched data before filtering
+        console.log('📦 Raw timetables data (publisher):', data);
+        console.log('🔍 Filtering by department:', userDepartmentId);
+        
+        // Filter by department after fetching
+        timetablesData = data?.filter((tt: any) => {
+          console.log('Checking timetable:', tt.id, 'batch:', tt.batch, 'dept:', tt.batch?.department_id);
+          return tt.batch?.department_id === userDepartmentId;
+        });
+        
+        console.log('✅ Filtered timetables:', timetablesData?.length);
       } else {
-        // Creators see only their own timetables
-        console.log('✏️ Creator mode: Fetching own timetables');
+        // Creators see only their own timetables from their department
+        console.log('✏️ Creator mode: Fetching own timetables from department:', userDepartmentId);
         const { data, error } = await supabase
           .from('generated_timetables')
-          .select('*')
+          .select(`
+            *,
+            batch:batches(id, name, department_id)
+          `)
           .eq('created_by', userId)
           .order('created_at', { ascending: false });
         
@@ -98,11 +131,21 @@ export default function TimetablesPage() {
           setLoading(false);
           return;
         }
-        timetablesData = data;
+        // Log fetched data before filtering
+        console.log('📦 Raw timetables data:', data);
+        console.log('🔍 Filtering by department:', userDepartmentId);
+        
+        // Filter by department after fetching
+        timetablesData = data?.filter((tt: any) => {
+          console.log('Checking timetable:', tt.id, 'batch:', tt.batch, 'dept:', tt.batch?.department_id);
+          return tt.batch?.department_id === userDepartmentId;
+        });
+        
+        console.log('✅ Filtered timetables:', timetablesData?.length);
       }
 
       if (!timetablesData || timetablesData.length === 0) {
-        console.log('📭 No timetables found for user');
+        console.log('📭 No timetables found for user after filtering');
         setLoading(false);
         return;
       }
@@ -207,7 +250,7 @@ export default function TimetablesPage() {
       
       // Refresh the list
       if (user) {
-        fetchTimetables(user.id, user.faculty_type);
+        fetchTimetables(user.id, user.faculty_type, user.department_id);
       }
     } catch (error: any) {
       console.error('❌ Error in handleDelete:', error);
@@ -261,10 +304,67 @@ export default function TimetablesPage() {
       
       // Refresh the list
       if (user) {
-        fetchTimetables(user.id, user.faculty_type);
+        fetchTimetables(user.id, user.faculty_type, user.department_id);
       }
     } catch (error: any) {
       console.error('❌ Error in handleSubmitForReview:', error);
+      alert(`Error: ${error.message}`);
+    } finally {
+      setIsSubmitting(null);
+    }
+  };
+
+  const handleUnpublish = async (timetableId: string, title: string) => {
+    const reason = prompt(`Why are you unpublishing "${title}"? This will revert it to draft status.`);
+    if (!reason || reason.trim() === '') {
+      return;
+    }
+
+    setIsSubmitting(timetableId);
+    console.log('🔙 Unpublishing timetable:', timetableId);
+
+    try {
+      // Update timetable status to draft
+      const { error: updateError } = await supabase
+        .from('generated_timetables')
+        .update({ 
+          status: 'draft',
+          unpublished_reason: reason,
+          unpublished_at: new Date().toISOString(),
+          unpublished_by: user.id
+        })
+        .eq('id', timetableId);
+
+      if (updateError) {
+        console.error('❌ Error unpublishing timetable:', updateError);
+        alert(`Failed to unpublish: ${updateError.message}`);
+        setIsSubmitting(null);
+        return;
+      }
+
+      // Add workflow record
+      const { error: workflowError } = await supabase
+        .from('workflow_approvals')
+        .insert({ 
+          timetable_id: timetableId,
+          workflow_step: 'unpublished',
+          performed_by: user.id,
+          comments: reason
+        });
+
+      if (workflowError) {
+        console.error('❌ Error updating workflow:', workflowError);
+      }
+
+      console.log('✅ Timetable unpublished successfully');
+      alert('Timetable unpublished successfully!');
+      
+      // Refresh the list
+      if (user) {
+        fetchTimetables(user.id, user.faculty_type, user.department_id);
+      }
+    } catch (error: any) {
+      console.error('❌ Error in handleUnpublish:', error);
       alert(`Error: ${error.message}`);
     } finally {
       setIsSubmitting(null);
@@ -500,8 +600,31 @@ export default function TimetablesPage() {
                           </button>
                         )}
 
-                        {/* Delete Button (only for drafts and rejected) */}
-                        {(timetable.status === 'draft' || timetable.status === 'rejected') && (
+                        {/* Unpublish Button (only for publishers on published timetables) */}
+                        {user?.faculty_type === 'publisher' && timetable.status === 'published' && (
+                          <button
+                            onClick={() => handleUnpublish(timetable.id, timetable.title)}
+                            disabled={isSubmitting === timetable.id}
+                            className="inline-flex items-center px-3 py-2 bg-orange-600 text-white text-sm rounded-lg hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                            title="Unpublish Timetable"
+                          >
+                            {isSubmitting === timetable.id ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                Unpublishing...
+                              </>
+                            ) : (
+                              <>
+                                <XCircle className="w-4 h-4 mr-1" />
+                                Unpublish
+                              </>
+                            )}
+                          </button>
+                        )}
+
+                        {/* Delete Button (for drafts/rejected by creator, or any by publisher) */}
+                        {((timetable.status === 'draft' || timetable.status === 'rejected') || 
+                          (user?.faculty_type === 'publisher' && timetable.status === 'published')) && (
                           <button
                             onClick={() => handleDelete(timetable.id, timetable.title)}
                             disabled={isDeleting === timetable.id}

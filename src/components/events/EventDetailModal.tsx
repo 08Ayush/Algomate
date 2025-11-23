@@ -16,7 +16,7 @@ interface EventData {
   venue: string;
   department_id: string;
   department_name: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'draft' | 'pending' | 'published' | 'approved' | 'rejected';
   created_by: string;
   created_by_name?: string;
   max_participants?: number;
@@ -26,7 +26,6 @@ interface EventData {
   contact_person?: string;
   contact_email?: string;
   contact_phone?: string;
-  budget_allocated?: number;
   registration_required?: boolean;
 }
 
@@ -38,10 +37,12 @@ interface EventDetailModalProps {
   onDelete?: (eventId: string) => void;
   onApprove?: (eventId: string) => void;
   onReject?: (eventId: string, reason: string) => void;
+  onPublish?: (eventId: string) => void;
   onRegister?: (eventId: string) => void;
   onUnregister?: (eventId: string) => void;
   currentUserId?: string;
   userRole?: string;
+  userFacultyType?: string;
 }
 
 const EVENT_TYPE_COLORS: Record<string, string> = {
@@ -56,8 +57,10 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   other: 'bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300'
 };
 
-const STATUS_COLORS = {
+const STATUS_COLORS: Record<string, { bg: string; text: string; icon: any }> = {
+  draft: { bg: 'bg-gray-100 dark:bg-gray-900/30', text: 'text-gray-800 dark:text-gray-400', icon: AlertCircle },
   pending: { bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-800 dark:text-yellow-400', icon: AlertCircle },
+  published: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-800 dark:text-green-400', icon: CheckCircle },
   approved: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-800 dark:text-green-400', icon: CheckCircle },
   rejected: { bg: 'bg-red-100 dark:bg-red-900/30', text: 'text-red-800 dark:text-red-400', icon: XCircle }
 };
@@ -70,10 +73,12 @@ export default function EventDetailModal({
   onDelete,
   onApprove,
   onReject,
+  onPublish,
   onRegister,
   onUnregister,
   currentUserId,
-  userRole
+  userRole,
+  userFacultyType
 }: EventDetailModalProps) {
   const [isRegistered, setIsRegistered] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -81,12 +86,13 @@ export default function EventDetailModal({
 
   if (!event || !open) return null;
 
-  const statusConfig = STATUS_COLORS[event.status];
+  const statusConfig = STATUS_COLORS[event.status] || STATUS_COLORS['draft'];
   const StatusIcon = statusConfig.icon;
 
   const canEdit = currentUserId === event.created_by || userRole === 'admin';
   const canDelete = currentUserId === event.created_by || userRole === 'admin';
-  const canApprove = userRole === 'admin' || userRole === 'hod';
+  const canApprove = userRole === 'admin' || userRole === 'hod' || (userRole === 'faculty' && userFacultyType === 'publisher');
+  const canPublish = userRole === 'admin' || userRole === 'hod' || (userRole === 'faculty' && userFacultyType === 'publisher');
   const canRegister = event.registration_required && event.status === 'approved';
 
   const isConflicted = event.conflict_with && event.conflict_with.length > 0;
@@ -328,6 +334,20 @@ export default function EventDetailModal({
               >
                 <Edit className="h-4 w-4" />
                 Edit
+              </button>
+            )}
+            
+            {canPublish && event.status === 'draft' && onPublish && (
+              <button
+                onClick={() => {
+                  if (confirm('Are you sure you want to publish this event? It will be visible to all students.')) {
+                    onPublish(event.id);
+                  }
+                }}
+                className="flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all duration-300 transform hover:scale-105 shadow-md font-semibold"
+              >
+                <CheckCircle className="h-4 w-4" />
+                Publish Event
               </button>
             )}
             

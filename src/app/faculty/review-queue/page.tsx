@@ -44,7 +44,7 @@ export default function ReviewQueuePage() {
       }
       
       setUser(parsedUser);
-      fetchPendingTimetables();
+      fetchPendingTimetables(parsedUser.department_id);
     } catch (error) {
       console.error('Error parsing user data:', error);
       localStorage.removeItem('user');
@@ -52,13 +52,34 @@ export default function ReviewQueuePage() {
     }
   }, [router]);
 
-  const fetchPendingTimetables = async () => {
+  const fetchPendingTimetables = async (departmentId?: string) => {
     try {
-      console.log('🔍 Fetching pending timetables for review...');
+      // Get department ID from parameter or fetch from user
+      let userDepartmentId = departmentId;
+      
+      if (!userDepartmentId && user?.id) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('department_id')
+          .eq('id', user.id)
+          .single();
+        userDepartmentId = userData?.department_id;
+      }
+
+      if (!userDepartmentId) {
+        console.error('❌ No department ID found');
+        setLoading(false);
+        return;
+      }
+
+      console.log('🔍 Fetching pending timetables for review from department:', userDepartmentId);
       
       const { data, error} = await supabase
         .from('generated_timetables')
-        .select('*')
+        .select(`
+          *,
+          batch:batches(id, name, department_id)
+        `)
         .eq('status', 'pending_approval')
         .order('created_at', { ascending: false });
 
@@ -68,9 +89,21 @@ export default function ReviewQueuePage() {
         return;
       }
 
+      // Log raw data before filtering
+      console.log('📦 Raw pending timetables data:', data);
+      console.log('🔍 Filtering by department:', userDepartmentId);
+
+      // Filter by department after fetching
+      const filteredData = data?.filter((tt: any) => {
+        console.log('Checking timetable:', tt.id, 'batch:', tt.batch, 'dept:', tt.batch?.department_id);
+        return tt.batch?.department_id === userDepartmentId;
+      });
+      
+      console.log('✅ Filtered pending timetables:', filteredData?.length);
+
       // Get additional details for each timetable
       const timetablesWithCounts = await Promise.all(
-        (data || []).map(async (tt: any) => {
+        (filteredData || []).map(async (tt: any) => {
           // Get batch name
           const { data: batchData } = await supabase
             .from('batches')
@@ -169,7 +202,7 @@ export default function ReviewQueuePage() {
       alert('Timetable approved and published successfully!');
       
       // Refresh the list
-      fetchPendingTimetables();
+      fetchPendingTimetables(user?.department_id);
     } catch (error: any) {
       console.error('❌ Error in handleApprove:', error);
       alert(`Error: ${error.message}`);
@@ -223,7 +256,7 @@ export default function ReviewQueuePage() {
       alert('Timetable rejected. Creator will be notified.');
       
       // Refresh the list
-      fetchPendingTimetables();
+      fetchPendingTimetables(user?.department_id);
     } catch (error: any) {
       console.error('❌ Error in handleReject:', error);
       alert(`Error: ${error.message}`);

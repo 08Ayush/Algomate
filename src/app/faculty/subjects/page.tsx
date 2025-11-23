@@ -101,11 +101,10 @@ export default function SubjectsPage() {
 
   async function fetchSubjects() {
     try {
-      if (!user) return;
+      if (!user || !user.department_id) return;
       
-      console.log('Fetching subjects for CSE department...');
-      const departmentCode = 'CSE';
-      const response = await fetch(`/api/subjects?department_code=${departmentCode}`);
+      console.log('Fetching subjects for department:', user.department_id);
+      const response = await fetch(`/api/subjects?department_id=${user.department_id}`);
       
       const result = await response.json();
       console.log('Subjects API Result:', result);

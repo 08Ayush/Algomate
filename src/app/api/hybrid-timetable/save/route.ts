@@ -198,15 +198,17 @@ export async function POST(request: NextRequest) {
       subject: item.subject_name
     })));
 
-    // Get all available classrooms for dynamic assignment
+    // Get all available classrooms for dynamic assignment - FILTER BY DEPARTMENT
     let { data: availableClassrooms, error: classroomError } = await supabase
       .from('classrooms')
       .select('id, name, capacity, type')
       .eq('college_id', college_id)
+      .eq('department_id', department_id)  // Only get classrooms for this department!
       .eq('is_available', true);
 
     console.log(`🏫 Classrooms query result:`, {
       college_id,
+      department_id,
       found: availableClassrooms?.length || 0,
       error: classroomError?.message
     });
@@ -322,10 +324,16 @@ export async function POST(request: NextRequest) {
           console.error(`❌ No time_slot_id found for ${timeKey}`);
         }
 
-        // Assign classroom - ALWAYS redistribute to avoid conflicts
+        // Assign classroom - USE the one from generator if provided, otherwise assign one
         let assignedClassroomId = null;
         
-        if (timeSlotId) {
+        // PRIORITY 1: Use classroom already assigned by generator (it handles occupancy correctly)
+        if (item.classroom_id) {
+          assignedClassroomId = item.classroom_id;
+          console.log(`🏫 Using generator-assigned classroom ${assignedClassroomId.substring(0, 8)} for ${timeKey}`);
+        }
+        // PRIORITY 2: Assign classroom if generator didn't provide one
+        else if (timeSlotId) {
           // Get classrooms already used in this time slot
           const usedClassrooms = classroomUsageMap.get(timeSlotId) || new Set();
           
@@ -338,7 +346,7 @@ export async function POST(request: NextRequest) {
             assignedClassroomId = availableClassroom.id;
             usedClassrooms.add(availableClassroom.id);
             classroomUsageMap.set(timeSlotId, usedClassrooms);
-            console.log(`🏫 Assigned ${availableClassroom.id.substring(0, 8)} to ${timeKey}`);
+            console.log(`🏫 Auto-assigned ${availableClassroom.id.substring(0, 8)} to ${timeKey}`);
           } else {
             // All classrooms are in use, cycle through them
             const classroomIndex = index % availableClassrooms.length;

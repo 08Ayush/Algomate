@@ -48,7 +48,6 @@ export default function EditEventPage() {
     end_time: '',
     venue: '',
     expected_participants: 0,
-    budget_allocated: 0,
     contact_person: '',
     contact_email: '',
     contact_phone: '',
@@ -111,7 +110,6 @@ export default function EditEventPage() {
           end_time: event.end_time || '',
           venue: event.venue || '',
           expected_participants: event.expected_participants || 0,
-          budget_allocated: event.budget_allocated || 0,
           contact_person: event.contact_person || '',
           contact_email: event.contact_email || '',
           contact_phone: event.contact_phone || '',
@@ -415,23 +413,6 @@ export default function EditEventPage() {
                     onChange={handleChange}
                     min="0"
                     placeholder="100"
-                    className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    <DollarSign className="w-4 h-4 inline mr-1" />
-                    Budget Allocated
-                  </label>
-                  <input
-                    type="number"
-                    name="budget_allocated"
-                    value={formData.budget_allocated}
-                    onChange={handleChange}
-                    min="0"
-                    step="0.01"
-                    placeholder="5000.00"
                     className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   />
                 </div>

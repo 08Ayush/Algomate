@@ -19,7 +19,7 @@ interface EventData {
   venue: string;
   department_id: string;
   department_name: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'draft' | 'pending' | 'published' | 'approved' | 'rejected';
   created_by: string;
   created_by_name?: string;
   max_participants?: number;
@@ -68,7 +68,6 @@ export default function EventsPage() {
       
       setUser(parsedUser);
       setLoading(false);
-      fetchEvents();
     } catch (error) {
       console.error('Error parsing user data:', error);
       localStorage.removeItem('user');
@@ -76,10 +75,19 @@ export default function EventsPage() {
     }
   }, [router]);
 
+  // Fetch events when user is loaded
+  useEffect(() => {
+    if (user && user.department_id) {
+      fetchEvents();
+    }
+  }, [user]);
+
   const fetchEvents = async () => {
     setLoadingEvents(true);
     try {
-      const response = await fetch('/api/events');
+      // Filter events by user's department
+      const departmentParam = user?.department_id ? `?department_id=${user.department_id}` : '';
+      const response = await fetch(`/api/events${departmentParam}`);
       const result = await response.json();
       
       if (result.success && result.data) {
@@ -180,8 +188,37 @@ export default function EventsPage() {
     }
   };
 
+  const handlePublish = async (eventId: string) => {
+    try {
+      const response = await fetch('/api/events', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: eventId,
+          status: 'published',
+          published_by: user?.id,
+          published_at: new Date().toISOString()
+        })
+      });
+      
+      if (response.ok) {
+        alert('Event published successfully! Students can now see this event.');
+        fetchEvents();
+        setIsDetailModalOpen(false);
+      } else {
+        const result = await response.json();
+        alert(`Failed to publish event: ${result.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error publishing event:', error);
+      alert('Failed to publish event');
+    }
+  };
+
   // Calculate statistics
   const totalEvents = events.length;
+  const draftEvents = events.filter(e => e.status === 'draft').length;
+  const publishedEvents = events.filter(e => e.status === 'published').length;
   const pendingEvents = events.filter(e => e.status === 'pending').length;
   const approvedEvents = events.filter(e => e.status === 'approved').length;
   const conflictEvents = events.filter(e => e.conflict_with && e.conflict_with.length > 0).length;
@@ -222,13 +259,29 @@ export default function EventsPage() {
             </div>
 
             {/* Statistics Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
               <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-md hover:shadow-xl border border-gray-200 dark:border-slate-700 transition-all duration-300 transform hover:scale-105 cursor-pointer">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-2xl font-extrabold text-gray-900 dark:text-white">{totalEvents}</span>
                   <Calendar className="w-8 h-8 text-blue-600 dark:text-blue-400" />
                 </div>
                 <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Events</p>
+              </div>
+
+              <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-md hover:shadow-xl border border-gray-200 dark:border-slate-700 transition-all duration-300 transform hover:scale-105 cursor-pointer">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-2xl font-extrabold text-gray-600 dark:text-gray-400">{draftEvents}</span>
+                  <Clock className="w-8 h-8 text-gray-600 dark:text-gray-400" />
+                </div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Draft</p>
+              </div>
+
+              <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-md hover:shadow-xl border border-gray-200 dark:border-slate-700 transition-all duration-300 transform hover:scale-105 cursor-pointer">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-2xl font-extrabold text-blue-600 dark:text-blue-400">{publishedEvents}</span>
+                  <CheckCircle className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+                </div>
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Published</p>
               </div>
 
               <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-md hover:shadow-xl border border-gray-200 dark:border-slate-700 transition-all duration-300 transform hover:scale-105 cursor-pointer">
@@ -253,14 +306,6 @@ export default function EventsPage() {
                   <AlertCircle className="w-8 h-8 text-red-600 dark:text-red-400" />
                 </div>
                 <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Conflicts</p>
-              </div>
-
-              <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-md hover:shadow-xl border border-gray-200 dark:border-slate-700 transition-all duration-300 transform hover:scale-105 cursor-pointer">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-2xl font-extrabold text-purple-600 dark:text-purple-400">{queuedEvents}</span>
-                  <Users className="w-8 h-8 text-purple-600 dark:text-purple-400" />
-                </div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">In Queue</p>
               </div>
             </div>
 
@@ -313,7 +358,9 @@ export default function EventsPage() {
                   className="px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-300 font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="all">All Status</option>
+                  <option value="draft">Draft</option>
                   <option value="pending">Pending</option>
+                  <option value="published">Published</option>
                   <option value="approved">Approved</option>
                   <option value="rejected">Rejected</option>
                 </select>
@@ -348,8 +395,9 @@ export default function EventsPage() {
                         <div className="flex items-start justify-between mb-3">
                           <h4 className="font-bold text-lg text-gray-900 dark:text-white">{event.title}</h4>
                           <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                            event.status === 'draft' ? 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400' :
                             event.status === 'pending' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                            event.status === 'approved' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
+                            event.status === 'published' || event.status === 'approved' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
                             'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
                           }`}>
                             {event.status.toUpperCase()}
@@ -383,8 +431,10 @@ export default function EventsPage() {
         onDelete={handleDelete}
         onApprove={handleApprove}
         onReject={handleReject}
+        onPublish={handlePublish}
         currentUserId={user?.id}
         userRole={user?.role}
+        userFacultyType={user?.faculty_type}
       />
     </>
   );

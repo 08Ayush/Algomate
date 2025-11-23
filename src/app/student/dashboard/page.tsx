@@ -404,9 +404,9 @@ export default function StudentDashboard() {
               <>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-purple-600">
-                    {user.email?.split('@')[0]?.toUpperCase() || '-'}
+                    {user.college_uid?.toUpperCase() || user.uid?.toUpperCase() || '-'}
                   </div>
-                  <div className="text-sm text-gray-500">UID</div>
+                  <div className="text-sm text-gray-500">College UID</div>
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-blue-600">
@@ -416,9 +416,9 @@ export default function StudentDashboard() {
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-green-600">
-                    {dashboardData?.user.departments?.code || '-'}
+                    {dashboardData?.user.department?.name || user.department_name || '-'}
                   </div>
-                  <div className="text-sm text-gray-500">Department Code</div>
+                  <div className="text-sm text-gray-500">Department</div>
                 </div>
               </>
             )}

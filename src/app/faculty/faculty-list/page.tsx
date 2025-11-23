@@ -6,9 +6,17 @@ import { Header } from '@/components/Header';
 import LeftSidebar from '@/components/LeftSidebar';
 import { Users, Search, Plus, Mail, Phone } from 'lucide-react';
 
+interface User {
+  role: string;
+  faculty_type: string;
+  department_id: string;
+  department_code?: string;
+  department_name?: string;
+}
+
 export default function FacultyListPage() {
   const router = useRouter();
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [facultyList, setFacultyList] = useState<any[]>([]);
   const [search, setSearch] = useState('');
@@ -40,16 +48,15 @@ export default function FacultyListPage() {
     }
   }, [router]);
 
-  // Fetch CSE faculty list
+  // Fetch faculty list for user's department
   useEffect(() => {
     async function fetchFaculty() {
       try {
         // Only fetch after user is loaded
-        if (!user) return;
+        if (!user || !user.department_id) return;
         
-        console.log('Fetching faculty for CSE department...');
-        const departmentCode = 'CSE';
-        const response = await fetch(`/api/faculty?department_code=${departmentCode}`);
+        console.log('Fetching faculty for department:', user.department_id);
+        const response = await fetch(`/api/faculty?department_id=${user.department_id}`);
         
         console.log('Response status:', response.status);
         const result = await response.json();
@@ -94,7 +101,7 @@ export default function FacultyListPage() {
               <div>
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Faculty Directory</h1>
                 <p className="text-gray-600 dark:text-gray-300">
-                  CSE Department Faculty Members {facultyList.length > 0 && `(${facultyList.length})`}
+                  {user.department_code || user.department_name || ''} Department Faculty Members {facultyList.length > 0 && `(${facultyList.length})`}
                 </p>
               </div>
             </div>
@@ -107,7 +114,7 @@ export default function FacultyListPage() {
                   type="text"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  placeholder="Search faculty by name, email, or subject..."
+                  placeholder="Search faculty by name, email..."
                   className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
                 />
               </div>
@@ -121,8 +128,7 @@ export default function FacultyListPage() {
                   return (
                     faculty.first_name.toLowerCase().includes(q) ||
                     faculty.last_name.toLowerCase().includes(q) ||
-                    faculty.email.toLowerCase().includes(q) ||
-                    (faculty.subjects && faculty.subjects.join(' ').toLowerCase().includes(q))
+                    faculty.email.toLowerCase().includes(q)
                   );
                 })
                 .map(faculty => (
@@ -144,20 +150,13 @@ export default function FacultyListPage() {
                             {faculty.phone || 'N/A'}
                           </div>
                         </div>
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          {faculty.subjects && faculty.subjects.map((sub: string) => (
-                            <span key={sub} className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs font-medium px-2.5 py-0.5 rounded-full">
-                              {sub}
-                            </span>
-                          ))}
-                        </div>
                       </div>
                     </div>
                   </div>
                 ))}
               {facultyList.length === 0 && (
                 <div className="col-span-3 text-center text-gray-500 dark:text-gray-400 py-12">
-                  No faculty found for CSE department.
+                  No faculty found for your department.
                 </div>
               )}
             </div>
