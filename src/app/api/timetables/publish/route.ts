@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { checkConflictsBeforePublish, storeConflicts } from '@/lib/crossDepartmentConflicts';
+import { publishToMasterRegistry } from '@/lib/masterTimetableRegistry';
+import {
+  notifyTimetableSubmittedForApproval,
+  notifyTimetableApproved,
+  notifyTimetableRejected,
+  notifyConflictsDetected
+} from '@/lib/notificationService';
 
 export async function POST(request: NextRequest) {
   try {
@@ -61,7 +69,43 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        newStatus = 'published';
+
+        // ✨ NEW: Check for cross-department conflicts before approving
+        console.log('🔍 Checking for cross-department conflicts...');
+        const conflictCheck = await checkConflictsBeforePublish(timetableId);
+        
+        if (conflictCheck.hasConflicts) {
+          console.warn(`⚠️ Found ${conflictCheck.conflictCount} conflicts (${conflictCheck.criticalCount} critical)`);
+          
+          // Store conflicts in database
+          await storeConflicts(timetableId, conflictCheck.conflicts);
+          
+          // ✨ NEW: Notify about conflicts
+          await notifyConflictsDetected({
+            timetableId,
+            timetableTitle: timetable.title,
+            batchId: timetable.batch_id,
+            departmentId: timetable.department_id,
+            conflictCount: conflictCheck.conflictCount,
+            criticalCount: conflictCheck.criticalCount,
+            creatorId: timetable.created_by
+          });
+          
+          // Return conflicts to user for resolution
+          return NextResponse.json({
+            success: false,
+            error: 'Cross-department conflicts detected',
+            conflicts: conflictCheck.conflicts,
+            conflictCount: conflictCheck.conflictCount,
+            criticalCount: conflictCheck.criticalCount,
+            message: 'Please resolve conflicts before publishing. Faculty or classrooms are already scheduled at these times by other departments.',
+            requiresResolution: true
+          }, { status: 409 }); // 409 Conflict status
+        }
+
+        console.log('✅ No conflicts detected, proceeding with approval');
+
+        newStatus = 'approved'; // First approve, then publish to master
         workflowStep = 'approved';
         updateData.approved_by = publisherId;
         updateData.approved_at = new Date().toISOString();
@@ -106,6 +150,35 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ Timetable status updated successfully');
 
+    // ✨ NEW: Publish to master registry if approved
+    if (action === 'approve') {
+      console.log('📋 Publishing timetable to master registry...');
+      const publishResult = await publishToMasterRegistry(timetableId, publisherId);
+      
+      if (publishResult.success) {
+        console.log(`✅ Published ${publishResult.classes_published} classes to master registry`);
+        
+        // Update status to 'published' now that it's in master registry
+        await supabase
+          .from('generated_timetables')
+          .update({ status: 'published' })
+          .eq('id', timetableId);
+      } else {
+        console.error('❌ Failed to publish to master registry:', publishResult.errors);
+        // Rollback approval if master registry fails
+        await supabase
+          .from('generated_timetables')
+          .update({ status: 'pending_approval' })
+          .eq('id', timetableId);
+        
+        return NextResponse.json({
+          success: false,
+          error: 'Failed to publish to master registry',
+          details: publishResult.errors
+        }, { status: 500 });
+      }
+    }
+
     // Create workflow approval record using the schema structure
     const { error: workflowError } = await supabase
       .from('workflow_approvals')
@@ -125,26 +198,73 @@ export async function POST(request: NextRequest) {
       console.log('✅ Workflow approval record created');
     }
 
-    // Create notification for the creator (if approved/rejected)
-    if (action === 'approve' || action === 'reject') {
-      const notificationType = action === 'approve' ? 'timetable_published' : 'approval_request';
-      const { error: notificationError } = await supabase
-        .from('notifications')
-        .insert({
-          recipient_id: timetable.created_by,
-          sender_id: publisherId,
-          type: notificationType,
-          title: action === 'approve' ? 'Timetable Published ✅' : 'Timetable Rejected ❌',
-          message: action === 'approve' 
-            ? `Your timetable "${timetable.title}" has been approved and published.`
-            : `Your timetable "${timetable.title}" was rejected. Reason: ${reason}`,
-          related_id: timetableId
-        });
+    // ✨ ENHANCED: Create notifications using notification service
+    // Get publisher name for notifications
+    const { data: publisherData } = await supabase
+      .from('users')
+      .select('name')
+      .eq('id', publisherId)
+      .single();
+    
+    const publisherName = publisherData?.name || 'Administrator';
 
-      if (notificationError) {
-        console.error('⚠️ Warning: Failed to create notification:', notificationError);
+    // Get creator name for submit_for_review notification
+    const { data: creatorData } = await supabase
+      .from('users')
+      .select('name')
+      .eq('id', timetable.created_by)
+      .single();
+    
+    const creatorName = creatorData?.name || 'User';
+
+    if (action === 'submit_for_review') {
+      // Notify all publishers (HODs + faculty with publish permission)
+      const notifyResult = await notifyTimetableSubmittedForApproval({
+        timetableId,
+        timetableTitle: timetable.title,
+        batchId: timetable.batch_id,
+        departmentId: timetable.department_id,
+        creatorId: timetable.created_by,
+        creatorName
+      });
+      
+      if (notifyResult.success) {
+        console.log(`✅ Notified ${notifyResult.count} publisher(s) about new timetable submission`);
       } else {
-        console.log('✅ Notification sent to creator');
+        console.error('⚠️ Warning: Failed to notify publishers:', notifyResult.error);
+      }
+    } else if (action === 'approve') {
+      // Notify creator about approval
+      const notifyResult = await notifyTimetableApproved({
+        timetableId,
+        timetableTitle: timetable.title,
+        batchId: timetable.batch_id,
+        creatorId: timetable.created_by,
+        approverId: publisherId,
+        approverName: publisherName
+      });
+      
+      if (notifyResult.success) {
+        console.log('✅ Approval notification sent to creator');
+      } else {
+        console.error('⚠️ Warning: Failed to send approval notification:', notifyResult.error);
+      }
+    } else if (action === 'reject') {
+      // Notify creator about rejection
+      const notifyResult = await notifyTimetableRejected({
+        timetableId,
+        timetableTitle: timetable.title,
+        batchId: timetable.batch_id,
+        creatorId: timetable.created_by,
+        rejectorId: publisherId,
+        rejectorName: publisherName,
+        reason
+      });
+      
+      if (notifyResult.success) {
+        console.log('✅ Rejection notification sent to creator');
+      } else {
+        console.error('⚠️ Warning: Failed to send rejection notification:', notifyResult.error);
       }
     }
 

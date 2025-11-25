@@ -1,5 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { 
+  fetchConstraintRules, 
+  validateConstraints, 
+  calculateFitnessScore,
+  type ScheduledClass,
+  type TimeSlot
+} from '@/lib/constraintRules';
+import { createConstraintViolationNotifications } from '@/lib/notifications';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -20,14 +28,16 @@ export async function POST(request: NextRequest) {
       created_by,
       status = 'draft', // draft or pending_approval
       statistics,
-      metrics
+      metrics,
+      enabled_constraint_ids // IDs of constraints enabled in UI
     } = body;
 
     console.log('💾 Saving Hybrid Generated Timetable:', { 
       semester, 
       batch_id, 
       status,
-      schedule_count: schedule?.length 
+      schedule_count: schedule?.length,
+      enabled_constraints: enabled_constraint_ids?.length || 'all'
     });
 
     // NOTE: With timetable-specific constraints, multiple drafts can coexist
@@ -506,6 +516,79 @@ export async function POST(request: NextRequest) {
         success: false,
         error: 'No valid classes to schedule after conflict resolution'
       }, { status: 400 });
+    }
+
+    // Validate constraints BEFORE inserting
+    console.log('🔍 Validating constraint rules for hybrid timetable...');
+    try {
+      const constraintRules = await fetchConstraintRules({
+        department_id: department_id,
+        batch_id: batch_id,
+        enabled_constraint_ids: enabled_constraint_ids
+      });
+      
+      console.log(`✅ Loaded ${constraintRules.length} constraint rules for validation${enabled_constraint_ids ? ' (filtered by UI selection)' : ''}`);
+      
+      // Prepare time slots data
+      const timeSlotData: TimeSlot[] = (timeSlots || []).map(ts => ({
+        id: ts.id,
+        day: ts.day,
+        start_time: ts.start_time,
+        end_time: ts.end_time,
+        duration_minutes: ts.duration_minutes
+      }));
+      
+      // Validate
+      const { violations, score } = await validateConstraints(
+        finalUniqueClasses as ScheduledClass[],
+        timeSlotData,
+        constraintRules
+      );
+      
+      console.log(`✅ Hybrid timetable constraint validation:`);
+      console.log(`   - Violations: ${violations.length}`);
+      console.log(`   - Fitness Score: ${score.toFixed(2)}%`);
+      
+      // Update timetable with validation results
+      if (violations.length > 0) {
+        console.log('⚠️ Constraint violations detected:');
+        violations.forEach((v, idx) => {
+          console.log(`   ${idx + 1}. [${v.severity}] ${v.description}`);
+        });
+        
+        await supabase
+          .from('generated_timetables')
+          .update({
+            fitness_score: score,
+            constraint_violations: violations
+          })
+          .eq('id', timetable.id);
+        
+        // Create notifications for creator and publishers about violations
+        console.log('📧 Creating constraint violation notifications...');
+        const notificationResult = await createConstraintViolationNotifications({
+          timetableId: timetable.id,
+          batchId: batch_id,
+          violations: violations,
+          creatorId: created_by,
+          departmentId: department_id,
+          timetableTitle: timetable.title || `Hybrid Timetable - Semester ${semester}`
+        });
+        
+        if (notificationResult.success) {
+          console.log('✅ Constraint violation notifications created successfully');
+        } else {
+          console.error('⚠️ Failed to create notifications:', notificationResult.error);
+        }
+      }
+      
+      const criticalViolations = violations.filter(v => v.severity === 'CRITICAL');
+      if (criticalViolations.length > 0) {
+        console.error(`❌ ${criticalViolations.length} CRITICAL violations in hybrid timetable!`);
+      }
+      
+    } catch (constraintError) {
+      console.error('⚠️ Error during constraint validation:', constraintError);
     }
 
     // Insert classes using the fully deduplicated array

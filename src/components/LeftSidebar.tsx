@@ -79,13 +79,6 @@ export default function LeftSidebar() {
       facultyTypes: ['creator', 'publisher']
     },
     { 
-      href: '/faculty/conflict-resolution', 
-      icon: AlertCircle, 
-      label: 'Queue',
-      badge: '3',
-      facultyTypes: ['creator', 'publisher']
-    },
-    { 
       href: '/faculty/faculty-list', 
       icon: Users, 
       label: 'Faculty',

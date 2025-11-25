@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Moon, Sun, GraduationCap, Sparkles, Bell, LogOut, User, Crown, Shield, BookOpen } from 'lucide-react';
+import { NotificationBell } from './NotificationBell';
 
 interface UserData {
   id: string;
@@ -150,47 +151,8 @@ export function Header() {
 
           {user ? (
             <>
-              {/* Notifications Button */}
-              <div className="relative notification-dropdown">
-                <button
-                  onClick={() => {
-                    setShowNotifications(!showNotifications);
-                    setShowProfileMenu(false);
-                  }}
-                  className="relative inline-flex h-10 w-10 items-center justify-center rounded-lg hover:bg-accent transition-colors"
-                  aria-label="Notifications"
-                >
-                  <Bell className="h-5 w-5" />
-                  {notifications.length > 0 && (
-                    <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500 ring-2 ring-background"></span>
-                  )}
-                </button>
-
-                {/* Notifications Dropdown */}
-                {showNotifications && (
-                  <div className="absolute right-0 mt-2 w-80 rounded-lg border border-border bg-background shadow-lg">
-                    <div className="p-4 border-b border-border">
-                      <h3 className="font-semibold text-sm">Notifications</h3>
-                    </div>
-                    <div className="max-h-96 overflow-y-auto">
-                      {notifications.length === 0 ? (
-                        <div className="p-8 text-center text-muted-foreground text-sm">
-                          <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                          <p>No new notifications</p>
-                        </div>
-                      ) : (
-                        notifications.map((notification, index) => (
-                          <div key={index} className="p-4 border-b border-border hover:bg-accent cursor-pointer transition-colors">
-                            <p className="text-sm font-medium">{notification.title}</p>
-                            <p className="text-xs text-muted-foreground mt-1">{notification.message}</p>
-                            <p className="text-xs text-muted-foreground mt-1">{notification.time}</p>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
+              {/* Notifications Bell */}
+              <NotificationBell />
 
               {/* Profile Dropdown */}
               <div className="relative profile-dropdown">

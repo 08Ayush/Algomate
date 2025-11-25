@@ -69,6 +69,7 @@ export default function HybridSchedulerPage() {
   const [selectedBatch, setSelectedBatch] = useState<string>('');
   const [academicYear, setAcademicYear] = useState('2025-26');
   const [constraints, setConstraints] = useState<Constraint[]>(DEFAULT_CONSTRAINTS);
+  const [constraintsLoading, setConstraintsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'hard' | 'soft'>('hard');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [generationTask, setGenerationTask] = useState<GenerationTask>({
@@ -103,6 +104,7 @@ export default function HybridSchedulerPage() {
       setUser(parsedUser);
       setLoading(false);
       fetchBatches(parsedUser.department_id);
+      fetchConstraints(parsedUser.department_id);
     } catch (error) {
       console.error('Error parsing user data:', error);
       localStorage.removeItem('user');
@@ -119,6 +121,39 @@ export default function HybridSchedulerPage() {
       }
     } catch (error) {
       console.error('Error fetching batches:', error);
+    }
+  };
+
+  const fetchConstraints = async (departmentId: string) => {
+    try {
+      setConstraintsLoading(true);
+      const response = await fetch(`/api/constraints?department_id=${departmentId}`);
+      const data = await response.json();
+      
+      if (data.success && data.data && data.data.length > 0) {
+        // Map database constraints to UI format
+        const mappedConstraints: Constraint[] = data.data.map((rule: any) => ({
+          id: rule.id,
+          type: rule.rule_type,
+          category: rule.rule_parameters?.category || 'GENERAL',
+          name: rule.rule_name,
+          description: rule.description,
+          weight: rule.weight,
+          enabled: rule.is_active // Default to active state from DB
+        }));
+        setConstraints(mappedConstraints);
+        console.log(`✅ Loaded ${mappedConstraints.length} constraints from database`);
+      } else {
+        // Fallback to default constraints if API fails
+        console.warn('⚠️ Using default constraints (database fetch failed)');
+        setConstraints(DEFAULT_CONSTRAINTS);
+      }
+    } catch (error) {
+      console.error('Error fetching constraints:', error);
+      // Fallback to default constraints
+      setConstraints(DEFAULT_CONSTRAINTS);
+    } finally {
+      setConstraintsLoading(false);
     }
   };
 
@@ -168,7 +203,8 @@ export default function HybridSchedulerPage() {
         academic_year: academicYear,
         created_by: user.id,
         hybrid_config: hybridConfig,
-        constraints: constraints.filter(c => c.enabled)
+        constraints: constraints.filter(c => c.enabled),
+        enabled_constraint_ids: constraints.filter(c => c.enabled).map(c => c.id)
       };
 
       console.log('🚀 Sending generation request:', requestBody);
@@ -220,7 +256,8 @@ export default function HybridSchedulerPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...generatedSchedule,
-          status: 'draft'
+          status: 'draft',
+          enabled_constraint_ids: constraints.filter(c => c.enabled).map(c => c.id)
         })
       });
 
@@ -248,7 +285,8 @@ export default function HybridSchedulerPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...generatedSchedule,
-          status: 'draft'
+          status: 'draft',
+          enabled_constraint_ids: constraints.filter(c => c.enabled).map(c => c.id)
         })
       });
 
@@ -280,7 +318,8 @@ export default function HybridSchedulerPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...generatedSchedule,
-          status: 'pending_approval'
+          status: 'pending_approval',
+          enabled_constraint_ids: constraints.filter(c => c.enabled).map(c => c.id)
         })
       });
 
@@ -453,7 +492,12 @@ export default function HybridSchedulerPage() {
 
                 {/* Scheduling Constraints */}
                 <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Scheduling Constraints</h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">Scheduling Constraints</h3>
+                    {constraintsLoading && (
+                      <span className="text-xs text-gray-500 dark:text-gray-400">Loading from database...</span>
+                    )}
+                  </div>
                   
                   <div className="flex gap-2 mb-4">
                     <button

@@ -18,7 +18,8 @@ export async function POST(request: NextRequest) {
       academic_year, 
       created_by,
       hybrid_config,
-      constraints 
+      constraints,
+      enabled_constraint_ids // IDs of constraints selected in UI
     } = body;
 
     console.log('🔬 Hybrid Algorithm Generation Request:', { 
@@ -27,7 +28,8 @@ export async function POST(request: NextRequest) {
       department_id, 
       college_id,
       academic_year,
-      created_by 
+      created_by,
+      enabled_constraints: enabled_constraint_ids?.length || 0
     });
 
     // Validate required fields with detailed error messages

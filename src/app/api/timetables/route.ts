@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { 
+  fetchConstraintRules, 
+  validateConstraints, 
+  calculateFitnessScore,
+  type ScheduledClass,
+  type TimeSlot
+} from '@/lib/constraintRules';
+import { createConstraintViolationNotifications } from '@/lib/notifications';
 
 export async function POST(request: NextRequest) {
   try {
@@ -260,7 +268,7 @@ export async function POST(request: NextRequest) {
     console.log('📍 Fetching time slots from database for mapping...');
     const { data: dbTimeSlots, error: timeSlotsError } = await supabase
       .from('time_slots')
-      .select('id, day, start_time, end_time')
+      .select('id, day, start_time, end_time, duration_minutes')
       .eq('college_id', finalCollegeId)
       .eq('is_active', true);
 
@@ -569,6 +577,86 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`✅ Mapped ${scheduledClasses.length} out of ${assignments.length} assignments to database time slots`);
+
+    // STEP 3.9: Validate constraints BEFORE saving to database
+    console.log('🔍 Validating constraint rules...');
+    try {
+      // Fetch active constraint rules
+      const constraintRules = await fetchConstraintRules({
+        department_id: finalDepartmentId,
+        batch_id: finalBatchId
+      });
+      
+      console.log(`✅ Loaded ${constraintRules.length} constraint rules for validation`);
+      
+      // Prepare time slots data for validation
+      const timeSlotData: TimeSlot[] = dbTimeSlots.map(ts => ({
+        id: ts.id,
+        day: ts.day,
+        start_time: ts.start_time,
+        end_time: ts.end_time,
+        duration_minutes: ts.duration_minutes
+      }));
+      
+      // Validate scheduled classes against constraints
+      const { violations, score } = await validateConstraints(
+        scheduledClasses as ScheduledClass[],
+        timeSlotData,
+        constraintRules
+      );
+      
+      console.log(`✅ Constraint validation complete:`);
+      console.log(`   - Violations: ${violations.length}`);
+      console.log(`   - Fitness Score: ${score.toFixed(2)}%`);
+      
+      // Update timetable with constraint violations and recalculated score
+      if (violations.length > 0) {
+        console.log('⚠️ Constraint violations detected:');
+        violations.forEach((v, idx) => {
+          console.log(`   ${idx + 1}. [${v.severity}] ${v.description} (Rule: ${v.rule_name})`);
+        });
+        
+        // Update timetable fitness score and violations
+        await supabase
+          .from('generated_timetables')
+          .update({
+            fitness_score: score,
+            constraint_violations: violations
+          })
+          .eq('id', timetable.id);
+        
+        // Create notifications for creator and publishers about violations
+        console.log('📧 Creating constraint violation notifications...');
+        const notificationResult = await createConstraintViolationNotifications({
+          timetableId: timetable.id,
+          batchId: finalBatchId,
+          violations: violations,
+          creatorId: createdBy,
+          departmentId: finalDepartmentId,
+          timetableTitle: title || `Manual Timetable - ${academicYear}`
+        });
+        
+        if (notificationResult.success) {
+          console.log('✅ Constraint violation notifications created successfully');
+        } else {
+          console.error('⚠️ Failed to create notifications:', notificationResult.error);
+        }
+      }
+      
+      // Check for CRITICAL violations (HARD constraints)
+      const criticalViolations = violations.filter(v => v.severity === 'CRITICAL');
+      if (criticalViolations.length > 0) {
+        console.error(`❌ ${criticalViolations.length} CRITICAL constraint violations found!`);
+        console.error('   Timetable has HARD constraint violations that must be fixed.');
+        
+        // Still save but warn the user
+        // In production, you might want to prevent saving or require acknowledgment
+      }
+      
+    } catch (constraintError) {
+      console.error('⚠️ Error during constraint validation:', constraintError);
+      // Don't fail the entire save operation, just log the error
+    }
 
     const { data: classes, error: classesError } = await supabase
       .from('scheduled_classes')
