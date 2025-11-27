@@ -199,27 +199,68 @@ export async function DELETE(
       }
     }
 
-    // Check if faculty has dependencies (subjects, timetables, etc.)
-    // This would depend on your schema - adding basic check for subjects
-    const { data: subjects, error: subjectsError } = await supabaseAdmin
-      .from('subjects')
+    // Check if faculty has dependencies
+    const dependencies: string[] = [];
+
+    // Check scheduled_classes (has ON DELETE RESTRICT)
+    const { data: scheduledClasses, error: scheduledError } = await supabaseAdmin
+      .from('scheduled_classes')
       .select('id')
       .eq('faculty_id', id)
       .limit(1);
 
-    if (subjectsError) {
-      console.error('Subjects check error:', subjectsError);
-      // Continue with deletion even if check fails
+    if (scheduledClasses && scheduledClasses.length > 0) {
+      dependencies.push('scheduled classes');
     }
 
-    if (subjects && subjects.length > 0) {
+    // Check batch_subjects (assigned_faculty_id)
+    const { data: batchSubjects, error: batchSubjectsError } = await supabaseAdmin
+      .from('batch_subjects')
+      .select('id')
+      .eq('assigned_faculty_id', id)
+      .limit(1);
+
+    if (batchSubjects && batchSubjects.length > 0) {
+      dependencies.push('batch subject assignments');
+    }
+
+    // Check if faculty is HOD of any department
+    const { data: departments, error: deptError } = await supabaseAdmin
+      .from('departments')
+      .select('id')
+      .eq('head_of_department', id)
+      .limit(1);
+
+    if (departments && departments.length > 0) {
+      dependencies.push('head of department role');
+    }
+
+    // Check if faculty is class coordinator
+    const { data: batches, error: batchError } = await supabaseAdmin
+      .from('batches')
+      .select('id')
+      .eq('class_coordinator', id)
+      .limit(1);
+
+    if (batches && batches.length > 0) {
+      dependencies.push('class coordinator role');
+    }
+
+    // If there are any dependencies, return error with details
+    if (dependencies.length > 0) {
       return NextResponse.json(
-        { error: 'Cannot delete faculty with assigned subjects. Please reassign subjects first.' },
+        { 
+          error: `Cannot delete faculty. This faculty has active ${dependencies.join(', ')}. Please remove these assignments first.` 
+        },
         { status: 400 }
       );
     }
 
-    // Delete faculty
+    // Delete faculty - CASCADE will handle:
+    // - faculty_qualified_subjects
+    // - faculty_availability
+    // - notifications (sender_id will be SET NULL)
+    // - student_enrollments (if any)
     const { error } = await supabaseAdmin
       .from('users')
       .delete()
@@ -228,7 +269,7 @@ export async function DELETE(
     if (error) {
       console.error('Faculty deletion error:', error);
       return NextResponse.json(
-        { error: 'Failed to delete faculty' },
+        { error: `Failed to delete faculty: ${error.message}` },
         { status: 500 }
       );
     }

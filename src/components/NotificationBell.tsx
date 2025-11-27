@@ -247,7 +247,7 @@ export function NotificationBell() {
               <div className="p-3 border-t border-gray-200 dark:border-slate-700 text-center">
                 <button
                   onClick={() => {
-                    router.push('/faculty/notifications');
+                    router.push('/notifications');
                     setIsOpen(false);
                   }}
                   className="text-sm text-blue-600 dark:text-blue-400 hover:underline font-medium"

@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       `)
       .eq('college_uid', collegeUid)
       .eq('is_active', true)
-      .single();
+      .maybeSingle();
 
     if (userError || !userData) {
       console.error('User lookup error:', userError);

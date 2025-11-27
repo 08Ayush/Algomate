@@ -4,8 +4,9 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
 import LeftSidebar from '@/components/LeftSidebar';
-import { Calendar, Search, Eye, Trash2, Send, AlertCircle, CheckCircle, Clock, XCircle, Download } from 'lucide-react';
+import { Calendar, Search, Eye, Trash2, Send, AlertCircle, CheckCircle, Clock, XCircle, Download, Bell } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { NotificationComposer } from '@/components/NotificationComposer';
 
 interface Timetable {
   id: string;
@@ -18,6 +19,7 @@ interface Timetable {
   batch_name: string;
   created_by_name: string;
   class_count: number;
+  batch_id?: string;
 }
 
 export default function TimetablesPage() {
@@ -30,6 +32,8 @@ export default function TimetablesPage() {
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<string | null>(null);
+  const [showNotificationComposer, setShowNotificationComposer] = useState(false);
+  const [selectedTimetableForNotification, setSelectedTimetableForNotification] = useState<{id: string, batchId: string} | null>(null);
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -184,6 +188,7 @@ export default function TimetablesPage() {
             created_at: tt.created_at,
             fitness_score: tt.fitness_score || 0,
             batch_name: batchData?.name || 'Unknown Batch',
+            batch_id: tt.batch_id,
             created_by_name: userData 
               ? `${userData.first_name || ''} ${userData.last_name || ''}`.trim() 
               : 'Unknown',
@@ -451,6 +456,22 @@ export default function TimetablesPage() {
               <p className="text-gray-600 dark:text-gray-300">View, manage, and submit your created timetables</p>
             </div>
 
+            {/* Notification Feature Info Banner */}
+            <div className="bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border border-purple-200 dark:border-purple-800 rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <Bell className="w-5 h-5 text-purple-600 dark:text-purple-400 mt-0.5" />
+                <div>
+                  <h3 className="font-semibold text-purple-900 dark:text-purple-100 mb-1">
+                    📢 Notify Students About Timetable Changes
+                  </h3>
+                  <p className="text-sm text-purple-700 dark:text-purple-300">
+                    For published timetables, you can send notifications to students and faculty about last-minute changes or important updates. 
+                    Look for the <strong>"Notify Students"</strong> button next to each published timetable.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* Stats */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-4">
@@ -578,6 +599,24 @@ export default function TimetablesPage() {
                           <Eye className="w-5 h-5" />
                         </button>
 
+                        {/* Send Notification Button (for published timetables) */}
+                        {timetable.status === 'published' && timetable.batch_id && (
+                          <button
+                            onClick={() => {
+                              setSelectedTimetableForNotification({
+                                id: timetable.id,
+                                batchId: timetable.batch_id!
+                              });
+                              setShowNotificationComposer(true);
+                            }}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-sm font-medium rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all shadow-md hover:shadow-lg"
+                            title="Send notification to students and faculty about this timetable"
+                          >
+                            <Bell className="w-4 h-4" />
+                            <span>Notify Students</span>
+                          </button>
+                        )}
+
                         {/* Submit for Review Button (only for drafts) */}
                         {timetable.status === 'draft' && (
                           <button
@@ -647,6 +686,21 @@ export default function TimetablesPage() {
           </div>
         </main>
       </div>
+
+      {/* Notification Composer Modal */}
+      {showNotificationComposer && user && selectedTimetableForNotification && (
+        <NotificationComposer
+          isOpen={showNotificationComposer}
+          onClose={() => {
+            setShowNotificationComposer(false);
+            setSelectedTimetableForNotification(null);
+          }}
+          userId={user.id}
+          userDepartmentId={user.department_id}
+          timetableId={selectedTimetableForNotification.id}
+          batchId={selectedTimetableForNotification.batchId}
+        />
+      )}
     </>
   );
 }

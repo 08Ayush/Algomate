@@ -3,8 +3,22 @@ import bcrypt from 'bcryptjs'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+// Admin client with service role key for server-side operations
+// Falls back to anon key if service role key is not available
+export const supabaseAdmin = createClient(
+  supabaseUrl, 
+  supabaseServiceRoleKey || supabaseAnonKey,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  }
+)
 
 // Database Types based on your new schema
 export interface Department {

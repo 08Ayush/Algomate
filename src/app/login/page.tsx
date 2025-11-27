@@ -93,6 +93,9 @@ export default function LoginPage() {
       const facultyType = data.userData.faculty_type;
       
       switch (role) {
+        case 'super_admin':
+          router.push('/super-admin/dashboard');
+          break;
         case 'admin':
         case 'college_admin':
           router.push('/admin/dashboard');

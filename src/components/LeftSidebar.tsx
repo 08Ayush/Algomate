@@ -114,6 +114,12 @@ export default function LeftSidebar() {
       label: 'Timetables',
       facultyTypes: ['creator', 'publisher']
     },
+    { 
+      href: '/notifications', 
+      icon: Bell, 
+      label: 'Notifications',
+      facultyTypes: ['creator', 'publisher']
+    },
   ];
 
   const actionItems: NavItem[] = [

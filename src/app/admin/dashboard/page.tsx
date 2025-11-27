@@ -22,13 +22,13 @@ interface Faculty {
   phone?: string;
   role: 'admin' | 'college_admin' | 'faculty';
   faculty_type?: 'creator' | 'publisher' | 'general' | 'guest';
-  department_id: string;
+  department_id: string | null;
   is_active: boolean;
-  departments: {
+  departments?: {
     id: string;
     name: string;
     code: string;
-  };
+  } | null;
 }
 
 interface Classroom {
@@ -59,6 +59,7 @@ export default function AdminDashboard() {
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   // Department form state
   const [showDeptForm, setShowDeptForm] = useState(false);
@@ -237,7 +238,10 @@ export default function AdminDashboard() {
   };
 
   const handleFacultyDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this faculty member?')) return;
+    if (!confirm('Are you sure you want to delete this faculty member? This action cannot be undone.')) return;
+
+    setError('');
+    setSuccessMessage('');
 
     try {
       const response = await fetch(`/api/admin/faculty/${id}`, {
@@ -245,13 +249,17 @@ export default function AdminDashboard() {
       });
 
       if (response.ok) {
+        setSuccessMessage('Faculty member deleted successfully');
         fetchData();
+        // Clear success message after 5 seconds
+        setTimeout(() => setSuccessMessage(''), 5000);
       } else {
         const data = await response.json();
         setError(data.error || 'Failed to delete faculty');
       }
     } catch (error) {
-      setError('Failed to delete faculty');
+      console.error('Delete error:', error);
+      setError('Failed to delete faculty. Please try again.');
     }
   };
 
@@ -274,7 +282,7 @@ export default function AdminDashboard() {
       phone: fac.phone || '',
       role: fac.role,
             faculty_type: fac.faculty_type || 'general',
-      department_id: fac.department_id,
+      department_id: fac.department_id || '',
       is_active: fac.is_active
     });
     setShowFacultyForm(true);
@@ -390,11 +398,23 @@ export default function AdminDashboard() {
           </div>
 
           {error && (
-            <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+            <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative">
               {error}
               <button 
                 onClick={() => setError('')}
-                className="float-right text-red-500 hover:text-red-700"
+                className="absolute top-3 right-3 text-red-500 hover:text-red-700 text-xl font-bold"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="mb-6 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded relative">
+              {successMessage}
+              <button 
+                onClick={() => setSuccessMessage('')}
+                className="absolute top-3 right-3 text-green-500 hover:text-green-700 text-xl font-bold"
               >
                 ×
               </button>
@@ -636,14 +656,13 @@ export default function AdminDashboard() {
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">Department</label>
+                          <label className="block text-sm font-medium text-gray-700">Department <span className="text-gray-400">(Optional)</span></label>
                           <select
-                            required
                             value={facultyForm.department_id}
                             onChange={(e) => setFacultyForm({...facultyForm, department_id: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                           >
-                            <option value="">Select Department</option>
+                            <option value="">No Department</option>
                             {departments.map((dept) => (
                               <option key={dept.id} value={dept.id}>
                                 {dept.name} ({dept.code})
@@ -734,7 +753,7 @@ export default function AdminDashboard() {
                             </div>
                             <p className="mt-1 text-sm text-gray-600">{fac.email}</p>
                             <p className="mt-1 text-sm text-gray-600">
-                              {fac.departments.name} ({fac.departments.code})
+                              {fac.departments ? `${fac.departments.name} (${fac.departments.code})` : 'No Department Assigned'}
                             </p>
                             <p className="text-xs text-gray-500">
                               {fac.college_uid} • {fac.faculty_type}
