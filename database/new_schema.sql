@@ -33,6 +33,16 @@ CREATE TYPE algorithm_phase AS ENUM ('INITIALIZING', 'CP_SAT', 'GA', 'FINALIZING
 CREATE TYPE generation_task_status AS ENUM ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED');
 CREATE TYPE access_level AS ENUM ('READ', 'write', 'admin', 'super_admin');
 CREATE TYPE notification_type AS ENUM ('timetable_published', 'schedule_change', 'system_alert', 'approval_request');
+CREATE TYPE nep_category AS ENUM (
+    'MAJOR', 
+    'MINOR', 
+    'MULTIDISCIPLINARY', 
+    'AEC',          -- Ability Enhancement Course
+    'VAC',          -- Value Added Course
+    'CORE', 
+    'PEDAGOGY',     -- Specific to B.Ed/ITEP
+    'INTERNSHIP'    -- Block-out events
+);
 
 -- ============================================================================
 -- 2. MULTI-COLLEGE FOUNDATION TABLES
@@ -152,6 +162,11 @@ ALTER TABLE departments
 ADD CONSTRAINT fk_head_of_department 
 FOREIGN KEY (head_of_department) REFERENCES users(id) ON DELETE SET NULL;
 
+-- Add foreign key constraint for NEP 2020 course groups
+ALTER TABLE subjects 
+ADD CONSTRAINT fk_course_group 
+FOREIGN KEY (course_group_id) REFERENCES elective_buckets(id) ON DELETE SET NULL;
+
 CREATE TABLE classrooms (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     college_id UUID NOT NULL REFERENCES colleges(id) ON DELETE CASCADE,
@@ -194,11 +209,33 @@ CREATE TABLE subjects (
     min_gap_hours INT DEFAULT 0 CHECK (min_gap_hours BETWEEN 0 AND 8),
     algorithm_complexity INT DEFAULT 5 CHECK (algorithm_complexity BETWEEN 1 AND 10),
     is_core_subject BOOLEAN DEFAULT TRUE,
+    -- NEP 2020 Fields
+    nep_category nep_category DEFAULT 'CORE',
+    lecture_hours INTEGER DEFAULT 1,
+    tutorial_hours INTEGER DEFAULT 0,
+    practical_hours INTEGER DEFAULT 0,
+    -- Generated column for automatic credit calculation: L + T + (P/2)
+    credit_value NUMERIC(3,1) 
+        GENERATED ALWAYS AS (lecture_hours + tutorial_hours + (practical_hours / 2.0)) STORED,
+    course_group_id UUID,
     description TEXT,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(college_id, department_id, code)
+);
+
+-- NEP 2020: Elective Buckets Table
+-- This holds the "Pools" (e.g., "Sem 1 Humanities Major Pool")
+CREATE TABLE elective_buckets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    batch_id UUID NOT NULL REFERENCES batches(id) ON DELETE CASCADE,
+    bucket_name VARCHAR(255) NOT NULL,
+    min_selection INTEGER DEFAULT 1,
+    max_selection INTEGER DEFAULT 1,
+    is_common_slot BOOLEAN DEFAULT TRUE, -- TRUE = All subjects in this bucket run simultaneously
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE TABLE batches (
@@ -450,6 +487,20 @@ CREATE TABLE student_batch_enrollment (
     UNIQUE(student_id, batch_id)
 );
 
+-- NEP 2020: Student Course Selections Table
+-- Tracks which specific "Major/Minor" a student has chosen
+CREATE TABLE student_course_selections (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    semester INTEGER NOT NULL,
+    academic_year VARCHAR(10) NOT NULL,
+    enrolled_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    -- Ensure a student doesn't pick the same subject twice in a semester
+    UNIQUE(student_id, subject_id, semester, academic_year)
+);
+
 CREATE TABLE timetable_access_control (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     timetable_id UUID NOT NULL REFERENCES generated_timetables(id) ON DELETE CASCADE,
@@ -540,6 +591,11 @@ CREATE INDEX idx_scheduled_classes_timetable ON scheduled_classes(timetable_id, 
 CREATE INDEX idx_scheduled_classes_conflicts ON scheduled_classes(faculty_id, classroom_id, time_slot_id);
 CREATE INDEX idx_student_enrollment_batch ON student_batch_enrollment(batch_id, is_active);
 CREATE INDEX idx_student_enrollment_student ON student_batch_enrollment(student_id, is_active);
+-- NEP 2020 Indexes
+CREATE INDEX idx_buckets_batch ON elective_buckets(batch_id);
+CREATE INDEX idx_subjects_nep_category ON subjects(nep_category);
+CREATE INDEX idx_student_selections_student ON student_course_selections(student_id);
+CREATE INDEX idx_subjects_bucket ON subjects(course_group_id);
 CREATE INDEX idx_timetable_access_user ON timetable_access_control(user_id, access_type, is_active);
 CREATE INDEX idx_timetable_access_batch ON timetable_access_control(batch_id, access_type, is_active);
 CREATE INDEX idx_workflow_approvals_timetable ON workflow_approvals(timetable_id, workflow_step);
@@ -674,6 +730,7 @@ CREATE TRIGGER update_constraint_rules_updated_at BEFORE UPDATE ON constraint_ru
 CREATE TRIGGER update_generation_tasks_updated_at BEFORE UPDATE ON timetable_generation_tasks FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_generated_timetables_updated_at BEFORE UPDATE ON generated_timetables FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_scheduled_classes_updated_at BEFORE UPDATE ON scheduled_classes FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_elective_buckets_updated_at BEFORE UPDATE ON elective_buckets FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Apply audit triggers
 CREATE TRIGGER audit_users AFTER INSERT OR UPDATE OR DELETE ON users FOR EACH ROW EXECUTE FUNCTION log_audit_changes();
@@ -1092,6 +1149,7 @@ BEGIN
     RAISE NOTICE '✓ Tables Created: %', table_count;
     RAISE NOTICE '✓ Views Created: %', view_count;
     RAISE NOTICE '✓ Events Management System: INTEGRATED';
+    RAISE NOTICE '✓ NEP 2020 Architecture: INTEGRATED';
     RAISE NOTICE 'Ready for PyGram 2025 Algorithm Integration!';
     RAISE NOTICE '==============================================================';
 END $$;
@@ -1106,3 +1164,10 @@ COMMENT ON TABLE event_notifications IS 'Stores event-related notifications for 
 COMMENT ON FUNCTION check_event_conflicts() IS 'Automatically detects venue and time conflicts for events';
 COMMENT ON FUNCTION update_event_participants() IS 'Maintains accurate participant count for events';
 COMMENT ON FUNCTION send_event_notification() IS 'Sends notifications to users when event status changes';
+
+-- NEP 2020 Documentation
+COMMENT ON TYPE nep_category IS 'NEP 2020 course categories for choice-based credit system';
+COMMENT ON TABLE elective_buckets IS 'NEP 2020 elective pools where students choose from multiple subject options';
+COMMENT ON TABLE student_course_selections IS 'Tracks individual student choices for major/minor subjects under NEP 2020';
+COMMENT ON COLUMN subjects.credit_value IS 'NEP 2020 standard credit calculation: L + T + (P/2)';
+COMMENT ON COLUMN subjects.nep_category IS 'NEP 2020 course classification for structured learning outcomes';

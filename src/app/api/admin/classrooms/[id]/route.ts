@@ -13,11 +13,50 @@ const supabaseAdmin = createClient(
   }
 );
 
+// Helper function to get user from Authorization header
+async function getAuthenticatedUser(request: NextRequest) {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.substring(7);
+  try {
+    const userString = Buffer.from(token, 'base64').toString();
+    const user = JSON.parse(userString);
+    
+    const { data: dbUser, error } = await supabaseAdmin
+      .from('users')
+      .select('id, college_id, role, is_active')
+      .eq('id', user.id)
+      .eq('is_active', true)
+      .in('role', ['admin', 'college_admin'])
+      .single();
+
+    if (error || !dbUser) {
+      return null;
+    }
+
+    return dbUser;
+  } catch {
+    return null;
+  }
+}
+
 export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    // Get authenticated user
+    const user = await getAuthenticatedUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized. Please log in as an admin.' },
+        { status: 401 }
+      );
+    }
+
     const id = params.id;
     const body = await request.json();
 
@@ -63,22 +102,24 @@ export async function PUT(
       );
     }
 
-    // Check if classroom exists
+    // Check if classroom exists and belongs to user's college
     const { data: existingClassroom } = await supabaseAdmin
       .from('classrooms')
-      .select('id, name')
+      .select('id, name, college_id')
       .eq('id', id)
+      .eq('college_id', user.college_id)
       .single();
 
     if (!existingClassroom) {
-      return NextResponse.json({ error: 'Classroom not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Classroom not found in your college' }, { status: 404 });
     }
 
-    // Check if another classroom has the same name (excluding current one)
+    // Check if another classroom has the same name in the same college (excluding current one)
     const { data: duplicateClassroom } = await supabaseAdmin
       .from('classrooms')
       .select('id')
       .eq('name', name)
+      .eq('college_id', user.college_id)
       .neq('id', id)
       .single();
 
@@ -113,6 +154,7 @@ export async function PUT(
       .from('classrooms')
       .update(classroomData)
       .eq('id', id)
+      .eq('college_id', user.college_id)
       .select()
       .single();
 
@@ -136,17 +178,27 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    // Get authenticated user
+    const user = await getAuthenticatedUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized. Please log in as an admin.' },
+        { status: 401 }
+      );
+    }
+
     const id = params.id;
 
-    // Check if classroom exists
+    // Check if classroom exists and belongs to user's college
     const { data: existingClassroom } = await supabaseAdmin
       .from('classrooms')
-      .select('id, name')
+      .select('id, name, college_id')
       .eq('id', id)
+      .eq('college_id', user.college_id)
       .single();
 
     if (!existingClassroom) {
-      return NextResponse.json({ error: 'Classroom not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Classroom not found in your college' }, { status: 404 });
     }
 
     // Check if classroom is being used in schedules or bookings
@@ -169,7 +221,8 @@ export async function DELETE(
     const { error } = await supabaseAdmin
       .from('classrooms')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('college_id', user.college_id);
 
     if (error) {
       console.error('Error deleting classroom:', error);

@@ -126,25 +126,48 @@ export default function AdminDashboard() {
     try {
       setLoading(true);
       
+      // Get user data for authentication
+      const userData = localStorage.getItem('user');
+      if (!userData) {
+        router.push('/login');
+        return;
+      }
+      
+      // Create authentication token (base64 encoded user data)
+      const authToken = Buffer.from(userData).toString('base64');
+      const headers = {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json'
+      };
+      
       // Fetch departments
-      const deptResponse = await fetch('/api/admin/departments');
+      const deptResponse = await fetch('/api/admin/departments', { headers });
       if (deptResponse.ok) {
         const deptData = await deptResponse.json();
         setDepartments(deptData.departments || []);
+      } else if (deptResponse.status === 401) {
+        router.push('/login?message=Session expired');
+        return;
       }
 
       // Fetch faculty
-      const facultyResponse = await fetch('/api/admin/faculty');
+      const facultyResponse = await fetch('/api/admin/faculty', { headers });
       if (facultyResponse.ok) {
         const facultyData = await facultyResponse.json();
         setFaculty(facultyData.faculty || []);
+      } else if (facultyResponse.status === 401) {
+        router.push('/login?message=Session expired');
+        return;
       }
 
       // Fetch classrooms
-      const classroomResponse = await fetch('/api/admin/classrooms');
+      const classroomResponse = await fetch('/api/admin/classrooms', { headers });
       if (classroomResponse.ok) {
         const classroomData = await classroomResponse.json();
         setClassrooms(classroomData.classrooms || []);
+      } else if (classroomResponse.status === 401) {
+        router.push('/login?message=Session expired');
+        return;
       }
 
     } catch (error: any) {
@@ -158,13 +181,24 @@ export default function AdminDashboard() {
   const handleDeptSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Get authentication token
+      const userData = localStorage.getItem('user');
+      if (!userData) {
+        router.push('/login');
+        return;
+      }
+      
+      const authToken = Buffer.from(userData).toString('base64');
       const url = editingDept 
         ? `/api/admin/departments/${editingDept.id}` 
         : '/api/admin/departments';
       
       const response = await fetch(url, {
         method: editingDept ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
         body: JSON.stringify(deptForm)
       });
 
@@ -186,8 +220,19 @@ export default function AdminDashboard() {
     if (!confirm('Are you sure you want to delete this department?')) return;
 
     try {
+      // Get authentication token
+      const userData = localStorage.getItem('user');
+      if (!userData) {
+        router.push('/login');
+        return;
+      }
+      
+      const authToken = Buffer.from(userData).toString('base64');
       const response = await fetch(`/api/admin/departments/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
       });
 
       if (response.ok) {
@@ -204,13 +249,24 @@ export default function AdminDashboard() {
   const handleFacultySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Get authentication token
+      const userData = localStorage.getItem('user');
+      if (!userData) {
+        router.push('/login');
+        return;
+      }
+      
+      const authToken = Buffer.from(userData).toString('base64');
       const url = editingFaculty 
         ? `/api/admin/faculty/${editingFaculty.id}` 
         : '/api/admin/faculty';
       
       const response = await fetch(url, {
         method: editingFaculty ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
         body: JSON.stringify(facultyForm)
       });
 
@@ -244,8 +300,19 @@ export default function AdminDashboard() {
     setSuccessMessage('');
 
     try {
+      // Get authentication token
+      const userData = localStorage.getItem('user');
+      if (!userData) {
+        router.push('/login');
+        return;
+      }
+      
+      const authToken = Buffer.from(userData).toString('base64');
       const response = await fetch(`/api/admin/faculty/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
       });
 
       if (response.ok) {
@@ -291,13 +358,24 @@ export default function AdminDashboard() {
   const handleClassroomSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Get authentication token
+      const userData = localStorage.getItem('user');
+      if (!userData) {
+        router.push('/login');
+        return;
+      }
+      
+      const authToken = Buffer.from(userData).toString('base64');
       const url = editingClassroom 
         ? `/api/admin/classrooms/${editingClassroom.id}` 
         : '/api/admin/classrooms';
       
       const response = await fetch(url, {
         method: editingClassroom ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
         body: JSON.stringify(classroomForm)
       });
 
@@ -335,8 +413,19 @@ export default function AdminDashboard() {
     if (!confirm('Are you sure you want to delete this classroom?')) return;
 
     try {
+      // Get authentication token
+      const userData = localStorage.getItem('user');
+      if (!userData) {
+        router.push('/login');
+        return;
+      }
+      
+      const authToken = Buffer.from(userData).toString('base64');
       const response = await fetch(`/api/admin/classrooms/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
       });
 
       if (response.ok) {

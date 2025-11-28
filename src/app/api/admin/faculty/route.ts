@@ -14,9 +14,51 @@ const supabaseAdmin = createClient(
   }
 );
 
-// GET - Fetch all faculty
-export async function GET() {
+// Helper function to get user from Authorization header
+async function getAuthenticatedUser(request: NextRequest) {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.substring(7);
   try {
+    // Decode and verify the user token
+    const userString = Buffer.from(token, 'base64').toString();
+    const user = JSON.parse(userString);
+    
+    // Verify user exists and is active admin
+    const { data: dbUser, error } = await supabaseAdmin
+      .from('users')
+      .select('id, college_id, role, is_active')
+      .eq('id', user.id)
+      .eq('is_active', true)
+      .in('role', ['admin', 'college_admin'])
+      .single();
+
+    if (error || !dbUser) {
+      return null;
+    }
+
+    return dbUser;
+  } catch {
+    return null;
+  }
+}
+
+// GET - Fetch faculty for authenticated user's college
+export async function GET(request: NextRequest) {
+  try {
+    // Get authenticated user
+    const user = await getAuthenticatedUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized. Please log in as an admin.' },
+        { status: 401 }
+      );
+    }
+
+    // Fetch faculty only for user's college
     const { data: faculty, error } = await supabaseAdmin
       .from('users')
       .select(`
@@ -33,6 +75,7 @@ export async function GET() {
         is_active,
         departments!users_department_id_fkey(id, name, code)
       `)
+      .eq('college_id', user.college_id)
       .in('role', ['admin', 'faculty'])
       .order('first_name');
 
@@ -60,6 +103,15 @@ export async function GET() {
 // POST - Create new faculty
 export async function POST(request: NextRequest) {
   try {
+    // Get authenticated user
+    const user = await getAuthenticatedUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized. Please log in as an admin.' },
+        { status: 401 }
+      );
+    }
+
     const { 
       first_name, 
       last_name, 
@@ -102,23 +154,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if department exists and get college_id
+    // Check if department exists and belongs to user's college
     const { data: department } = await supabaseAdmin
       .from('departments')
       .select('id, code, college_id')
       .eq('id', department_id)
+      .eq('college_id', user.college_id)
       .single();
 
     if (!department) {
       return NextResponse.json(
-        { error: 'Department not found' },
-        { status: 400 }
-      );
-    }
-
-    if (!department.college_id) {
-      return NextResponse.json(
-        { error: 'Department does not have a college_id assigned' },
+        { error: 'Department not found in your college' },
         { status: 400 }
       );
     }
@@ -145,7 +191,7 @@ export async function POST(request: NextRequest) {
         role,
         faculty_type: faculty_type || 'general',
         department_id,
-        college_id: department.college_id,  // CRITICAL: Include college_id from department
+        college_id: user.college_id,  // Use authenticated user's college_id
         is_active: is_active !== undefined ? is_active : true,
         email_verified: false
       })

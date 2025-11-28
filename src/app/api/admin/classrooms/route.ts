@@ -13,11 +13,54 @@ const supabaseAdmin = createClient(
   }
 );
 
-export async function GET() {
+// Helper function to get user from Authorization header
+async function getAuthenticatedUser(request: NextRequest) {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.substring(7);
   try {
+    // Decode and verify the user token
+    const userString = Buffer.from(token, 'base64').toString();
+    const user = JSON.parse(userString);
+    
+    // Verify user exists and is active admin
+    const { data: dbUser, error } = await supabaseAdmin
+      .from('users')
+      .select('id, college_id, role, is_active')
+      .eq('id', user.id)
+      .eq('is_active', true)
+      .in('role', ['admin', 'college_admin'])
+      .single();
+
+    if (error || !dbUser) {
+      return null;
+    }
+
+    return dbUser;
+  } catch {
+    return null;
+  }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    // Get authenticated user
+    const user = await getAuthenticatedUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized. Please log in as an admin.' },
+        { status: 401 }
+      );
+    }
+
+    // Fetch classrooms only for user's college
     const { data: classrooms, error } = await supabaseAdmin
       .from('classrooms')
       .select('*')
+      .eq('college_id', user.college_id)
       .order('name');
 
     if (error) {
@@ -34,6 +77,15 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    // Get authenticated user
+    const user = await getAuthenticatedUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized. Please log in as an admin.' },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
     
     // Validate required fields
@@ -78,31 +130,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if classroom name already exists
+    // Check if classroom name already exists in the same college
     const { data: existingClassroom } = await supabaseAdmin
       .from('classrooms')
       .select('id')
       .eq('name', name)
+      .eq('college_id', user.college_id)
       .single();
 
     if (existingClassroom) {
       return NextResponse.json(
-        { error: 'A classroom with this name already exists' },
-        { status: 400 }
-      );
-    }
-
-    // Get college_id from the first available college
-    // In a multi-college system, this should come from the logged-in user's context
-    const { data: colleges } = await supabaseAdmin
-      .from('colleges')
-      .select('id')
-      .limit(1)
-      .single();
-
-    if (!colleges) {
-      return NextResponse.json(
-        { error: 'No college found. Please contact administrator.' },
+        { error: 'A classroom with this name already exists in your college' },
         { status: 400 }
       );
     }
@@ -114,7 +152,7 @@ export async function POST(request: NextRequest) {
       floor_number: body.floor_number || 1,
       capacity,
       type,
-      college_id: colleges.id,  // CRITICAL: Include college_id
+      college_id: user.college_id,  // Use authenticated user's college_id
       has_projector: body.has_projector || false,
       has_ac: body.has_ac || false,
       has_computers: body.has_computers || false,

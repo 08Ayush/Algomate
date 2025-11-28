@@ -13,12 +13,55 @@ const supabaseAdmin = createClient(
   }
 );
 
-// GET - Fetch all departments
-export async function GET() {
+// Helper function to get user from Authorization header
+async function getAuthenticatedUser(request: NextRequest) {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.substring(7);
   try {
+    // Decode and verify the user token (you can implement JWT verification here)
+    const userString = Buffer.from(token, 'base64').toString();
+    const user = JSON.parse(userString);
+    
+    // Verify user exists and is active admin
+    const { data: dbUser, error } = await supabaseAdmin
+      .from('users')
+      .select('id, college_id, role, is_active')
+      .eq('id', user.id)
+      .eq('is_active', true)
+      .in('role', ['admin', 'college_admin'])
+      .single();
+
+    if (error || !dbUser) {
+      return null;
+    }
+
+    return dbUser;
+  } catch {
+    return null;
+  }
+}
+
+// GET - Fetch departments for authenticated user's college
+export async function GET(request: NextRequest) {
+  try {
+    // Get authenticated user
+    const user = await getAuthenticatedUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized. Please log in as an admin.' },
+        { status: 401 }
+      );
+    }
+
+    // Fetch departments only for user's college
     const { data: departments, error } = await supabaseAdmin
       .from('departments')
       .select('*')
+      .eq('college_id', user.college_id)
       .order('name');
 
     if (error) {
@@ -45,6 +88,15 @@ export async function GET() {
 // POST - Create new department
 export async function POST(request: NextRequest) {
   try {
+    // Get authenticated user
+    const user = await getAuthenticatedUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized. Please log in as an admin.' },
+        { status: 401 }
+      );
+    }
+
     const { name, code, description } = await request.json();
 
     // Validate required fields
@@ -55,43 +107,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if department code already exists
+    // Check if department code already exists in the same college
     const { data: existingDept } = await supabaseAdmin
       .from('departments')
       .select('id')
       .eq('code', code)
+      .eq('college_id', user.college_id)
       .single();
 
     if (existingDept) {
       return NextResponse.json(
-        { error: 'Department code already exists' },
+        { error: 'Department code already exists in your college' },
         { status: 400 }
       );
     }
 
-    // Get college_id from the first available college
-    // In a multi-college system, this should come from the logged-in user's context
-    const { data: colleges } = await supabaseAdmin
-      .from('colleges')
-      .select('id')
-      .limit(1)
-      .single();
-
-    if (!colleges) {
-      return NextResponse.json(
-        { error: 'No college found. Please contact administrator.' },
-        { status: 400 }
-      );
-    }
-
-    // Create department
+    // Create department for user's college
     const { data: newDept, error } = await supabaseAdmin
       .from('departments')
       .insert({
         name,
         code: code.toUpperCase(),
         description: description || null,
-        college_id: colleges.id  // CRITICAL: Include college_id
+        college_id: user.college_id  // Use authenticated user's college_id
       })
       .select()
       .single();
