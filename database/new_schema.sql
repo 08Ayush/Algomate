@@ -1155,6 +1155,171 @@ BEGIN
 END $$;
 
 -- ============================================================================
+-- POST-SETUP DATA MIGRATIONS (Run after initial setup)
+-- ============================================================================
+
+-- Migration 1: Tag subjects with program values for NEP Curriculum Builder
+-- This should be run after subjects are added to the database
+DO $$ 
+BEGIN
+    RAISE NOTICE '==============================================================';
+    RAISE NOTICE 'Running Data Migrations...';
+    RAISE NOTICE '==============================================================';
+    
+    -- Tag subjects based on department names (customize based on your college structure)
+    -- Example patterns for different institutions:
+    
+    -- Computer Science & Engineering
+    UPDATE subjects 
+    SET program = 'B.Tech CSE'
+    WHERE department_id IN (
+        SELECT id FROM departments 
+        WHERE name = 'Computer Science & Engineering'
+    )
+    AND is_active = true
+    AND program IS NULL;
+    
+    -- Data Science
+    UPDATE subjects 
+    SET program = 'B.Tech DS'
+    WHERE department_id IN (
+        SELECT id FROM departments 
+        WHERE name ILIKE '%Data Science%'
+    )
+    AND is_active = true
+    AND program IS NULL;
+    
+    -- B.Ed (Bachelor of Education)
+    UPDATE subjects 
+    SET program = 'B.Ed'
+    WHERE department_id IN (
+        SELECT id FROM departments 
+        WHERE name ILIKE '%Education%' AND name NOT ILIKE '%Master%'
+    )
+    AND is_active = true
+    AND program IS NULL;
+    
+    -- M.Ed (Master of Education)
+    UPDATE subjects 
+    SET program = 'M.Ed'
+    WHERE department_id IN (
+        SELECT id FROM departments 
+        WHERE name ILIKE '%Master%' AND name ILIKE '%Education%'
+    )
+    AND is_active = true
+    AND program IS NULL;
+    
+    -- ITEP (Integrated Teacher Education Programme)
+    UPDATE subjects 
+    SET program = 'ITEP'
+    WHERE (
+        code ILIKE 'ITEP%' OR 
+        code ILIKE 'ITE%' OR
+        name ILIKE '%ITEP%' OR 
+        name ILIKE '%Integrated Teacher%'
+    )
+    AND is_active = true
+    AND program IS NULL;
+    
+    -- Additional patterns based on subject codes
+    UPDATE subjects 
+    SET program = 'B.Ed'
+    WHERE (
+        code ILIKE 'BED%' OR 
+        code ILIKE 'B.ED%' OR 
+        code ILIKE 'B_ED%'
+    )
+    AND is_active = true
+    AND program IS NULL;
+    
+    UPDATE subjects 
+    SET program = 'M.Ed'
+    WHERE (
+        code ILIKE 'MED%' OR 
+        code ILIKE 'M.ED%' OR 
+        code ILIKE 'M_ED%'
+    )
+    AND is_active = true
+    AND program IS NULL;
+    
+    RAISE NOTICE '✓ Subject program tagging completed';
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE '⚠ Subject tagging skipped (subjects not yet created)';
+END $$;
+
+-- Migration 2: Ensure all subjects have college_id set
+DO $$ 
+BEGIN
+    -- Update subjects to have college_id from their department
+    UPDATE subjects 
+    SET college_id = (
+        SELECT college_id FROM departments 
+        WHERE departments.id = subjects.department_id
+    )
+    WHERE college_id IS NULL 
+    AND department_id IS NOT NULL;
+    
+    -- If still NULL and only one college exists, assign to that college
+    UPDATE subjects 
+    SET college_id = (SELECT id FROM colleges LIMIT 1)
+    WHERE college_id IS NULL 
+    AND EXISTS (SELECT 1 FROM colleges);
+    
+    RAISE NOTICE '✓ College ID assignment completed';
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE '⚠ College ID assignment skipped (subjects not yet created)';
+END $$;
+
+-- ============================================================================
+-- VERIFICATION QUERIES (Run these after setup to verify data)
+-- ============================================================================
+
+-- Uncomment and run these queries to verify your data:
+/*
+-- Check subject program distribution
+SELECT 
+    program,
+    COUNT(*) as subject_count,
+    MIN(semester) as min_semester,
+    MAX(semester) as max_semester
+FROM subjects 
+WHERE is_active = true
+GROUP BY program
+ORDER BY program;
+
+-- Check subjects by department and program
+SELECT 
+    d.name as department_name,
+    s.program,
+    COUNT(*) as count
+FROM subjects s
+JOIN departments d ON s.department_id = d.id
+WHERE s.is_active = true
+GROUP BY d.name, s.program
+ORDER BY d.name;
+
+-- Check for subjects without program assigned
+SELECT 
+    COUNT(*) FILTER (WHERE program IS NOT NULL) as tagged_subjects,
+    COUNT(*) FILTER (WHERE program IS NULL) as untagged_subjects,
+    COUNT(*) as total_active_subjects
+FROM subjects 
+WHERE is_active = true;
+
+-- Check for subjects without college_id
+SELECT 
+    college_id,
+    COUNT(*) as subject_count
+FROM subjects 
+WHERE is_active = true
+GROUP BY college_id;
+*/
+
+-- ============================================================================
 -- COMMENTS FOR DOCUMENTATION
 -- ============================================================================
 

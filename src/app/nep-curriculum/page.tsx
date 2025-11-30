@@ -1,0 +1,191 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import CurriculumBuilder from '@/components/nep/CurriculumBuilder';
+import MockStudentGenerator from '@/components/nep/MockStudentGenerator';
+import { createClient } from '@/lib/supabase/client';
+
+interface User {
+  id: string;
+  role: string;
+  college_id: string;
+  first_name: string;
+  last_name: string;
+}
+
+export default function NEPCurriculumPage() {
+  const router = useRouter();
+  const [user, setUser] = useState<User | null>(null);
+  const [selectedCourse, setSelectedCourse] = useState<string>('B.Tech CSE');
+  const [selectedSemester, setSelectedSemester] = useState<number>(1);
+  const [loading, setLoading] = useState(true);
+
+  const supabase = createClient();
+
+  const courses = [
+    { value: 'B.Tech CSE', label: 'B.Tech - Computer Science & Engineering', semesters: 8 },
+    { value: 'B.Tech DS', label: 'B.Tech - Data Science', semesters: 8 },
+    { value: 'B.Ed', label: 'B.Ed (Bachelor of Education)', semesters: 4 },
+    { value: 'ITEP', label: 'ITEP (Integrated Teacher Education Programme)', semesters: 8 },
+    { value: 'M.Ed', label: 'M.Ed (Master of Education)', semesters: 4 }
+  ];
+
+  // Get semesters based on selected course
+  const getAvailableSemesters = () => {
+    const selectedCourseObj = courses.find(c => c.value === selectedCourse);
+    return Array.from({ length: selectedCourseObj?.semesters || 8 }, (_, i) => i + 1);
+  };
+
+  const semesters = getAvailableSemesters();
+
+  useEffect(() => {
+    checkAuthAndRole();
+  }, []);
+
+  async function checkAuthAndRole() {
+    try {
+      // Check if user is logged in
+      const userData = localStorage.getItem('user');
+      if (!userData) {
+        router.push('/login?message=Please login to access this page');
+        return;
+      }
+
+      const parsedUser: User = JSON.parse(userData);
+
+      // Check if user is college_admin
+      if (parsedUser.role !== 'college_admin' && parsedUser.role !== 'admin') {
+        router.push('/login?message=Access denied. Only College Admins can access this page');
+        return;
+      }
+
+      setUser(parsedUser);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error checking authentication:', error);
+      router.push('/login');
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      <div className="bg-white border-b border-gray-200 shadow-sm">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">NEP 2020 Curriculum Builder</h1>
+              <p className="text-gray-600 mt-1">
+                Create elective buckets and assign subjects for Choice-Based Credit System
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-gray-500">Logged in as</p>
+              <p className="font-semibold text-gray-900">{user.first_name} {user.last_name}</p>
+              <p className="text-xs text-blue-600">College Admin</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-6 py-6">
+        {/* Course and Semester Selector */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Course / Program
+              </label>
+              <select
+                value={selectedCourse}
+                onChange={(e) => {
+                  setSelectedCourse(e.target.value);
+                  // Reset semester to 1 when course changes
+                  setSelectedSemester(1);
+                }}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                {courses.map((course) => (
+                  <option key={course.value} value={course.value}>
+                    {course.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Select the program for which you want to create curriculum
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Semester
+              </label>
+              <select
+                value={selectedSemester}
+                onChange={(e) => setSelectedSemester(parseInt(e.target.value))}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                {semesters.map((sem) => (
+                  <option key={sem} value={sem}>
+                    Semester {sem}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Subjects will be filtered based on the selected semester
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Curriculum Builder */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+          <CurriculumBuilder
+            collegeId={user.college_id}
+            course={selectedCourse}
+            semester={selectedSemester}
+          />
+        </div>
+      </div>
+
+      {/* Help Section */}
+      <div className="max-w-7xl mx-auto px-6 py-6">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+          <h3 className="font-bold text-blue-900 mb-3 text-lg">📚 How to use the NEP Curriculum Builder:</h3>
+          <ol className="list-decimal list-inside space-y-2 text-blue-800">
+            <li><strong>Select Course & Semester:</strong> Choose the program (ITEP/B.Ed/M.Ed) and semester from the dropdowns above</li>
+            <li><strong>Create Elective Buckets:</strong> Enter a bucket name (e.g., "Major Pool", "Minor Pool") and click "Create Bucket"</li>
+            <li><strong>Drag & Drop Subjects:</strong> Drag subjects from the available list on the left into the appropriate bucket on the right</li>
+            <li><strong>Configure Common Time Slot:</strong> Toggle this option if all subjects in the bucket should run simultaneously (students choose one)</li>
+            <li><strong>Set Selection Limits:</strong> Define minimum and maximum number of subjects students can choose from this bucket</li>
+            <li><strong>Save Curriculum:</strong> Click "Save Curriculum" to persist your elective structure to the database</li>
+          </ol>
+          <div className="mt-4 p-4 bg-white rounded-lg border border-blue-300">
+            <h4 className="font-semibold text-blue-900 mb-2">📌 Important Notes:</h4>
+            <ul className="list-disc list-inside space-y-1 text-sm text-blue-700">
+              <li>Subjects are filtered based on your college, selected course, and semester</li>
+              <li>Only College Admins can access this page</li>
+              <li>Changes are specific to the selected course and semester combination</li>
+              <li>Use this to implement NEP 2020 Choice-Based Credit System (CBCS)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
