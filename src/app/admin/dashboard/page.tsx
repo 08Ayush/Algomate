@@ -51,12 +51,33 @@ interface Classroom {
   created_at: string;
 }
 
+interface Batch {
+  id: string;
+  name: string;
+  college_id: string;
+  department_id: string;
+  course?: string;
+  semester: number;
+  section: string;
+  academic_year: string;
+  expected_strength: number;
+  actual_strength: number;
+  is_active: boolean;
+  created_at: string;
+  departments?: {
+    id: string;
+    name: string;
+    code: string;
+  } | null;
+}
+
 export default function AdminDashboard() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'departments' | 'faculty' | 'classrooms'>('departments');
+  const [activeTab, setActiveTab] = useState<'departments' | 'faculty' | 'classrooms' | 'batches'>('departments');
   const [departments, setDepartments] = useState<Department[]>([]);
   const [faculty, setFaculty] = useState<Faculty[]>([]);
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -134,7 +155,20 @@ export default function AdminDashboard() {
       }
       
       // Create authentication token (base64 encoded user data)
-      const authToken = Buffer.from(userData).toString('base64');
+      let userDataObj = JSON.parse(userData);
+      
+      // Fix: Add college_id if missing (for existing users)
+      if (!userDataObj.college_id && userDataObj.departments?.id) {
+        // Try to get college_id from department
+        const deptResponse = await fetch(`/api/admin/departments/${userDataObj.departments.id}`);
+        if (deptResponse.ok) {
+          const deptData = await deptResponse.json();
+          userDataObj.college_id = deptData.college_id;
+          localStorage.setItem('user', JSON.stringify(userDataObj));
+        }
+      }
+      
+      const authToken = Buffer.from(JSON.stringify(userDataObj)).toString('base64');
       const headers = {
         'Authorization': `Bearer ${authToken}`,
         'Content-Type': 'application/json'
@@ -166,6 +200,16 @@ export default function AdminDashboard() {
         const classroomData = await classroomResponse.json();
         setClassrooms(classroomData.classrooms || []);
       } else if (classroomResponse.status === 401) {
+        router.push('/login?message=Session expired');
+        return;
+      }
+
+      // Fetch batches
+      const batchResponse = await fetch('/api/admin/batches', { headers });
+      if (batchResponse.ok) {
+        const batchData = await batchResponse.json();
+        setBatches(batchData.batches || []);
+      } else if (batchResponse.status === 401) {
         router.push('/login?message=Session expired');
         return;
       }
@@ -564,6 +608,16 @@ export default function AdminDashboard() {
                   }`}
                 >
                   Classrooms ({classrooms.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('batches')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'batches'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Batches ({batches.length})
                 </button>
               </nav>
             </div>
@@ -1206,6 +1260,91 @@ export default function AdminDashboard() {
                 {classrooms.length === 0 && (
                   <div className="text-center py-12">
                     <p className="text-gray-500">No classrooms found. Add your first classroom to get started.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Batches Tab */}
+          {activeTab === 'batches' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-semibold text-gray-900">Student Batches</h2>
+                <div className="text-sm text-gray-600">
+                  <p>Batches are created automatically when you create NEP curriculum buckets</p>
+                </div>
+              </div>
+
+              {/* Batches List */}
+              <div className="bg-white shadow overflow-hidden sm:rounded-md">
+                <ul className="divide-y divide-gray-200">
+                  {batches.map((batch) => (
+                    <li key={batch.id}>
+                      <div className="px-4 py-4 sm:px-6">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h3 className="text-lg font-medium text-gray-900">{batch.name}</h3>
+                                <p className="text-sm text-gray-500 mt-1">
+                                  <span className="font-medium">ID:</span> {batch.id}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                  batch.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                }`}>
+                                  {batch.is_active ? 'Active' : 'Inactive'}
+                                </span>
+                              </div>
+                            </div>
+                            
+                            <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
+                              <div>
+                                <span className="font-medium">Department:</span><br/>
+                                {batch.departments?.name || 'N/A'} ({batch.departments?.code || 'N/A'})
+                              </div>
+                              <div>
+                                <span className="font-medium">Semester:</span><br/>
+                                Semester {batch.semester}
+                              </div>
+                              <div>
+                                <span className="font-medium">Section:</span><br/>
+                                {batch.section}
+                              </div>
+                              <div>
+                                <span className="font-medium">Strength:</span><br/>
+                                {batch.actual_strength}/{batch.expected_strength}
+                              </div>
+                            </div>
+                            
+                            <div className="mt-2 text-sm text-gray-600">
+                              <span className="font-medium">Academic Year:</span> {batch.academic_year}
+                              <span className="ml-4 font-medium">Created:</span> {new Date(batch.created_at).toLocaleDateString()}
+                            </div>
+
+                            <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+                              <h4 className="text-sm font-medium text-blue-900 mb-2">NEP 2020 Data Flow:</h4>
+                              <div className="text-xs text-blue-800">
+                                <div className="flex items-center space-x-2">
+                                  <span className="bg-blue-100 px-2 py-1 rounded">Batch ID: {batch.id}</span>
+                                  <span>→</span>
+                                  <span className="bg-green-100 px-2 py-1 rounded">Elective Buckets</span>
+                                  <span>→</span>
+                                  <span className="bg-yellow-100 px-2 py-1 rounded">Subjects (via course_group_id)</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                {batches.length === 0 && (
+                  <div className="text-center py-12">
+                    <p className="text-gray-500">No batches found. Batches are created automatically when you create NEP curriculum buckets.</p>
                   </div>
                 )}
               </div>

@@ -1,18 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/server';
 import bcrypt from 'bcryptjs';
-
-// Create server-side supabase client with service role key
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-);
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,7 +14,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find user by college_uid with department info
+    const supabaseAdmin = createClient();
+
+    // Find user by college_uid with department info and college_id
     const { data: userData, error: userError } = await supabaseAdmin
       .from('users')
       .select(`
@@ -34,6 +24,7 @@ export async function POST(request: NextRequest) {
         first_name,
         last_name,
         college_uid,
+        college_id,
         email,
         password_hash,
         phone,
@@ -45,7 +36,8 @@ export async function POST(request: NextRequest) {
         email_verified,
         last_login,
         created_at,
-        departments!users_department_id_fkey(id, name, code)
+        departments!users_department_id_fkey(id, name, code),
+        colleges!users_college_id_fkey(id, name, code)
       `)
       .eq('college_uid', collegeUid)
       .eq('is_active', true)

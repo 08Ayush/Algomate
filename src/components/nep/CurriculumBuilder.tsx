@@ -14,7 +14,7 @@ import {
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { createClient } from '@/lib/supabase/client';
+
 
 // Types
 interface Subject {
@@ -183,6 +183,7 @@ export default function CurriculumBuilder({
   const [newBucketName, setNewBucketName] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -192,41 +193,71 @@ export default function CurriculumBuilder({
     })
   );
 
-  const supabase = createClient();
+
 
   // Fetch available subjects
   useEffect(() => {
+    // Check if user is logged in before making API calls
+    const userData = localStorage.getItem('user');
+    if (!userData) {
+      setLoading(false);
+      console.error('No user data found in localStorage. Please login first.');
+      return;
+    }
+
+    try {
+      JSON.parse(userData);
+    } catch (e) {
+      setLoading(false);
+      console.error('Invalid user data in localStorage:', e);
+      return;
+    }
+
     fetchSubjects();
     fetchBuckets();
   }, [collegeId, course, semester]);
 
   async function fetchSubjects() {
     try {
-      const { data, error } = await supabase
-        .from('subjects')
-        .select('*')
-        .eq('college_id', collegeId)
-        .eq('semester', semester)
-        .eq('is_active', true)
-        .is('course_group_id', null) // Only subjects not in buckets
-        .order('code');
+      const userData = localStorage.getItem('user');
+      console.log('User data from localStorage:', userData);
+      if (!userData) {
+        setError('Please log in to access subjects data');
+        return;
+      }
 
-      if (error) throw error;
-      
-      // Filter by program column first, then fallback to code/name matching
-      const filtered = (data || []).filter((subject: any) => {
-        // Primary filter: Use program column if available
-        if (subject.program) {
-          return subject.program === course;
+      const authToken = Buffer.from(userData).toString('base64');
+      console.log('Auth token created:', authToken.substring(0, 20) + '...');
+      const response = await fetch(`/api/nep/subjects?course=${encodeURIComponent(course)}&semester=${semester}`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
         }
-        // Fallback: Check if course name appears in code or name
-        return subject.code?.includes(course) || subject.name?.includes(course);
       });
-      
-      console.log(`Found ${filtered.length} subjects for ${course} semester ${semester}`);
-      setAvailableSubjects(filtered);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('API Error Response:', errorData);
+        
+        if (response.status === 401) {
+          if (errorData.code === 'AUTH_REQUIRED') {
+            setError(errorData.message || 'Authentication required. Please log in again.');
+          } else {
+            setError('Your session has expired. Please log in again to access subjects.');
+          }
+          return;
+        }
+        
+        throw new Error(errorData.error || errorData.message || 'Failed to fetch subjects');
+      }
+
+      const subjects = await response.json();
+      console.log(`Found ${subjects.length} subjects for ${course} semester ${semester}`);
+      setAvailableSubjects(subjects);
+      setError(null); // Clear any previous errors
     } catch (error) {
       console.error('Error fetching subjects:', error);
+      setError(error instanceof Error ? error.message : 'Failed to load subjects. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -234,34 +265,41 @@ export default function CurriculumBuilder({
 
   async function fetchBuckets() {
     try {
-      // Fetch buckets by college, course, and semester
-      const { data: bucketsData, error: bucketsError } = await supabase
-        .from('elective_buckets')
-        .select('*')
-        .eq('college_id', collegeId)
-        .eq('course', course)
-        .eq('semester', semester);
+      const userData = localStorage.getItem('user');
+      if (!userData) {
+        setError('Please log in to access buckets data');
+        return;
+      }
 
-      if (bucketsError) throw bucketsError;
+      const authToken = Buffer.from(userData).toString('base64');
+      const response = await fetch(`/api/nep/buckets?course=${encodeURIComponent(course)}&semester=${semester}`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
 
-      // Fetch subjects for each bucket
-      const bucketsWithSubjects = await Promise.all(
-        (bucketsData || []).map(async (bucket: any) => {
-          const { data: subjects } = await supabase
-            .from('subjects')
-            .select('*')
-            .eq('course_group_id', bucket.id);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('API Error Response:', errorData);
+        
+        if (response.status === 401) {
+          if (errorData.code === 'AUTH_REQUIRED') {
+            setError(errorData.message || 'Authentication required. Please log in again.');
+          } else {
+            setError('Your session has expired. Please log in again to access buckets.');
+          }
+          return;
+        }
+        
+        throw new Error(errorData.error || errorData.message || 'Failed to fetch buckets');
+      }
 
-          return {
-            ...bucket,
-            subjects: subjects || [],
-          };
-        })
-      );
-
+      const bucketsWithSubjects = await response.json();
       setBuckets(bucketsWithSubjects);
     } catch (error) {
       console.error('Error fetching buckets:', error);
+      setError(error instanceof Error ? error.message : 'Failed to load buckets. Please try again.');
     }
   }
 
@@ -356,53 +394,32 @@ export default function CurriculumBuilder({
   async function handleSave() {
     setSaving(true);
     try {
-      // Delete all existing buckets for this college, course, and semester
-      const { error: deleteError } = await supabase
-        .from('elective_buckets')
-        .delete()
-        .eq('college_id', collegeId)
-        .eq('course', course)
-        .eq('semester', semester);
-
-      if (deleteError) throw deleteError;
-
-      // Insert new buckets
-      for (const bucket of buckets) {
-        const { data: bucketData, error: bucketError } = await supabase
-          .from('elective_buckets')
-          .insert({
-            college_id: collegeId,
-            course: course,
-            semester: semester,
-            bucket_name: bucket.bucket_name,
-            is_common_slot: bucket.is_common_slot,
-            min_selection: bucket.min_selection,
-            max_selection: bucket.max_selection,
-          } as any)
-          .select()
-          .single();
-
-        if (bucketError) throw bucketError;
-
-        // Update subjects to link to bucket
-        if (bucket.subjects.length > 0 && bucketData) {
-          const { error: updateError } = await (supabase as any)
-            .from('subjects')
-            .update({ course_group_id: (bucketData as any).id })
-            .in('id', bucket.subjects.map((s) => s.id));
-
-          if (updateError) throw updateError;
-        }
+      const userData = localStorage.getItem('user');
+      if (!userData) {
+        throw new Error('No user data found');
       }
 
-      // Reset course_group_id for available subjects
-      if (availableSubjects.length > 0) {
-        await (supabase as any)
-          .from('subjects')
-          .update({ course_group_id: null })
-          .in('id', availableSubjects.map((s) => s.id));
+      const authToken = Buffer.from(userData).toString('base64');
+      const response = await fetch('/api/nep/buckets', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          buckets,
+          availableSubjects,
+          course,
+          semester
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save curriculum');
       }
 
+      const result = await response.json();
       alert('Curriculum saved successfully!');
       await fetchBuckets();
     } catch (error) {
@@ -415,6 +432,55 @@ export default function CurriculumBuilder({
 
   if (loading) {
     return <div className="flex justify-center items-center h-96">Loading...</div>;
+  }
+
+  // Display error if any
+  if (error) {
+    return (
+      <div className="flex flex-col justify-center items-center h-96 p-8 text-center">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
+          <h3 className="text-lg font-semibold text-red-800 mb-2">Error</h3>
+          <p className="text-red-600 mb-4">{error}</p>
+          <button
+            onClick={() => {
+              setError(null);
+              fetchSubjects();
+              fetchBuckets();
+            }}
+            className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 mr-2"
+          >
+            Retry
+          </button>
+          <button
+            onClick={() => window.location.href = '/admin/dashboard'}
+            className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
+          >
+            Go to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Check if user is authenticated
+  const userData = localStorage.getItem('user');
+  if (!userData) {
+    return (
+      <div className="flex flex-col justify-center items-center h-96 p-8 text-center">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
+          <h3 className="text-lg font-semibold text-red-800 mb-2">Authentication Required</h3>
+          <p className="text-red-600 mb-4">
+            Please log in through the admin dashboard first.
+          </p>
+          <button
+            onClick={() => window.location.href = '/admin/dashboard'}
+            className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+          >
+            Go to Admin Dashboard
+          </button>
+        </div>
+      </div>
+    );
   }
 
   const activeSubject = availableSubjects.find((s) => s.id === activeId);

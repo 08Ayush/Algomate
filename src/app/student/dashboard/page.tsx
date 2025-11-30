@@ -61,6 +61,42 @@ interface TimetableClass {
   isContinuation: boolean;
 }
 
+interface ElectiveBucket {
+  id: string;
+  bucket_name: string;
+  description?: string;
+  max_selection: number;
+  min_selection: number;
+  batch_id: string;
+  batches?: {
+    name: string;
+    semester: number;
+  };
+  created_at: string;
+}
+
+interface Subject {
+  id: string;
+  code: string;
+  name: string;
+  credits: number;
+  nep_category: string;
+  subject_type: string;
+  course_group_id: string;
+  semester: number;
+  description?: string;
+}
+
+interface StudentSelection {
+  id: string;
+  student_id: string;
+  subject_id: string;
+  semester: number;
+  academic_year: string;
+  selection_date: string;
+  subjects?: Subject;
+}
+
 export default function StudentDashboard() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
@@ -73,6 +109,15 @@ export default function StudentDashboard() {
   const [timeSlots, setTimeSlots] = useState<string[]>([]);
   const [days] = useState(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
   const [loadingTimetable, setLoadingTimetable] = useState(false);
+
+  // NEP Curriculum Selection States
+  const [electiveBuckets, setElectiveBuckets] = useState<ElectiveBucket[]>([]);
+  const [bucketSubjects, setBucketSubjects] = useState<{ [bucketId: string]: Subject[] }>({});
+  const [studentSelections, setStudentSelections] = useState<StudentSelection[]>([]);
+  const [selectedSubjects, setSelectedSubjects] = useState<{ [bucketId: string]: string[] }>({});
+  const [loadingBuckets, setLoadingBuckets] = useState(false);
+  const [loadingSelections, setLoadingSelections] = useState(false);
+  const [showNepCurriculum, setShowNepCurriculum] = useState(false);
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -98,6 +143,13 @@ export default function StudentDashboard() {
     setUser(parsedUser);
     fetchDashboardData(parsedUser);
   }, [router]);
+
+  // Fetch NEP curriculum data when dashboard data is loaded
+  useEffect(() => {
+    if (user?.role === 'student' && dashboardData?.additionalData?.batch && !loadingBuckets && electiveBuckets.length === 0) {
+      fetchNepCurriculumData(user);
+    }
+  }, [user, dashboardData, loadingBuckets, electiveBuckets.length]);
 
   const fetchDashboardData = async (user: any) => {
     try {
@@ -170,6 +222,124 @@ export default function StudentDashboard() {
   const handleTimetableChange = (timetable: PublishedTimetable) => {
     setSelectedTimetable(timetable);
     fetchTimetableClasses(timetable.id);
+  };
+
+  // NEP Curriculum Functions
+  const fetchNepCurriculumData = async (user: any) => {
+    if (!dashboardData?.additionalData?.batch) return;
+    
+    try {
+      setLoadingBuckets(true);
+      
+      // Get user's current semester from batch
+      const semester = dashboardData.additionalData.batch.semester;
+      
+      // Fetch elective buckets for student's semester
+      const bucketsResponse = await fetch(
+        `/api/nep/buckets?course=${encodeURIComponent('B.Ed')}&semester=${semester}&studentId=${user.id}`
+      );
+      
+      if (bucketsResponse.ok) {
+        const bucketsData = await bucketsResponse.json();
+        setElectiveBuckets(bucketsData || []);
+        
+        // Extract subjects from buckets response (subjects are already included)
+        const subjectsMap = (bucketsData || []).reduce((acc: any, bucket: any) => {
+          acc[bucket.id] = bucket.subjects || [];
+          return acc;
+        }, {} as { [bucketId: string]: Subject[] });
+        
+        setBucketSubjects(subjectsMap);
+        console.log('Loaded buckets with subjects:', bucketsData.length, 'buckets');
+        console.log('Subjects map:', subjectsMap);
+      }
+      
+      // Fetch student's existing selections
+      const selectionsResponse = await fetch(
+        `/api/student/selections?studentId=${user.id}&semester=${semester}`
+      );
+      
+      if (selectionsResponse.ok) {
+        const selectionsData = await selectionsResponse.json();
+        setStudentSelections(selectionsData.selections || []);
+        
+        // Initialize selected subjects state
+        const initialSelections = (selectionsData.selections || []).reduce((acc: any, selection: StudentSelection) => {
+          if (selection.subjects?.course_group_id) {
+            if (!acc[selection.subjects.course_group_id]) {
+              acc[selection.subjects.course_group_id] = [];
+            }
+            acc[selection.subjects.course_group_id].push(selection.subject_id);
+          }
+          return acc;
+        }, {});
+        
+        setSelectedSubjects(initialSelections);
+      }
+    } catch (error) {
+      console.error('Error fetching NEP curriculum data:', error);
+    } finally {
+      setLoadingBuckets(false);
+    }
+  };
+
+  const handleSubjectSelection = async (bucketId: string, subjectId: string, isSelected: boolean) => {
+    try {
+      setLoadingSelections(true);
+      
+      const bucket = electiveBuckets.find(b => b.id === bucketId);
+      if (!bucket) return;
+      
+      const currentSelections = selectedSubjects[bucketId] || [];
+      
+      if (isSelected) {
+        // Check if we can add more selections
+        if (currentSelections.length >= bucket.max_selection) {
+          alert(`You can only select ${bucket.max_selection} subjects from this bucket.`);
+          return;
+        }
+        
+        // Add selection
+        const response = await fetch('/api/student/selections', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            student_id: user.id,
+            subject_id: subjectId,
+            semester: dashboardData?.additionalData?.batch?.semester,
+            academic_year: dashboardData?.additionalData?.batch?.academic_year || '2025-26'
+          })
+        });
+        
+        if (response.ok) {
+          setSelectedSubjects(prev => ({
+            ...prev,
+            [bucketId]: [...currentSelections, subjectId]
+          }));
+        }
+      } else {
+        // Remove selection
+        const response = await fetch('/api/student/selections', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            student_id: user.id,
+            subject_id: subjectId
+          })
+        });
+        
+        if (response.ok) {
+          setSelectedSubjects(prev => ({
+            ...prev,
+            [bucketId]: currentSelections.filter(id => id !== subjectId)
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Error handling subject selection:', error);
+    } finally {
+      setLoadingSelections(false);
+    }
   };
 
   const getClassForSlot = (day: string, timeSlot: string): TimetableClass | undefined => {
@@ -730,6 +900,197 @@ export default function StudentDashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {/* NEP Curriculum Selection Section - Only for Students */}
+      {user?.role === 'student' && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <BookOpen className="h-5 w-5" />
+                  NEP 2020 Curriculum Selection
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Choose your elective subjects from available buckets
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">
+                  {electiveBuckets.length} Buckets Available
+                </Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowNepCurriculum(!showNepCurriculum)}
+                  className="flex items-center gap-2"
+                >
+                  {showNepCurriculum ? 'Hide' : 'Show'} Selections
+                  <ChevronDown className={`h-4 w-4 transition-transform ${showNepCurriculum ? 'rotate-180' : ''}`} />
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loadingBuckets ? (
+              <div className="text-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-2" />
+                <p className="text-gray-500">Loading curriculum options...</p>
+              </div>
+            ) : electiveBuckets.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <BookOpen className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p className="font-medium">No elective buckets available</p>
+                <p className="text-sm mt-1">Elective options will appear here when available for your semester</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {!showNepCurriculum && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
+                        <BookOpen className="h-6 w-6 text-blue-600" />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-blue-900">Subject Selection Summary</h4>
+                        <p className="text-sm text-blue-700 mt-1">
+                          You have {Object.values(selectedSubjects).reduce((acc, arr) => acc + arr.length, 0)} subjects selected from {electiveBuckets.length} available buckets
+                        </p>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {electiveBuckets.map(bucket => {
+                            const selections = selectedSubjects[bucket.id] || [];
+                            return (
+                              <Badge key={bucket.id} variant="secondary" className="text-xs">
+                                {bucket.bucket_name}: {selections.length}/{bucket.max_selection}
+                              </Badge>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {showNepCurriculum && (
+                  <div className="space-y-6">
+                    {electiveBuckets.map((bucket) => {
+                      const subjects = bucketSubjects[bucket.id] || [];
+                      const currentSelections = selectedSubjects[bucket.id] || [];
+                      
+                      return (
+                        <Card key={bucket.id} className="border-l-4 border-l-blue-500">
+                          <CardHeader className="pb-3">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h4 className="font-semibold text-gray-900">{bucket.bucket_name}</h4>
+                                {bucket.description && (
+                                  <p className="text-sm text-gray-600 mt-1">{bucket.description}</p>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                <Badge className={`${
+                                  currentSelections.length >= bucket.min_selection 
+                                    ? 'bg-green-100 text-green-800 border-green-200' 
+                                    : 'bg-yellow-100 text-yellow-800 border-yellow-200'
+                                }`}>
+                                  {currentSelections.length}/{bucket.max_selection} Selected
+                                </Badge>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Min: {bucket.min_selection} • Max: {bucket.max_selection}
+                                </p>
+                              </div>
+                            </div>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {subjects.map((subject) => {
+                                const isSelected = currentSelections.includes(subject.id);
+                                const canSelect = currentSelections.length < bucket.max_selection;
+                                
+                                // Debug logging
+                                console.log('Subject selection debug:', {
+                                  subjectId: subject.id,
+                                  subjectName: subject.name,
+                                  bucketId: bucket.id,
+                                  bucketName: bucket.bucket_name,
+                                  currentSelections: currentSelections,
+                                  isSelected: isSelected,
+                                  canSelect: canSelect,
+                                  maxSelections: bucket.max_selection,
+                                  minSelections: bucket.min_selection
+                                });
+                                
+                                return (
+                                  <div
+                                    key={subject.id}
+                                    className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                                      isSelected
+                                        ? 'border-blue-500 bg-blue-50'
+                                        : canSelect
+                                        ? 'border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50'
+                                        : 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
+                                    }`}
+                                    onClick={() => {
+                                      if (isSelected || canSelect) {
+                                        handleSubjectSelection(bucket.id, subject.id, !isSelected);
+                                      }
+                                    }}
+                                  >
+                                    <div className="flex items-center justify-between mb-2">
+                                      <Badge variant="outline" className="text-xs">
+                                        {subject.code}
+                                      </Badge>
+                                      <div className="flex items-center gap-2">
+                                        <Badge className="text-xs bg-purple-100 text-purple-800">
+                                          {subject.credit_value} Credits
+                                        </Badge>
+                                        {isSelected && (
+                                          <div className="h-5 w-5 rounded-full bg-blue-500 flex items-center justify-center">
+                                            <svg className="h-3 w-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                            </svg>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <h5 className="font-medium text-sm text-gray-900 line-clamp-2">
+                                      {subject.name}
+                                    </h5>
+                                    {subject.description && (
+                                      <p className="text-xs text-gray-600 mt-1 line-clamp-2">
+                                        {subject.description}
+                                      </p>
+                                    )}
+                                    <div className="flex items-center gap-2 mt-2">
+                                      <Badge variant="outline" className="text-xs">
+                                        {subject.nep_category}
+                                      </Badge>
+                                      <Badge variant="outline" className="text-xs">
+                                        {subject.subject_type}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            
+                            {subjects.length === 0 && (
+                              <div className="text-center py-8 text-gray-500">
+                                <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                                <p className="text-sm">No subjects available in this bucket</p>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Examination Information Section */}
       <Card>
