@@ -191,15 +191,34 @@ CREATE TABLE classrooms (
     UNIQUE(college_id, name)
 );
 
+-- ============================================================================
+-- COURSES TABLE - Stores programs like B.Ed, M.Ed, ITEP
+-- ============================================================================
+
+CREATE TABLE courses (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    college_id UUID NOT NULL REFERENCES colleges(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,         -- e.g., "Integrated Teacher Education Programme"
+    code VARCHAR(50) NOT NULL,           -- e.g., "ITEP"
+    nature_of_course VARCHAR(50),        -- e.g., "Integrated", "PG", "UG"
+    intake INTEGER DEFAULT 0,            -- e.g., 50
+    duration_years INTEGER,              -- e.g., 4
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    UNIQUE(college_id, code)
+);
+
 CREATE TABLE subjects (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(255) NOT NULL,
     code VARCHAR(20) NOT NULL,
     college_id UUID NOT NULL REFERENCES colleges(id) ON DELETE CASCADE,
-    department_id UUID NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+    department_id UUID REFERENCES departments(id) ON DELETE SET NULL,
+    course_id UUID REFERENCES courses(id) ON DELETE SET NULL,
     credits_per_week INT NOT NULL CHECK (credits_per_week BETWEEN 1 AND 10),
     semester INT CHECK (semester BETWEEN 1 AND 8),
-    subject_type subject_type NOT NULL DEFAULT 'THEORY',
+    category nep_category DEFAULT 'CORE',  -- Previously nep_category, now renamed to category
+    subject_type VARCHAR(50) DEFAULT 'THEORY',  -- Previously subject_type enum, now VARCHAR for flexibility
     preferred_duration INT DEFAULT 60 CHECK (preferred_duration BETWEEN 30 AND 180),
     max_continuous_hours INT DEFAULT 2 CHECK (max_continuous_hours BETWEEN 1 AND 4),
     requires_lab BOOLEAN DEFAULT FALSE,
@@ -210,7 +229,6 @@ CREATE TABLE subjects (
     algorithm_complexity INT DEFAULT 5 CHECK (algorithm_complexity BETWEEN 1 AND 10),
     is_core_subject BOOLEAN DEFAULT TRUE,
     -- NEP 2020 Fields
-    nep_category nep_category DEFAULT 'CORE',
     lecture_hours INTEGER DEFAULT 1,
     tutorial_hours INTEGER DEFAULT 0,
     practical_hours INTEGER DEFAULT 0,
@@ -218,11 +236,12 @@ CREATE TABLE subjects (
     credit_value NUMERIC(3,1) 
         GENERATED ALWAYS AS (lecture_hours + tutorial_hours + (practical_hours / 2.0)) STORED,
     course_group_id UUID,
+    program VARCHAR(100),
     description TEXT,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(college_id, department_id, code)
+    UNIQUE(college_id, code)  -- Changed from department_id constraint since department_id is now nullable
 );
 
 -- NEP 2020: Elective Buckets Table
@@ -574,6 +593,8 @@ CREATE INDEX idx_users_department_role ON users(department_id, role);
 CREATE INDEX idx_users_student_semester ON users(college_id, current_semester, is_active) WHERE role = 'student';
 CREATE INDEX idx_departments_college ON departments(college_id, is_active);
 CREATE INDEX idx_subjects_college_department ON subjects(college_id, department_id, is_active);
+CREATE INDEX idx_subjects_course ON subjects(course_id);
+CREATE INDEX idx_subjects_department ON subjects(department_id);
 CREATE INDEX idx_subjects_algorithm_lookup ON subjects(subject_type, requires_lab, algorithm_complexity);
 CREATE INDEX idx_classrooms_college ON classrooms(college_id, is_available);
 CREATE INDEX idx_classrooms_capacity_features ON classrooms(college_id, capacity, has_projector, has_lab_equipment, is_available);
@@ -593,7 +614,8 @@ CREATE INDEX idx_student_enrollment_batch ON student_batch_enrollment(batch_id, 
 CREATE INDEX idx_student_enrollment_student ON student_batch_enrollment(student_id, is_active);
 -- NEP 2020 Indexes
 CREATE INDEX idx_buckets_batch ON elective_buckets(batch_id);
-CREATE INDEX idx_subjects_nep_category ON subjects(nep_category);
+CREATE INDEX idx_subjects_category ON subjects(category);
+CREATE INDEX idx_subjects_program ON subjects(program);
 CREATE INDEX idx_student_selections_student ON student_course_selections(student_id);
 CREATE INDEX idx_subjects_bucket ON subjects(course_group_id);
 CREATE INDEX idx_timetable_access_user ON timetable_access_control(user_id, access_type, is_active);
@@ -749,6 +771,208 @@ INSERT INTO departments (college_id, name, code) VALUES
     ((SELECT id FROM colleges WHERE code = 'SVPCET'), 'Computer Science & Engineering', 'CSE'),
     ((SELECT id FROM colleges WHERE code = 'SVPCET'), 'Information Technology', 'IT'),
     ((SELECT id FROM colleges WHERE code = 'SVPCET'), 'Civil Engineering', 'CE');
+
+-- ============================================================================
+-- GCOEJ COLLEGE AND DEPARTMENTS SETUP
+-- ============================================================================
+
+-- Insert GCOEJ College
+INSERT INTO colleges (
+    name, 
+    code, 
+    address, 
+    city, 
+    state, 
+    academic_year, 
+    working_days, 
+    college_start_time, 
+    college_end_time,
+    phone,
+    email,
+    website
+) VALUES (
+    'Government College of Education, Jammu', 
+    'GCOEJ', 
+    'Canal Road, Jammu', 
+    'Jammu', 
+    'Jammu and Kashmir', 
+    '2025-26', 
+    ARRAY['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']::day_of_week[], 
+    '09:00:00', 
+    '16:00:00',
+    '+91-191-2123456',
+    'info@gcoej.edu.in',
+    'https://gcoej.edu.in'
+);
+
+-- Insert Multiple Departments for GCOEJ
+INSERT INTO departments (college_id, name, code, description, department_type) VALUES
+    ((SELECT id FROM colleges WHERE code = 'GCOEJ'), 'Education', 'EDU', 'Department of Education offering B.Ed and other teacher training programs', 'academic'),
+    ((SELECT id FROM colleges WHERE code = 'GCOEJ'), 'English', 'ENG', 'Department of English Language and Literature', 'academic'),
+    ((SELECT id FROM colleges WHERE code = 'GCOEJ'), 'History', 'HIST', 'Department of History and Social Studies', 'academic'),
+    ((SELECT id FROM colleges WHERE code = 'GCOEJ'), 'Hindi', 'HIN', 'Department of Hindi Language and Literature', 'academic'),
+    ((SELECT id FROM colleges WHERE code = 'GCOEJ'), 'Urdu', 'URDU', 'Department of Urdu Language and Literature', 'academic'),
+    ((SELECT id FROM colleges WHERE code = 'GCOEJ'), 'Mathematics', 'MATH', 'Department of Mathematics and Statistics', 'academic'),
+    ((SELECT id FROM colleges WHERE code = 'GCOEJ'), 'Science', 'SCI', 'Department of Physical Sciences', 'academic');
+
+-- Insert Courses for GCOEJ
+INSERT INTO courses (college_id, title, code, nature_of_course, intake, duration_years) VALUES
+    ((SELECT id FROM colleges WHERE code = 'GCOEJ'), 'Bachelor of Education', 'B.Ed', 'UG', 100, 2),
+    ((SELECT id FROM colleges WHERE code = 'GCOEJ'), 'Master of Education', 'M.Ed', 'PG', 50, 2),
+    ((SELECT id FROM colleges WHERE code = 'GCOEJ'), 'Integrated Teacher Education Programme', 'ITEP', 'Integrated', 50, 4);
+
+-- ============================================================================
+-- GCOEJ USERS SETUP
+-- ============================================================================
+
+-- Insert Admin User
+INSERT INTO users (
+    first_name,
+    last_name,
+    college_uid,
+    email,
+    password_hash, -- Password: admin123 (bcrypt hashed)
+    phone,
+    college_id,
+    department_id,
+    role,
+    access_level,
+    can_create_timetables,
+    can_publish_timetables,
+    can_approve_timetables,
+    is_active,
+    email_verified
+) VALUES (
+    'Rajesh',
+    'Kumar',
+    'ADMIN001',
+    'admin@gcoej.in',
+    '$2b$10$rOzJgZxvfq7H8Ln/VQJjVeKNwYv5vKH3d8FgRxP2LmN9QwErTyBiC', -- admin123
+    '+91-9876543210',
+    (SELECT id FROM colleges WHERE code = 'GCOEJ'),
+    (SELECT id FROM departments WHERE code = 'EDU' AND college_id = (SELECT id FROM colleges WHERE code = 'GCOEJ')),
+    'admin',
+    'admin',
+    true,
+    true,
+    true,
+    true,
+    true
+);
+
+-- Insert Faculty User
+INSERT INTO users (
+    first_name,
+    last_name,
+    college_uid,
+    email,
+    password_hash, -- Password: faculty123 (bcrypt hashed)
+    phone,
+    college_id,
+    department_id,
+    role,
+    faculty_type,
+    access_level,
+    max_hours_per_day,
+    max_hours_per_week,
+    min_hours_per_week,
+    faculty_priority,
+    can_create_timetables,
+    can_publish_timetables,
+    is_active,
+    email_verified
+) VALUES (
+    'Dr. Priya',
+    'Sharma',
+    'FAC001',
+    'priya.sharma@gcoej.in',
+    '$2b$10$8VxGfKZqJmN4YwHrP1LmQeRnBvC2DtF5GhI6JkM7NpO8QsT9UvW0X', -- faculty123
+    '+91-9876543211',
+    (SELECT id FROM colleges WHERE code = 'GCOEJ'),
+    (SELECT id FROM departments WHERE code = 'EDU' AND college_id = (SELECT id FROM colleges WHERE code = 'GCOEJ')),
+    'faculty',
+    'general',
+    'write',
+    8,
+    35,
+    15,
+    7,
+    false,
+    false,
+    true,
+    true
+);
+
+-- Insert Student User
+INSERT INTO users (
+    first_name,
+    last_name,
+    college_uid,
+    email,
+    password_hash, -- Password: student123 (bcrypt hashed)
+    phone,
+    college_id,
+    department_id,
+    role,
+    access_level,
+    student_id,
+    admission_year,
+    current_semester,
+    is_active,
+    email_verified
+) VALUES (
+    'Aarav',
+    'Verma',
+    'STU001',
+    'aarav.verma@gcoej.in',
+    '$2b$10$3MnB5VtC7YzA1WsE9RqL4eHgF2JkM6NpO7QsT8UvX0Y1ZaBcD4EfG', -- student123
+    '+91-9876543212',
+    (SELECT id FROM colleges WHERE code = 'GCOEJ'),
+    (SELECT id FROM departments WHERE code = 'EDU' AND college_id = (SELECT id FROM colleges WHERE code = 'GCOEJ')),
+    'student',
+    'read',
+    'GCOEJ2025001',
+    2025,
+    1,
+    true,
+    true
+);
+
+-- Create a sample batch for B.Ed Semester 1
+INSERT INTO batches (
+    name,
+    college_id,
+    department_id,
+    semester,
+    academic_year,
+    expected_strength,
+    actual_strength,
+    section,
+    is_active
+) VALUES (
+    'B.Ed Semester 1 - Section A',
+    (SELECT id FROM colleges WHERE code = 'GCOEJ'),
+    (SELECT id FROM departments WHERE code = 'EDU' AND college_id = (SELECT id FROM colleges WHERE code = 'GCOEJ')),
+    1,
+    '2025-26',
+    40,
+    1, -- Will be updated when more students are enrolled
+    'A',
+    true
+);
+
+-- Enroll the student in the batch
+INSERT INTO student_batch_enrollment (
+    student_id,
+    batch_id,
+    enrollment_date,
+    is_active
+) VALUES (
+    (SELECT id FROM users WHERE college_uid = 'STU001' AND college_id = (SELECT id FROM colleges WHERE code = 'GCOEJ')),
+    (SELECT id FROM batches WHERE name = 'B.Ed Semester 1 - Section A' AND college_id = (SELECT id FROM colleges WHERE code = 'GCOEJ')),
+    CURRENT_DATE,
+    true
+);
 
 -- Insert default constraint rules for timetable generation
 INSERT INTO constraint_rules (rule_name, rule_type, description, rule_parameters, weight, is_active) VALUES
@@ -1274,6 +1498,103 @@ EXCEPTION
         RAISE NOTICE '⚠ College ID assignment skipped (subjects not yet created)';
 END $$;
 
+-- Migration 3: Intelligent Department Mapping for GCOEJ Subjects
+DO $$ 
+DECLARE 
+    v_college_id UUID;
+    
+    -- Department IDs
+    v_edu_dept UUID;
+    v_eng_dept UUID;
+    v_hist_dept UUID;
+    v_pol_dept UUID;
+    v_geo_dept UUID;
+    v_hin_dept UUID;
+    v_urd_dept UUID;
+    v_math_dept UUID;
+    v_sci_dept UUID;
+BEGIN
+    -- Get College ID (GCOEJ)
+    SELECT id INTO v_college_id FROM colleges WHERE code = 'GCOEJ' LIMIT 1;
+
+    IF v_college_id IS NOT NULL THEN
+        
+        -- Fetch Department IDs
+        SELECT id INTO v_edu_dept FROM departments WHERE code = 'EDU' AND college_id = v_college_id;
+        SELECT id INTO v_eng_dept FROM departments WHERE code = 'ENG' AND college_id = v_college_id;
+        SELECT id INTO v_hist_dept FROM departments WHERE code = 'HIST' AND college_id = v_college_id;
+        SELECT id INTO v_hin_dept FROM departments WHERE code = 'HIN' AND college_id = v_college_id;
+        SELECT id INTO v_urd_dept FROM departments WHERE code = 'URDU' AND college_id = v_college_id;
+        SELECT id INTO v_math_dept FROM departments WHERE code = 'MATH' AND college_id = v_college_id;
+        SELECT id INTO v_sci_dept FROM departments WHERE code = 'SCI' AND college_id = v_college_id;
+        
+        -- === A. Map Languages & Humanities ===
+        
+        -- English Subjects -> English Dept
+        IF v_eng_dept IS NOT NULL THEN
+            UPDATE subjects SET department_id = v_eng_dept 
+            WHERE college_id = v_college_id 
+            AND (name ILIKE '%English%' OR name ILIKE '%Literature%' OR name ILIKE '%Communication%');
+        END IF;
+
+        -- Hindi Subjects -> Hindi Dept
+        IF v_hin_dept IS NOT NULL THEN
+            UPDATE subjects SET department_id = v_hin_dept 
+            WHERE college_id = v_college_id 
+            AND (name ILIKE '%Hindi%' OR name ILIKE '%Bhasha%');
+        END IF;
+
+        -- Urdu Subjects -> Urdu Dept
+        IF v_urd_dept IS NOT NULL THEN
+            UPDATE subjects SET department_id = v_urd_dept 
+            WHERE college_id = v_college_id 
+            AND (name ILIKE '%Urdu%' OR name ILIKE '%Tarseel%');
+        END IF;
+
+        -- History Subjects -> History Dept
+        IF v_hist_dept IS NOT NULL THEN
+            UPDATE subjects SET department_id = v_hist_dept 
+            WHERE college_id = v_college_id 
+            AND (name ILIKE '%History%' OR name ILIKE '%Ancient%' OR name ILIKE '%Medieval%');
+        END IF;
+
+        -- === B. Map Sciences ===
+
+        -- Math Subjects -> Math Dept
+        IF v_math_dept IS NOT NULL THEN
+            UPDATE subjects SET department_id = v_math_dept 
+            WHERE college_id = v_college_id 
+            AND (name ILIKE '%Math%' OR name ILIKE '%Algebra%' OR name ILIKE '%Statistics%');
+        END IF;
+
+        -- Science Subjects -> Science Dept
+        IF v_sci_dept IS NOT NULL THEN
+            UPDATE subjects SET department_id = v_sci_dept 
+            WHERE college_id = v_college_id 
+            AND (name ILIKE '%Science%' OR name ILIKE '%Physics%' OR name ILIKE '%Chemistry%')
+            AND name NOT ILIKE '%Political%'; -- Exclude Political Science
+        END IF;
+
+        -- === C. Map Core Education ===
+        
+        -- Everything else defaults to Education Dept (e.g., "Childhood and Growing Up")
+        IF v_edu_dept IS NOT NULL THEN
+            UPDATE subjects SET department_id = v_edu_dept 
+            WHERE college_id = v_college_id 
+            AND department_id IS NULL; 
+        END IF;
+
+        RAISE NOTICE '✓ Department ID mapping completed for GCOEJ subjects';
+        
+    ELSE
+        RAISE NOTICE '⚠ GCOEJ college not found - department mapping skipped';
+    END IF;
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE '⚠ Department mapping skipped (subjects or departments not yet created)';
+END $$;
+
 -- ============================================================================
 -- VERIFICATION QUERIES (Run these after setup to verify data)
 -- ============================================================================
@@ -1332,7 +1653,11 @@ COMMENT ON FUNCTION send_event_notification() IS 'Sends notifications to users w
 
 -- NEP 2020 Documentation
 COMMENT ON TYPE nep_category IS 'NEP 2020 course categories for choice-based credit system';
+COMMENT ON TABLE courses IS 'Stores academic programs like B.Ed, M.Ed, ITEP with intake and duration details';
 COMMENT ON TABLE elective_buckets IS 'NEP 2020 elective pools where students choose from multiple subject options';
 COMMENT ON TABLE student_course_selections IS 'Tracks individual student choices for major/minor subjects under NEP 2020';
 COMMENT ON COLUMN subjects.credit_value IS 'NEP 2020 standard credit calculation: L + T + (P/2)';
-COMMENT ON COLUMN subjects.nep_category IS 'NEP 2020 course classification for structured learning outcomes';
+COMMENT ON COLUMN subjects.category IS 'NEP 2020 course classification for structured learning outcomes (renamed from nep_category)';
+COMMENT ON COLUMN subjects.subject_type IS 'Type of subject delivery (THEORY, LAB, PRACTICAL, TUTORIAL) - now VARCHAR for flexibility';
+COMMENT ON COLUMN subjects.course_id IS 'Links subject to academic program/course (B.Ed, M.Ed, ITEP)';
+COMMENT ON COLUMN subjects.department_id IS 'Links subject to teaching department (nullable for flexibility)';
