@@ -2,13 +2,57 @@ import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false
+  }
+});
 
-// GET - Fetch subjects by department
+// Helper function to get authenticated user
+async function getAuthenticatedUser(request: NextRequest) {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.substring(7);
+  try {
+    const userString = Buffer.from(token, 'base64').toString();
+    const user = JSON.parse(userString);
+    
+    // Verify user exists and is active
+    const { data: dbUser, error } = await supabase
+      .from('users')
+      .select('id, college_id, role, is_active, department_id')
+      .eq('id', user.id)
+      .eq('is_active', true)
+      .single();
+
+    if (error || !dbUser) {
+      return null;
+    }
+
+    return dbUser;
+  } catch {
+    return null;
+  }
+}
+
+// GET - Fetch subjects by department (with authentication)
 export async function GET(request: NextRequest) {
   try {
+    // Get authenticated user
+    const user = await getAuthenticatedUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized. Please log in.', data: [] },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const departmentCode = searchParams.get('department_code');
     const departmentId = searchParams.get('department_id');
@@ -37,11 +81,22 @@ export async function GET(request: NextRequest) {
         is_active,
         department:departments!subjects_department_id_fkey(id, name, code)
       `)
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .eq('college_id', user.college_id); // Only show subjects from user's college
 
-    // Filter by department if provided
+    // Apply role-based filtering
+    if (user.role === 'student' || user.role === 'faculty') {
+      // Students and faculty can only see subjects from their department
+      if (user.department_id) {
+        query = query.eq('department_id', user.department_id);
+      }
+    }
+
+    // Filter by department if provided (and user has access)
     if (departmentId) {
-      query = query.eq('department_id', departmentId);
+      if (user.role === 'admin' || user.role === 'college_admin' || user.department_id === departmentId) {
+        query = query.eq('department_id', departmentId);
+      }
     } else if (departmentCode) {
       // Get department ID from code
       const { data: deptData, error: deptError } = await supabase
@@ -78,7 +133,7 @@ export async function GET(request: NextRequest) {
     console.log(`Found ${subjectsData?.length || 0} subjects`);
 
     // Transform data - now using semester column directly from subjects table
-    const transformedData = subjectsData?.map((subject: any) => {
+      const transformedData = subjectsData?.map((subject: any) => {
       const department = Array.isArray(subject.department) ? subject.department[0] : subject.department;
       
       // Get semester directly from subject (single value, not array)
@@ -105,9 +160,7 @@ export async function GET(request: NextRequest) {
         description: subject.description,
         is_active: subject.is_active
       };
-    }) || [];
-
-    // Filter by semester if provided
+    }) || [];    // Filter by semester if provided
     let filteredData = transformedData;
     if (semester) {
       const semNum = parseInt(semester);
@@ -165,9 +218,18 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Create a new subject
+// POST - Create a new subject (admin only - redirected from /api/admin/subjects)
 export async function POST(request: NextRequest) {
   try {
+    // Get authenticated user
+    const user = await getAuthenticatedUser(request);
+    if (!user || (user.role !== 'admin' && user.role !== 'college_admin')) {
+      return NextResponse.json({
+        success: false,
+        error: 'Unauthorized. Admin access required.'
+      }, { status: 403 });
+    }
+
     const body = await request.json();
     const {
       name,

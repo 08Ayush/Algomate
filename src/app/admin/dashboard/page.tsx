@@ -71,13 +71,32 @@ interface Batch {
   } | null;
 }
 
+interface Subject {
+  id: string;
+  code: string;
+  name: string;
+  credits_per_week: number;
+  semester: number;
+  college_id: string;
+  department_id: string;
+  subject_type: 'THEORY' | 'LAB' | 'PRACTICAL' | 'TUTORIAL';
+  is_active: boolean;
+  created_at: string;
+  departments?: {
+    id: string;
+    name: string;
+    code: string;
+  } | null;
+}
+
 export default function AdminDashboard() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'departments' | 'faculty' | 'classrooms' | 'batches'>('departments');
+  const [activeTab, setActiveTab] = useState<'departments' | 'faculty' | 'classrooms' | 'batches' | 'subjects'>('departments');
   const [departments, setDepartments] = useState<Department[]>([]);
   const [faculty, setFaculty] = useState<Faculty[]>([]);
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -124,6 +143,19 @@ export default function AdminDashboard() {
     facilities: [] as string[],
     location_notes: '',
     is_available: true
+  });
+
+  // Subject form state
+  const [showSubjectForm, setShowSubjectForm] = useState(false);
+  const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
+  const [subjectForm, setSubjectForm] = useState({
+    code: '',
+    name: '',
+    credits_per_week: 4,
+    semester: 1,
+    department_id: '',
+    subject_type: 'THEORY' as 'THEORY' | 'LAB' | 'PRACTICAL' | 'TUTORIAL',
+    is_active: true
   });
 
   useEffect(() => {
@@ -210,6 +242,16 @@ export default function AdminDashboard() {
         const batchData = await batchResponse.json();
         setBatches(batchData.batches || []);
       } else if (batchResponse.status === 401) {
+        router.push('/login?message=Session expired');
+        return;
+      }
+
+      // Fetch subjects
+      const subjectResponse = await fetch('/api/admin/subjects', { headers });
+      if (subjectResponse.ok) {
+        const subjectData = await subjectResponse.json();
+        setSubjects(subjectData.subjects || []);
+      } else if (subjectResponse.status === 401) {
         router.push('/login?message=Session expired');
         return;
       }
@@ -505,6 +547,99 @@ export default function AdminDashboard() {
     setShowClassroomForm(true);
   };
 
+  // Subject handlers
+  const handleSubjectSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const userData = localStorage.getItem('user');
+      if (!userData) {
+        router.push('/login');
+        return;
+      }
+      
+      const authToken = Buffer.from(userData).toString('base64');
+      const url = editingSubject 
+        ? `/api/admin/subjects/${editingSubject.id}` 
+        : '/api/admin/subjects';
+      
+      const response = await fetch(url, {
+        method: editingSubject ? 'PUT' : 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify(subjectForm)
+      });
+
+      if (response.ok) {
+        setShowSubjectForm(false);
+        setEditingSubject(null);
+        setSubjectForm({
+          code: '',
+          name: '',
+          credits_per_week: 4,
+          semester: 1,
+          department_id: '',
+          subject_type: 'THEORY',
+          is_active: true
+        });
+        setSuccessMessage(editingSubject ? 'Subject updated successfully' : 'Subject created successfully');
+        fetchData();
+        setTimeout(() => setSuccessMessage(''), 5000);
+      } else {
+        const data = await response.json();
+        setError(data.error || 'Failed to save subject');
+      }
+    } catch (error) {
+      setError('Failed to save subject');
+    }
+  };
+
+  const handleSubjectDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this subject?')) return;
+
+    try {
+      const userData = localStorage.getItem('user');
+      if (!userData) {
+        router.push('/login');
+        return;
+      }
+      
+      const authToken = Buffer.from(userData).toString('base64');
+      const response = await fetch(`/api/admin/subjects/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      });
+
+      if (response.ok) {
+        setSuccessMessage('Subject deleted successfully');
+        fetchData();
+        setTimeout(() => setSuccessMessage(''), 5000);
+      } else {
+        const data = await response.json();
+        setError(data.error || 'Failed to delete subject');
+      }
+    } catch (error) {
+      setError('Failed to delete subject');
+    }
+  };
+
+  const startEditSubject = (subject: Subject) => {
+    setEditingSubject(subject);
+    setSubjectForm({
+      code: subject.code,
+      name: subject.name,
+      credits_per_week: subject.credits_per_week,
+      semester: subject.semester,
+      department_id: subject.department_id,
+      subject_type: subject.subject_type,
+      is_active: subject.is_active
+    });
+    setShowSubjectForm(true);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -618,6 +753,16 @@ export default function AdminDashboard() {
                   }`}
                 >
                   Batches ({batches.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('subjects')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'subjects'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Subjects ({subjects.length})
                 </button>
               </nav>
             </div>
@@ -1345,6 +1490,225 @@ export default function AdminDashboard() {
                 {batches.length === 0 && (
                   <div className="text-center py-12">
                     <p className="text-gray-500">No batches found. Batches are created automatically when you create NEP curriculum buckets.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Subjects Tab */}
+          {activeTab === 'subjects' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-semibold text-gray-900">Subjects</h2>
+                <button
+                  onClick={() => {
+                    setEditingSubject(null);
+                    setSubjectForm({
+                      code: '',
+                      name: '',
+                      credits_per_week: 4,
+                      semester: 1,
+                      department_id: '',
+                      subject_type: 'THEORY',
+                      is_active: true
+                    });
+                    setShowSubjectForm(true);
+                  }}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  Add Subject
+                </button>
+              </div>
+
+              {/* Subject Form Modal */}
+              {showSubjectForm && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                  <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-screen overflow-y-auto">
+                    <h3 className="text-lg font-semibold mb-4">
+                      {editingSubject ? 'Edit Subject' : 'Add Subject'}
+                    </h3>
+                    <form onSubmit={handleSubjectSubmit}>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Department *</label>
+                          <select
+                            required
+                            value={subjectForm.department_id}
+                            onChange={(e) => setSubjectForm({...subjectForm, department_id: e.target.value})}
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          >
+                            <option value="">Select Department</option>
+                            {departments.map(dept => (
+                              <option key={dept.id} value={dept.id}>
+                                {dept.name} ({dept.code})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Subject Code *</label>
+                          <input
+                            type="text"
+                            required
+                            value={subjectForm.code}
+                            onChange={(e) => setSubjectForm({...subjectForm, code: e.target.value.toUpperCase()})}
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            placeholder="e.g., CS101, MATH201"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Subject Name *</label>
+                          <input
+                            type="text"
+                            required
+                            value={subjectForm.name}
+                            onChange={(e) => setSubjectForm({...subjectForm, name: e.target.value})}
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            placeholder="e.g., Data Structures"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Credits Per Week *</label>
+                          <input
+                            type="number"
+                            required
+                            min="1"
+                            max="10"
+                            value={subjectForm.credits_per_week}
+                            onChange={(e) => setSubjectForm({...subjectForm, credits_per_week: parseInt(e.target.value) || 1})}
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Semester *</label>
+                          <select
+                            required
+                            value={subjectForm.semester}
+                            onChange={(e) => setSubjectForm({...subjectForm, semester: parseInt(e.target.value)})}
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          >
+                            {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
+                              <option key={sem} value={sem}>Semester {sem}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Subject Type *</label>
+                          <select
+                            required
+                            value={subjectForm.subject_type}
+                            onChange={(e) => setSubjectForm({...subjectForm, subject_type: e.target.value as any})}
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          >
+                            <option value="THEORY">Theory</option>
+                            <option value="LAB">Lab</option>
+                            <option value="PRACTICAL">Practical</option>
+                            <option value="TUTORIAL">Tutorial</option>
+                          </select>
+                        </div>
+
+                        <div className="flex items-center">
+                          <input
+                            type="checkbox"
+                            id="subject_is_active"
+                            checked={subjectForm.is_active}
+                            onChange={(e) => setSubjectForm({...subjectForm, is_active: e.target.checked})}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
+                          <label htmlFor="subject_is_active" className="ml-2 block text-sm text-gray-900">
+                            Active
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="mt-6 flex justify-end space-x-3">
+                        <button
+                          type="button"
+                          onClick={() => setShowSubjectForm(false)}
+                          className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700"
+                        >
+                          {editingSubject ? 'Update' : 'Create'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+
+              {/* Subjects List */}
+              <div className="bg-white shadow overflow-hidden sm:rounded-md">
+                <ul className="divide-y divide-gray-200">
+                  {subjects.map((subject) => (
+                    <li key={subject.id}>
+                      <div className="px-4 py-4 sm:px-6">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center">
+                              <p className="text-sm font-medium text-indigo-600 truncate">
+                                {subject.code}
+                              </p>
+                              <span className="ml-2 text-sm text-gray-900">
+                                {subject.name}
+                              </span>
+                              <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                subject.subject_type === 'LAB' ? 'bg-purple-100 text-purple-800' : 
+                                subject.subject_type === 'PRACTICAL' ? 'bg-green-100 text-green-800' :
+                                subject.subject_type === 'TUTORIAL' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-blue-100 text-blue-800'
+                              }`}>
+                                {subject.subject_type}
+                              </span>
+                              <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                subject.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                              }`}>
+                                {subject.is_active ? 'Active' : 'Inactive'}
+                              </span>
+                            </div>
+                            <div className="mt-2 flex items-center text-sm text-gray-600">
+                              <span className="mr-4">📚 {subject.credits_per_week} Credits/Week</span>
+                              <span className="mr-4">📅 Semester {subject.semester}</span>
+                              {subject.departments && (
+                                <span className="mr-4">🏢 {subject.departments.name}</span>
+                              )}
+                            </div>
+                            <p className="mt-2 text-xs text-gray-500">
+                              Created: {new Date(subject.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => startEditSubject(subject)}
+                              className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleSubjectDelete(subject.id)}
+                              className="text-red-600 hover:text-red-900 text-sm font-medium"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                {subjects.length === 0 && (
+                  <div className="text-center py-12">
+                    <p className="text-gray-500">No subjects found. Add your first subject to get started.</p>
                   </div>
                 )}
               </div>
