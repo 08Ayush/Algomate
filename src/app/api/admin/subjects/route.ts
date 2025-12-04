@@ -67,6 +67,11 @@ export async function GET(request: NextRequest) {
           id,
           name,
           code
+        ),
+        courses:course_id (
+          id,
+          title,
+          code
         )
       `)
       .eq('college_id', user.college_id)
@@ -113,14 +118,24 @@ export async function POST(request: NextRequest) {
       credits_per_week,
       semester,
       department_id,
+      course_id,
+      nep_category,
       subject_type,
+      description,
+      requires_lab,
+      requires_projector,
       is_active
     } = body;
 
+    // Debug logging
+    console.log('Received body:', JSON.stringify(body, null, 2));
+    console.log('nep_category value:', nep_category, 'type:', typeof nep_category);
+    console.log('subject_type value:', subject_type, 'type:', typeof subject_type);
+
     // Validate required fields
-    if (!code || !name || !credits_per_week || !semester || !department_id || !subject_type) {
+    if (!code || !name || !credits_per_week || !department_id || !nep_category) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'Missing required fields: code, name, credits_per_week, department_id, nep_category' },
         { status: 400 }
       );
     }
@@ -161,31 +176,32 @@ export async function POST(request: NextRequest) {
     const subjectId = randomUUID();
     
     const insertData = {
-      id: subjectId,  // Explicitly provide UUID
+      id: subjectId,
       code,
       name,
       credits_per_week,
-      semester,
+      semester: semester || 1,
       college_id: user.college_id,
       department_id,
-      subject_type,
-      is_active: is_active !== false,
-      // NEP 2020 fields
-      nep_category: 'CORE',
-      lecture_hours: 1,
-      tutorial_hours: 0,
-      practical_hours: subject_type === 'LAB' || subject_type === 'PRACTICAL' ? 2 : 0,
-      // Scheduling fields
+      course_id: course_id || null,
+      subject_type: subject_type || 'THEORY',  // Delivery type enum: THEORY, LAB, PRACTICAL, TUTORIAL
+      nep_category: nep_category || 'CORE',  // NEP classification enum: MAJOR, MINOR, CORE, etc.
+      description: description || null,
       preferred_duration: 60,
       max_continuous_hours: 2,
-      requires_lab: subject_type === 'LAB',
-      requires_projector: false,
-      requires_special_room: false,
-      is_intensive_subject: false,
-      min_gap_hours: 0,
-      algorithm_complexity: 5,
-      is_core_subject: true
+      requires_lab: requires_lab || false,
+      requires_projector: requires_projector || false,
+      is_active: is_active !== false,
     };
+
+    console.log('Insert data (matching actual DB schema):', JSON.stringify(insertData, null, 2));
+
+    // Try to refresh Supabase schema cache
+    try {
+      await supabaseAdmin.rpc('refresh_schema_cache');
+    } catch (e) {
+      console.log('Schema cache refresh not available, continuing...');
+    }
 
     const { data: newSubject, error: createError } = await supabaseAdmin
       .from('subjects')

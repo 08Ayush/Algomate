@@ -65,6 +65,8 @@ export async function PUT(
       credits_per_week,
       semester,
       department_id,
+      course_id,
+      category,
       subject_type,
       is_active
     } = body;
@@ -127,8 +129,10 @@ export async function PUT(
     if (credits_per_week) updateData.credits_per_week = credits_per_week;
     if (semester) updateData.semester = semester;
     if (department_id) updateData.department_id = department_id;
+    if (course_id !== undefined) updateData.course_id = course_id || null;
+    if (category !== undefined) updateData.category = category || null;  // MAJOR, MINOR, CORE (nep_category enum)
     if (subject_type) {
-      updateData.subject_type = subject_type;
+      updateData.subject_type = subject_type;  // THEORY, LAB, PRACTICAL, TUTORIAL
       updateData.requires_lab = subject_type === 'LAB';
       updateData.practical_hours = (subject_type === 'LAB' || subject_type === 'PRACTICAL') ? 2 : 0;
     }

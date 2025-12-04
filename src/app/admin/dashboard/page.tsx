@@ -76,12 +76,25 @@ interface Subject {
   code: string;
   name: string;
   credits_per_week: number;
-  semester: number;
+  semester?: number;
   college_id: string;
   department_id: string;
-  subject_type: 'THEORY' | 'LAB' | 'PRACTICAL' | 'TUTORIAL';
+  course_id?: string | null;
+  subject_type: 'THEORY' | 'LAB' | 'PRACTICAL' | 'TUTORIAL';  // Delivery type enum
+  nep_category?: 'MAJOR' | 'MINOR' | 'MULTIDISCIPLINARY' | 'AEC' | 'VAC' | 'CORE' | 'PEDAGOGY' | 'INTERNSHIP';  // NEP classification
+  preferred_duration?: number;
+  max_continuous_hours?: number;
+  requires_lab?: boolean;
+  requires_projector?: boolean;
+  requires_special_room?: boolean;
+  is_intensive_subject?: boolean;
+  min_gap_hours?: number;
+  algorithm_complexity?: number;
+  is_core_subject?: boolean;
+  description?: string;
   is_active: boolean;
   created_at: string;
+  updated_at?: string;
   departments?: {
     id: string;
     name: string;
@@ -89,14 +102,26 @@ interface Subject {
   } | null;
 }
 
+interface Course {
+  id: string;
+  title: string;
+  code: string;
+  nature_of_course?: string;
+  intake: number;
+  duration_years?: number;
+  college_id: string;
+  created_at: string;
+}
+
 export default function AdminDashboard() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'departments' | 'faculty' | 'classrooms' | 'batches' | 'subjects'>('departments');
+  const [activeTab, setActiveTab] = useState<'departments' | 'faculty' | 'classrooms' | 'batches' | 'subjects' | 'courses'>('departments');
   const [departments, setDepartments] = useState<Department[]>([]);
   const [faculty, setFaculty] = useState<Faculty[]>([]);
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -154,8 +179,24 @@ export default function AdminDashboard() {
     credits_per_week: 4,
     semester: 1,
     department_id: '',
-    subject_type: 'THEORY' as 'THEORY' | 'LAB' | 'PRACTICAL' | 'TUTORIAL',
+    course_id: '',
+    subject_type: 'THEORY' as 'THEORY' | 'LAB' | 'PRACTICAL' | 'TUTORIAL',  // Delivery type
+    nep_category: 'CORE' as 'MAJOR' | 'MINOR' | 'MULTIDISCIPLINARY' | 'AEC' | 'VAC' | 'CORE' | 'PEDAGOGY' | 'INTERNSHIP',  // NEP classification
+    description: '',
+    requires_lab: false,
+    requires_projector: false,
     is_active: true
+  });
+
+  // Course form state
+  const [showCourseForm, setShowCourseForm] = useState(false);
+  const [editingCourse, setEditingCourse] = useState<Course | null>(null);
+  const [courseForm, setCourseForm] = useState({
+    title: '',
+    code: '',
+    nature_of_course: '',
+    intake: 0,
+    duration_years: 4
   });
 
   useEffect(() => {
@@ -252,6 +293,16 @@ export default function AdminDashboard() {
         const subjectData = await subjectResponse.json();
         setSubjects(subjectData.subjects || []);
       } else if (subjectResponse.status === 401) {
+        router.push('/login?message=Session expired');
+        return;
+      }
+
+      // Fetch courses
+      const courseResponse = await fetch('/api/admin/courses', { headers });
+      if (courseResponse.ok) {
+        const courseData = await courseResponse.json();
+        setCourses(courseData.courses || []);
+      } else if (courseResponse.status === 401) {
         router.push('/login?message=Session expired');
         return;
       }
@@ -580,7 +631,12 @@ export default function AdminDashboard() {
           credits_per_week: 4,
           semester: 1,
           department_id: '',
+          course_id: '',
           subject_type: 'THEORY',
+          nep_category: 'CORE',
+          description: '',
+          requires_lab: false,
+          requires_projector: false,
           is_active: true
         });
         setSuccessMessage(editingSubject ? 'Subject updated successfully' : 'Subject created successfully');
@@ -632,12 +688,105 @@ export default function AdminDashboard() {
       code: subject.code,
       name: subject.name,
       credits_per_week: subject.credits_per_week,
-      semester: subject.semester,
+      semester: subject.semester || 1,
       department_id: subject.department_id,
+      course_id: subject.course_id || '',
       subject_type: subject.subject_type,
+      nep_category: subject.nep_category || 'CORE',
+      description: subject.description || '',
+      requires_lab: subject.requires_lab || false,
+      requires_projector: subject.requires_projector || false,
       is_active: subject.is_active
     });
     setShowSubjectForm(true);
+  };
+
+  const handleCourseSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const userData = localStorage.getItem('user');
+      if (!userData) {
+        router.push('/login');
+        return;
+      }
+      
+      const authToken = Buffer.from(userData).toString('base64');
+      const url = editingCourse 
+        ? `/api/admin/courses/${editingCourse.id}` 
+        : '/api/admin/courses';
+      
+      const response = await fetch(url, {
+        method: editingCourse ? 'PUT' : 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify(courseForm)
+      });
+
+      if (response.ok) {
+        setShowCourseForm(false);
+        setEditingCourse(null);
+        setCourseForm({
+          title: '',
+          code: '',
+          nature_of_course: '',
+          intake: 0,
+          duration_years: 4
+        });
+        setSuccessMessage(editingCourse ? 'Course updated successfully' : 'Course created successfully');
+        fetchData();
+        setTimeout(() => setSuccessMessage(''), 5000);
+      } else {
+        const data = await response.json();
+        setError(data.error || 'Failed to save course');
+      }
+    } catch (error) {
+      setError('Failed to save course');
+    }
+  };
+
+  const handleCourseDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this course? This will affect associated subjects.')) return;
+
+    try {
+      const userData = localStorage.getItem('user');
+      if (!userData) {
+        router.push('/login');
+        return;
+      }
+      
+      const authToken = Buffer.from(userData).toString('base64');
+      const response = await fetch(`/api/admin/courses/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      });
+
+      if (response.ok) {
+        setSuccessMessage('Course deleted successfully');
+        fetchData();
+        setTimeout(() => setSuccessMessage(''), 5000);
+      } else {
+        const data = await response.json();
+        setError(data.error || 'Failed to delete course');
+      }
+    } catch (error) {
+      setError('Failed to delete course');
+    }
+  };
+
+  const startEditCourse = (course: Course) => {
+    setEditingCourse(course);
+    setCourseForm({
+      title: course.title,
+      code: course.code,
+      nature_of_course: course.nature_of_course || '',
+      intake: course.intake,
+      duration_years: course.duration_years || 4
+    });
+    setShowCourseForm(true);
   };
 
   if (loading) {
@@ -763,6 +912,16 @@ export default function AdminDashboard() {
                   }`}
                 >
                   Subjects ({subjects.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('courses')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'courses'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Courses ({courses.length})
                 </button>
               </nav>
             </div>
@@ -1510,7 +1669,12 @@ export default function AdminDashboard() {
                       credits_per_week: 4,
                       semester: 1,
                       department_id: '',
+                      course_id: '',
                       subject_type: 'THEORY',
+                      nep_category: 'CORE',
+                      description: '',
+                      requires_lab: false,
+                      requires_projector: false,
                       is_active: true
                     });
                     setShowSubjectForm(true);
@@ -1542,6 +1706,22 @@ export default function AdminDashboard() {
                             {departments.map(dept => (
                               <option key={dept.id} value={dept.id}>
                                 {dept.name} ({dept.code})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Course</label>
+                          <select
+                            value={subjectForm.course_id}
+                            onChange={(e) => setSubjectForm({...subjectForm, course_id: e.target.value})}
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          >
+                            <option value="">Select Course (Optional)</option>
+                            {courses.map(course => (
+                              <option key={course.id} value={course.id}>
+                                {course.title} ({course.code})
                               </option>
                             ))}
                           </select>
@@ -1599,7 +1779,18 @@ export default function AdminDashboard() {
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">Subject Type *</label>
+                          <label className="block text-sm font-medium text-gray-700">Description</label>
+                          <textarea
+                            value={subjectForm.description}
+                            onChange={(e) => setSubjectForm({...subjectForm, description: e.target.value})}
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            rows={3}
+                            placeholder="Subject description (optional)"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Subject Type (Delivery) *</label>
                           <select
                             required
                             value={subjectForm.subject_type}
@@ -1611,6 +1802,52 @@ export default function AdminDashboard() {
                             <option value="PRACTICAL">Practical</option>
                             <option value="TUTORIAL">Tutorial</option>
                           </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">NEP Category</label>
+                          <select
+                            value={subjectForm.nep_category}
+                            onChange={(e) => setSubjectForm({...subjectForm, nep_category: e.target.value as any})}
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          >
+                            <option value="CORE">Core</option>
+                            <option value="MAJOR">Major</option>
+                            <option value="MINOR">Minor</option>
+                            <option value="MULTIDISCIPLINARY">Multidisciplinary</option>
+                            <option value="AEC">AEC (Ability Enhancement)</option>
+                            <option value="VAC">VAC (Value Added)</option>
+                            <option value="PEDAGOGY">Pedagogy</option>
+                            <option value="INTERNSHIP">Internship</option>
+                          </select>
+                        </div>
+
+                        <div className="flex items-center space-x-4">
+                          <div className="flex items-center">
+                            <input
+                              type="checkbox"
+                              id="requires_lab"
+                              checked={subjectForm.requires_lab}
+                              onChange={(e) => setSubjectForm({...subjectForm, requires_lab: e.target.checked})}
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                            />
+                            <label htmlFor="requires_lab" className="ml-2 block text-sm text-gray-900">
+                              Requires Lab
+                            </label>
+                          </div>
+                          
+                          <div className="flex items-center">
+                            <input
+                              type="checkbox"
+                              id="requires_projector"
+                              checked={subjectForm.requires_projector}
+                              onChange={(e) => setSubjectForm({...subjectForm, requires_projector: e.target.checked})}
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                            />
+                            <label htmlFor="requires_projector" className="ml-2 block text-sm text-gray-900">
+                              Requires Projector
+                            </label>
+                          </div>
                         </div>
 
                         <div className="flex items-center">
@@ -1670,6 +1907,20 @@ export default function AdminDashboard() {
                               }`}>
                                 {subject.subject_type}
                               </span>
+                              {subject.category && (
+                                <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  subject.category === 'MAJOR' ? 'bg-indigo-100 text-indigo-800' :
+                                  subject.category === 'MINOR' ? 'bg-pink-100 text-pink-800' :
+                                  subject.category === 'CORE' ? 'bg-cyan-100 text-cyan-800' :
+                                  subject.category === 'MULTIDISCIPLINARY' ? 'bg-teal-100 text-teal-800' :
+                                  subject.category === 'AEC' ? 'bg-orange-100 text-orange-800' :
+                                  subject.category === 'VAC' ? 'bg-lime-100 text-lime-800' :
+                                  subject.category === 'PEDAGOGY' ? 'bg-amber-100 text-amber-800' :
+                                  'bg-rose-100 text-rose-800'
+                                }`}>
+                                  {subject.category}
+                                </span>
+                              )}
                               <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                                 subject.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                               }`}>
@@ -1681,6 +1932,9 @@ export default function AdminDashboard() {
                               <span className="mr-4">📅 Semester {subject.semester}</span>
                               {subject.departments && (
                                 <span className="mr-4">🏢 {subject.departments.name}</span>
+                              )}
+                              {subject.courses && (
+                                <span className="mr-4">🎓 {subject.courses.code}</span>
                               )}
                             </div>
                             <p className="mt-2 text-xs text-gray-500">
@@ -1709,6 +1963,223 @@ export default function AdminDashboard() {
                 {subjects.length === 0 && (
                   <div className="text-center py-12">
                     <p className="text-gray-500">No subjects found. Add your first subject to get started.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Courses Tab */}
+          {activeTab === 'courses' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-semibold text-gray-900">Courses</h2>
+                <button
+                  onClick={() => {
+                    setEditingCourse(null);
+                    setCourseForm({
+                      title: '',
+                      code: '',
+                      nature_of_course: '',
+                      intake: 0,
+                      duration_years: 4
+                    });
+                    setShowCourseForm(true);
+                  }}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  Add Course
+                </button>
+              </div>
+
+              {/* Course Form Modal */}
+              {showCourseForm && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                  <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-screen overflow-y-auto">
+                    <h3 className="text-lg font-semibold mb-4">
+                      {editingCourse ? 'Edit Course' : 'Add Course'}
+                    </h3>
+                    <form onSubmit={handleCourseSubmit}>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="md:col-span-2">
+                          <label className="block text-sm font-medium text-gray-700">Course Title *</label>
+                          <input
+                            type="text"
+                            required
+                            value={courseForm.title}
+                            onChange={(e) => setCourseForm({...courseForm, title: e.target.value})}
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            placeholder="e.g., Bachelor of Education"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Course Code *</label>
+                          <input
+                            type="text"
+                            required
+                            value={courseForm.code}
+                            onChange={(e) => setCourseForm({...courseForm, code: e.target.value.toUpperCase()})}
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            placeholder="e.g., B.Ed, M.Ed, ITEP"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Nature of Course</label>
+                          <select
+                            value={courseForm.nature_of_course}
+                            onChange={(e) => setCourseForm({...courseForm, nature_of_course: e.target.value})}
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          >
+                            <option value="">Select Type</option>
+                            <option value="UG">Undergraduate (UG)</option>
+                            <option value="PG">Postgraduate (PG)</option>
+                            <option value="Integrated">Integrated</option>
+                            <option value="Diploma">Diploma</option>
+                            <option value="Certificate">Certificate</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Intake Capacity *</label>
+                          <input
+                            type="number"
+                            required
+                            min="0"
+                            value={courseForm.intake}
+                            onChange={(e) => setCourseForm({...courseForm, intake: parseInt(e.target.value) || 0})}
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            placeholder="e.g., 50, 100"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Duration (Years)</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="10"
+                            value={courseForm.duration_years}
+                            onChange={(e) => setCourseForm({...courseForm, duration_years: parseInt(e.target.value) || 4})}
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            placeholder="e.g., 2, 4"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="mt-6 flex justify-end space-x-3">
+                        <button
+                          type="button"
+                          onClick={() => setShowCourseForm(false)}
+                          className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700"
+                        >
+                          {editingCourse ? 'Update' : 'Create'}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+
+              {/* Courses List */}
+              <div className="bg-white shadow overflow-hidden sm:rounded-md">
+                <ul className="divide-y divide-gray-200">
+                  {courses.map((course) => (
+                    <li key={course.id}>
+                      <div className="px-4 py-4 sm:px-6">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center">
+                              <p className="text-lg font-semibold text-indigo-600 truncate">
+                                {course.title}
+                              </p>
+                              <span className="ml-3 inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                                {course.code}
+                              </span>
+                              {course.nature_of_course && (
+                                <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                  {course.nature_of_course}
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-2 flex items-center text-sm text-gray-600 space-x-4">
+                              <span className="flex items-center">
+                                <svg className="mr-1.5 h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                  <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+                                </svg>
+                                Intake: {course.intake} students
+                              </span>
+                              {course.duration_years && (
+                                <span className="flex items-center">
+                                  <svg className="mr-1.5 h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                                  </svg>
+                                  Duration: {course.duration_years} {course.duration_years === 1 ? 'year' : 'years'}
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-2 text-xs text-gray-500">
+                              Created: {new Date(course.created_at).toLocaleDateString('en-US', { 
+                                year: 'numeric', 
+                                month: 'long', 
+                                day: 'numeric' 
+                              })}
+                            </p>
+                          </div>
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => startEditCourse(course)}
+                              className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleCourseDelete(course.id)}
+                              className="text-red-600 hover:text-red-900 text-sm font-medium"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                {courses.length === 0 && (
+                  <div className="text-center py-12">
+                    <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">No courses found</h3>
+                    <p className="mt-1 text-sm text-gray-500">Get started by adding your first course program.</p>
+                    <div className="mt-6">
+                      <button
+                        onClick={() => {
+                          setEditingCourse(null);
+                          setCourseForm({
+                            title: '',
+                            code: '',
+                            nature_of_course: '',
+                            intake: 0,
+                            duration_years: 4
+                          });
+                          setShowCourseForm(true);
+                        }}
+                        className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                      >
+                        <svg className="-ml-1 mr-2 h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                        </svg>
+                        Add Course
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

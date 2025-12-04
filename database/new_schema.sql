@@ -217,8 +217,8 @@ CREATE TABLE subjects (
     course_id UUID REFERENCES courses(id) ON DELETE SET NULL,
     credits_per_week INT NOT NULL CHECK (credits_per_week BETWEEN 1 AND 10),
     semester INT CHECK (semester BETWEEN 1 AND 8),
-    category nep_category DEFAULT 'CORE',  -- Previously nep_category, now renamed to category
-    subject_type VARCHAR(50) DEFAULT 'THEORY',  -- Previously subject_type enum, now VARCHAR for flexibility
+    subject_type nep_category DEFAULT 'CORE',  -- Subject classification: MAJOR, MINOR, CORE, etc.
+    nep_category VARCHAR(50) DEFAULT 'THEORY',  -- Delivery type: THEORY, LAB, PRACTICAL, TUTORIAL
     preferred_duration INT DEFAULT 60 CHECK (preferred_duration BETWEEN 30 AND 180),
     max_continuous_hours INT DEFAULT 2 CHECK (max_continuous_hours BETWEEN 1 AND 4),
     requires_lab BOOLEAN DEFAULT FALSE,
@@ -1657,7 +1657,7 @@ COMMENT ON TABLE courses IS 'Stores academic programs like B.Ed, M.Ed, ITEP with
 COMMENT ON TABLE elective_buckets IS 'NEP 2020 elective pools where students choose from multiple subject options';
 COMMENT ON TABLE student_course_selections IS 'Tracks individual student choices for major/minor subjects under NEP 2020';
 COMMENT ON COLUMN subjects.credit_value IS 'NEP 2020 standard credit calculation: L + T + (P/2)';
-COMMENT ON COLUMN subjects.category IS 'NEP 2020 course classification for structured learning outcomes (renamed from nep_category)';
-COMMENT ON COLUMN subjects.subject_type IS 'Type of subject delivery (THEORY, LAB, PRACTICAL, TUTORIAL) - now VARCHAR for flexibility';
+COMMENT ON COLUMN subjects.subject_type IS 'NEP 2020 course classification: MAJOR, MINOR, CORE, MULTIDISCIPLINARY, etc.';
+COMMENT ON COLUMN subjects.category IS 'Type of subject delivery: THEORY, LAB, PRACTICAL, TUTORIAL';
 COMMENT ON COLUMN subjects.course_id IS 'Links subject to academic program/course (B.Ed, M.Ed, ITEP)';
 COMMENT ON COLUMN subjects.department_id IS 'Links subject to teaching department (nullable for flexibility)';
