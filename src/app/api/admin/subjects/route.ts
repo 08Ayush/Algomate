@@ -15,7 +15,7 @@ const supabaseAdmin = createClient(
 );
 
 // Helper function to get user from Authorization header
-async function getAuthenticatedUser(request: NextRequest) {
+async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) {
   const authHeader = request.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
     return null;
@@ -27,17 +27,32 @@ async function getAuthenticatedUser(request: NextRequest) {
     const userString = Buffer.from(token, 'base64').toString();
     const user = JSON.parse(userString);
     
-    // Verify user exists and is active admin
+    // Verify user exists and is active
     const { data: dbUser, error } = await supabaseAdmin
       .from('users')
-      .select('id, college_id, role, is_active')
+      .select('id, college_id, role, faculty_type, is_active')
       .eq('id', user.id)
       .eq('is_active', true)
-      .in('role', ['admin', 'college_admin'])
       .single();
 
     if (error || !dbUser) {
       return null;
+    }
+
+    // For write operations, only allow admin/college_admin
+    if (requireAdmin && !['admin', 'college_admin'].includes(dbUser.role)) {
+      return null;
+    }
+
+    // For read operations, allow admin, college_admin, and faculty with creator/publisher types
+    if (!requireAdmin) {
+      const allowedRoles = ['admin', 'college_admin'];
+      const allowedFacultyTypes = ['creator', 'publisher'];
+      
+      if (!allowedRoles.includes(dbUser.role) && 
+          !(dbUser.role === 'faculty' && allowedFacultyTypes.includes(dbUser.faculty_type))) {
+        return null;
+      }
     }
 
     return dbUser;
@@ -49,8 +64,8 @@ async function getAuthenticatedUser(request: NextRequest) {
 // GET - Fetch subjects for authenticated user's college
 export async function GET(request: NextRequest) {
   try {
-    // Get authenticated user
-    const user = await getAuthenticatedUser(request);
+    // Get authenticated user - allow read access for creator/publisher
+    const user = await getAuthenticatedUser(request, false);
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized. Please log in as an admin.' },
@@ -102,12 +117,12 @@ export async function GET(request: NextRequest) {
 // POST - Create new subject
 export async function POST(request: NextRequest) {
   try {
-    // Get authenticated user
-    const user = await getAuthenticatedUser(request);
+    // Get authenticated user - require admin role for write operations
+    const user = await getAuthenticatedUser(request, true);
     if (!user) {
       return NextResponse.json(
-        { error: 'Unauthorized. Please log in as an admin.' },
-        { status: 401 }
+        { error: 'Unauthorized. Only admins can create subjects.' },
+        { status: 403 }
       );
     }
 
@@ -183,7 +198,7 @@ export async function POST(request: NextRequest) {
       semester: semester || 1,
       college_id: user.college_id,
       department_id,
-      course_id: course_id || null,
+      course_id: course_id && course_id.trim() !== '' ? course_id : null,
       subject_type: subject_type || 'THEORY',  // Delivery type enum: THEORY, LAB, PRACTICAL, TUTORIAL
       nep_category: nep_category || 'CORE',  // NEP classification enum: MAJOR, MINOR, CORE, etc.
       description: description || null,

@@ -52,8 +52,8 @@ export async function PUT(
     const user = await getAuthenticatedUser(request);
     if (!user) {
       return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
+        { error: 'Unauthorized. Only admins can update subjects.' },
+        { status: 403 }
       );
     }
 
@@ -129,7 +129,7 @@ export async function PUT(
     if (credits_per_week) updateData.credits_per_week = credits_per_week;
     if (semester) updateData.semester = semester;
     if (department_id) updateData.department_id = department_id;
-    if (course_id !== undefined) updateData.course_id = course_id || null;
+    if (course_id !== undefined) updateData.course_id = course_id && course_id.trim() !== '' ? course_id : null;
     if (category !== undefined) updateData.category = category || null;  // MAJOR, MINOR, CORE (nep_category enum)
     if (subject_type) {
       updateData.subject_type = subject_type;  // THEORY, LAB, PRACTICAL, TUTORIAL
@@ -176,8 +176,8 @@ export async function DELETE(
     const user = await getAuthenticatedUser(request);
     if (!user) {
       return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
+        { error: 'Unauthorized. Only admins can delete subjects.' },
+        { status: 403 }
       );
     }
 

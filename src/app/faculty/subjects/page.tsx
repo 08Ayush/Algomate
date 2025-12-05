@@ -4,32 +4,31 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
 import LeftSidebar from '@/components/LeftSidebar';
-import { Book, Plus, Search, BookOpen, Edit, Trash2, Code, X, AlertCircle } from 'lucide-react';
+import { Book, Search, BookOpen, Code } from 'lucide-react';
 
 interface Subject {
   id: string;
   name: string;
   code: string;
-  credits: number;
+  credits?: number;
+  credits_per_week?: number;
   subject_type: string;
   semester: number;
   requires_lab: boolean;
   is_core_subject: boolean;
   description?: string;
+  course_id?: string;
+  courses?: {
+    id: string;
+    title: string;
+    code: string;
+  };
 }
 
-interface NewSubjectForm {
-  name: string;
+interface Course {
+  id: string;
+  title: string;
   code: string;
-  semester: number;
-  credits_per_week: number;
-  subject_type: string;
-  preferred_duration: number;
-  max_continuous_hours: number;
-  requires_lab: boolean;
-  requires_projector: boolean;
-  is_core_subject: boolean;
-  description: string;
 }
 
 export default function SubjectsPage() {
@@ -37,6 +36,7 @@ export default function SubjectsPage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [groupedSubjects, setGroupedSubjects] = useState<{ [key: number]: Subject[] }>({});
   const [statistics, setStatistics] = useState({
     totalSubjects: 0,
@@ -45,27 +45,10 @@ export default function SubjectsPage() {
     theorySubjects: 0,
     labSubjects: 0
   });
+  const [selectedCourse, setSelectedCourse] = useState<string>('all');
   const [selectedSemester, setSelectedSemester] = useState<number | 'all'>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // Modal state
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [newSubject, setNewSubject] = useState<NewSubjectForm>({
-    name: '',
-    code: '',
-    semester: 1,
-    credits_per_week: 3,
-    subject_type: 'THEORY',
-    preferred_duration: 60,
-    max_continuous_hours: 1,
-    requires_lab: false,
-    requires_projector: false,
-    is_core_subject: true,
-    description: ''
-  });
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -99,98 +82,76 @@ export default function SubjectsPage() {
     fetchSubjects();
   }, [user]);
 
+  // Update statistics when filters change
+  useEffect(() => {
+    if (subjects.length > 0) {
+      const filteredForStats = selectedCourse === 'all' 
+        ? subjects 
+        : subjects.filter(s => s.course_id === selectedCourse);
+      
+      setStatistics({
+        totalSubjects: filteredForStats.length,
+        totalCredits: filteredForStats.reduce((sum, s) => sum + (s.credits_per_week || 0), 0),
+        coreSubjects: filteredForStats.filter(s => s.is_core_subject).length,
+        theorySubjects: filteredForStats.filter(s => s.subject_type === 'THEORY').length,
+        labSubjects: filteredForStats.filter(s => s.subject_type === 'LAB' || s.subject_type === 'PRACTICAL').length
+      });
+    }
+  }, [selectedCourse, subjects]);
+
   async function fetchSubjects() {
     try {
-      if (!user || !user.department_id) return;
+      if (!user) return;
       
-      console.log('Fetching subjects for department:', user.department_id);
-      const response = await fetch(`/api/subjects?department_id=${user.department_id}`);
+      // Use admin API for cross-department access (creator/publisher can view all)
+      const authToken = Buffer.from(JSON.stringify(user)).toString('base64');
+      
+      // Fetch subjects
+      const response = await fetch('/api/admin/subjects', {
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      });
       
       const result = await response.json();
       console.log('Subjects API Result:', result);
       
-      if (result.success) {
-        setSubjects(result.data || []);
-        setGroupedSubjects(result.groupedBySemester || {});
-        setStatistics(result.statistics || {
-          totalSubjects: 0,
-          totalCredits: 0,
-          coreSubjects: 0,
-          theorySubjects: 0,
-          labSubjects: 0
-        });
+      // Fetch courses
+      const coursesResponse = await fetch('/api/admin/courses', {
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      });
+      const coursesResult = await coursesResponse.json();
+      if (coursesResult.courses) {
+        setCourses(coursesResult.courses);
+      }
+      
+      if (result.subjects) {
+        const subjectsData = result.subjects;
+        console.log('Subjects data sample:', subjectsData.slice(0, 2)); // Debug first 2 subjects
+        console.log('Total subjects fetched:', subjectsData.length);
+        
+        // Log subjects with and without course_id
+        const withCourse = subjectsData.filter((s: any) => s.course_id).length;
+        const withoutCourse = subjectsData.filter((s: any) => !s.course_id).length;
+        console.log(`Subjects with course_id: ${withCourse}, without course_id: ${withoutCourse}`);
+        
+        setSubjects(subjectsData);
+        
+        // Group by semester (for backward compatibility)
+        const grouped = subjectsData.reduce((acc: any, subject: any) => {
+          const sem = subject.semester || 1;
+          if (!acc[sem]) acc[sem] = [];
+          acc[sem].push(subject);
+          return acc;
+        }, {});
+        setGroupedSubjects(grouped);
       }
     } catch (error) {
       console.error('Error fetching subjects:', error);
     }
   }
-
-  const handleAddSubject = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError(null);
-    setSubmitting(true);
-
-    try {
-      // Get department ID for CSE
-      const departmentCode = 'CSE';
-      const deptResponse = await fetch(`/api/subjects?department_code=${departmentCode}`);
-      const deptResult = await deptResponse.json();
-      
-      if (!deptResult.success || !deptResult.data || deptResult.data.length === 0) {
-        setFormError('Could not find department information');
-        setSubmitting(false);
-        return;
-      }
-
-      const department_id = deptResult.data[0].department_id;
-      const college_id = user.college_id;
-
-      const response = await fetch('/api/subjects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...newSubject,
-          department_id,
-          college_id
-        })
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        alert('✅ Subject created successfully!');
-        setShowAddModal(false);
-        // Reset form
-        setNewSubject({
-          name: '',
-          code: '',
-          semester: 1,
-          credits_per_week: 3,
-          subject_type: 'THEORY',
-          preferred_duration: 60,
-          max_continuous_hours: 1,
-          requires_lab: false,
-          requires_projector: false,
-          is_core_subject: true,
-          description: ''
-        });
-        // Refresh subjects list
-        fetchSubjects();
-      } else {
-        setFormError(result.error || 'Failed to create subject');
-      }
-    } catch (error: any) {
-      console.error('Error creating subject:', error);
-      setFormError('An error occurred while creating the subject');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleInputChange = (field: keyof NewSubjectForm, value: any) => {
-    setNewSubject(prev => ({ ...prev, [field]: value }));
-    setFormError(null);
-  };
 
   if (loading) {
     return (
@@ -204,8 +165,9 @@ export default function SubjectsPage() {
     return null;
   }
 
-  // Filter subjects based on semester and search
+  // Filter subjects based on course, semester and search
   const filteredSubjects = subjects.filter(subject => {
+    const matchesCourse = selectedCourse === 'all' || subject.course_id === selectedCourse;
     const matchesSemester = selectedSemester === 'all' || subject.semester === selectedSemester;
     const matchesCategory = selectedCategory === 'all' || 
       (selectedCategory === 'theory' && subject.subject_type === 'THEORY') ||
@@ -214,20 +176,21 @@ export default function SubjectsPage() {
       subject.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       subject.code.toLowerCase().includes(searchQuery.toLowerCase());
     
-    return matchesSemester && matchesCategory && matchesSearch;
+    return matchesCourse && matchesSemester && matchesCategory && matchesSearch;
   });
 
   // Get current semester subjects - use grouped data if specific semester selected
   const currentSemesterSubjects = selectedSemester === 'all' 
     ? filteredSubjects 
     : (groupedSubjects[selectedSemester as number] || []).filter(subject => {
+        const matchesCourse = selectedCourse === 'all' || subject.course_id === selectedCourse;
         const matchesCategory = selectedCategory === 'all' || 
           (selectedCategory === 'theory' && subject.subject_type === 'THEORY') ||
           (selectedCategory === 'lab' && (subject.subject_type === 'LAB' || subject.subject_type === 'PRACTICAL'));
         const matchesSearch = searchQuery === '' || 
           subject.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           subject.code.toLowerCase().includes(searchQuery.toLowerCase());
-        return matchesCategory && matchesSearch;
+        return matchesCourse && matchesCategory && matchesSearch;
       });
 
   console.log('Current filter state:', {
@@ -251,15 +214,9 @@ export default function SubjectsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Subjects Management</h1>
-                <p className="text-gray-600 dark:text-gray-300">Computer Science Engineering - All Semesters</p>
+                <p className="text-gray-600 dark:text-gray-300">All Departments - Cross-Department View</p>
               </div>
-              <button 
-                onClick={() => setShowAddModal(true)}
-                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <Plus className="w-5 h-5 mr-2" />
-                Add Subject
-              </button>
+              {/* Only admin can add subjects - creator/publisher have read-only access */}
             </div>
 
             {/* Statistics Cards */}
@@ -315,19 +272,32 @@ export default function SubjectsPage() {
                   />
                 </div>
                 <select
+                  value={selectedCourse}
+                  onChange={(e) => setSelectedCourse(e.target.value)}
+                  aria-label="Filter by course"
+                  className="px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white min-w-[140px]"
+                >
+                  <option value="all">All Courses</option>
+                  {courses.map(course => (
+                    <option key={course.id} value={course.id}>{course.code || course.title}</option>
+                  ))}
+                </select>
+                <select
                   value={selectedSemester}
                   onChange={(e) => setSelectedSemester(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
-                  className="px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                  aria-label="Filter by semester"
+                  className="px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white min-w-[140px]"
                 >
                   <option value="all">All Semesters</option>
-                  {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
-                    <option key={sem} value={sem}>Sem {sem}</option>
+                  {[1, 2, 3, 4].map(sem => (
+                    <option key={sem} value={sem}>Semester {sem}</option>
                   ))}
                 </select>
                 <select
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+                  aria-label="Filter by category"
+                  className="px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white min-w-[140px]"
                 >
                   <option value="all">All Categories</option>
                   <option value="theory">Theory</option>
@@ -336,42 +306,18 @@ export default function SubjectsPage() {
               </div>
             </div>
 
-            {/* Semester Tabs */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-2">
-              <div className="flex overflow-x-auto space-x-2">
-                <button
-                  onClick={() => setSelectedSemester('all')}
-                  className={`px-4 py-2 rounded-lg whitespace-nowrap transition-colors ${
-                    selectedSemester === 'all'
-                      ? 'bg-blue-600 text-white'
-                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700'
-                  }`}
-                >
-                  All Semesters
-                </button>
-                {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
-                  <button
-                    key={sem}
-                    onClick={() => setSelectedSemester(sem)}
-                    className={`px-4 py-2 rounded-lg whitespace-nowrap transition-colors ${
-                      selectedSemester === sem
-                        ? 'bg-blue-600 text-white'
-                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700'
-                    }`}
-                  >
-                    Sem {sem}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* Subjects Header */}
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                {selectedCourse !== 'all' && (
+                  <span className="text-blue-600 dark:text-blue-400">
+                    {courses.find(c => c.id === selectedCourse)?.code || 'Course'} - 
+                  </span>
+                )}{' '}
                 {selectedSemester === 'all' ? 'All Subjects' : `Semester ${selectedSemester} Subjects`}
               </h2>
               <span className="text-sm text-gray-600 dark:text-gray-400">
-                {currentSemesterSubjects.length} subjects
+                {currentSemesterSubjects.length} subjects found
               </span>
             </div>
 
@@ -382,40 +328,59 @@ export default function SubjectsPage() {
                   <thead className="bg-gray-50 dark:bg-slate-700">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Course Code
+                        Subject Code
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Course Title
+                        Subject Name
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Category
+                        Course
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Semester
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        Type
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                         Credits
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Actions
                       </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
                     {currentSemesterSubjects.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
-                          No subjects found
+                        <td colSpan={6} className="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+                          No subjects found for the selected filters
                         </td>
                       </tr>
                     ) : (
                       currentSemesterSubjects.map((subject) => (
                         <tr key={subject.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors">
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm font-medium text-gray-900 dark:text-white">{subject.code}</div>
+                            <div className="text-sm font-semibold text-gray-900 dark:text-white">{subject.code}</div>
                           </td>
                           <td className="px-6 py-4">
                             <div className="text-sm text-gray-900 dark:text-white font-medium">{subject.name}</div>
                             {subject.description && (
-                              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{subject.description}</div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-1">{subject.description}</div>
                             )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {subject.courses?.code ? (
+                              <div className="text-sm font-medium text-gray-900 dark:text-white">
+                                {subject.courses.code}
+                              </div>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400">
+                                Not Assigned
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200">
+                              Sem {subject.semester}
+                            </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -427,17 +392,7 @@ export default function SubjectsPage() {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900 dark:text-white font-medium">{subject.credits}</div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center space-x-2">
-                              <button className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors">
-                                <Edit className="w-4 h-4" />
-                              </button>
-                              <button className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors">
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
+                            <div className="text-sm text-gray-900 dark:text-white font-medium">{subject.credits_per_week || subject.credits}</div>
                           </td>
                         </tr>
                       ))
@@ -449,239 +404,6 @@ export default function SubjectsPage() {
           </div>
         </main>
       </div>
-
-      {/* Add Subject Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Add New Subject</h2>
-              <button
-                onClick={() => {
-                  setShowAddModal(false);
-                  setFormError(null);
-                }}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-              >
-                <X className="w-6 h-6 text-gray-500" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddSubject} className="p-6 space-y-6">
-              {formError && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start space-x-3">
-                  <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <h3 className="text-sm font-semibold text-red-800 dark:text-red-300">Error</h3>
-                    <p className="text-sm text-red-700 dark:text-red-400 mt-1">{formError}</p>
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Subject Name */}
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Subject Name <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={newSubject.name}
-                    onChange={(e) => handleInputChange('name', e.target.value)}
-                    placeholder="e.g., Data Structures and Algorithms"
-                    required
-                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
-                  />
-                </div>
-
-                {/* Subject Code */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Subject Code <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={newSubject.code}
-                    onChange={(e) => handleInputChange('code', e.target.value.toUpperCase())}
-                    placeholder="e.g., CS301"
-                    required
-                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white uppercase"
-                  />
-                </div>
-
-                {/* Semester */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Semester <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={newSubject.semester}
-                    onChange={(e) => handleInputChange('semester', parseInt(e.target.value))}
-                    required
-                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
-                  >
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
-                      <option key={sem} value={sem}>Semester {sem}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Credits */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Credits per Week <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    value={newSubject.credits_per_week}
-                    onChange={(e) => handleInputChange('credits_per_week', parseInt(e.target.value))}
-                    min="1"
-                    max="10"
-                    required
-                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
-                  />
-                </div>
-
-                {/* Subject Type */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Subject Type <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={newSubject.subject_type}
-                    onChange={(e) => {
-                      handleInputChange('subject_type', e.target.value);
-                      // Auto-set requires_lab and preferred_duration based on type
-                      if (e.target.value === 'LAB' || e.target.value === 'PRACTICAL') {
-                        handleInputChange('requires_lab', true);
-                        handleInputChange('preferred_duration', 120);
-                        handleInputChange('max_continuous_hours', 2);
-                      } else {
-                        handleInputChange('requires_lab', false);
-                        handleInputChange('preferred_duration', 60);
-                        handleInputChange('max_continuous_hours', 1);
-                      }
-                    }}
-                    required
-                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
-                  >
-                    <option value="THEORY">Theory</option>
-                    <option value="LAB">Lab</option>
-                    <option value="PRACTICAL">Practical</option>
-                  </select>
-                </div>
-
-                {/* Preferred Duration */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Preferred Duration (minutes)
-                  </label>
-                  <select
-                    value={newSubject.preferred_duration}
-                    onChange={(e) => handleInputChange('preferred_duration', parseInt(e.target.value))}
-                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
-                  >
-                    <option value="60">60 minutes (1 hour)</option>
-                    <option value="120">120 minutes (2 hours)</option>
-                  </select>
-                </div>
-
-                {/* Max Continuous Hours */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Max Continuous Hours
-                  </label>
-                  <input
-                    type="number"
-                    value={newSubject.max_continuous_hours}
-                    onChange={(e) => handleInputChange('max_continuous_hours', parseInt(e.target.value))}
-                    min="1"
-                    max="4"
-                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
-                  />
-                </div>
-
-                {/* Checkboxes */}
-                <div className="md:col-span-2 space-y-3">
-                  <label className="flex items-center space-x-3">
-                    <input
-                      type="checkbox"
-                      checked={newSubject.requires_lab}
-                      onChange={(e) => handleInputChange('requires_lab', e.target.checked)}
-                      className="w-4 h-4 text-blue-600 bg-gray-50 dark:bg-slate-700 border-gray-300 dark:border-slate-600 rounded focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">Requires Lab</span>
-                  </label>
-
-                  <label className="flex items-center space-x-3">
-                    <input
-                      type="checkbox"
-                      checked={newSubject.requires_projector}
-                      onChange={(e) => handleInputChange('requires_projector', e.target.checked)}
-                      className="w-4 h-4 text-blue-600 bg-gray-50 dark:bg-slate-700 border-gray-300 dark:border-slate-600 rounded focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">Requires Projector</span>
-                  </label>
-
-                  <label className="flex items-center space-x-3">
-                    <input
-                      type="checkbox"
-                      checked={newSubject.is_core_subject}
-                      onChange={(e) => handleInputChange('is_core_subject', e.target.checked)}
-                      className="w-4 h-4 text-blue-600 bg-gray-50 dark:bg-slate-700 border-gray-300 dark:border-slate-600 rounded focus:ring-blue-500"
-                    />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">Core Subject</span>
-                  </label>
-                </div>
-
-                {/* Description */}
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Description (Optional)
-                  </label>
-                  <textarea
-                    value={newSubject.description}
-                    onChange={(e) => handleInputChange('description', e.target.value)}
-                    placeholder="Brief description of the subject..."
-                    rows={3}
-                    className="w-full px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white resize-none"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200 dark:border-slate-700">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddModal(false);
-                    setFormError(null);
-                  }}
-                  className="px-6 py-2 bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-600 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-                >
-                  {submitting ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                      <span>Creating...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="w-4 h-4" />
-                      <span>Create Subject</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </>
   );
 }

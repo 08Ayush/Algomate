@@ -23,6 +23,14 @@ interface Subject {
   subject_type: string;
   credits_per_week: number;
   department_id: string;
+  course_id?: string;
+}
+
+interface Course {
+  id: string;
+  title: string;
+  code: string;
+  nature_of_course?: string;
 }
 
 interface Qualification {
@@ -45,6 +53,7 @@ export default function FacultyQualificationsPage() {
   const [qualifications, setQualifications] = useState<Qualification[]>([]);
   const [faculty, setFaculty] = useState<Faculty[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [departmentName, setDepartmentName] = useState<string>('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -53,6 +62,7 @@ export default function FacultyQualificationsPage() {
 
   // Form state
   const [selectedFaculty, setSelectedFaculty] = useState('');
+  const [selectedCourse, setSelectedCourse] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [proficiencyLevel, setProficiencyLevel] = useState(7);
   const [preferenceScore, setPreferenceScore] = useState(5);
@@ -134,7 +144,7 @@ export default function FacultyQualificationsPage() {
       // Load subjects from same department only
       const { data: subjectsData, error: subjectsError } = await supabase
         .from('subjects')
-        .select('id, name, code, semester, subject_type, credits_per_week, department_id')
+        .select('id, name, code, semester, subject_type, credits_per_week, department_id, course_id')
         .eq('department_id', userDepartmentId)
         .eq('is_active', true)
         .order('semester', { ascending: true })
@@ -143,6 +153,18 @@ export default function FacultyQualificationsPage() {
       if (!subjectsError && subjectsData) {
         setSubjects(subjectsData);
         console.log(`✅ Loaded ${subjectsData.length} subjects from department`);
+      }
+
+      // Load courses for the college
+      const { data: coursesData, error: coursesError } = await supabase
+        .from('courses')
+        .select('id, title, code, nature_of_course')
+        .eq('college_id', userData.college_id)
+        .order('code');
+
+      if (!coursesError && coursesData) {
+        setCourses(coursesData);
+        console.log(`✅ Loaded ${coursesData.length} courses`);
       }
 
       setLoading(false);
@@ -221,6 +243,7 @@ export default function FacultyQualificationsPage() {
 
   const resetForm = () => {
     setSelectedFaculty('');
+    setSelectedCourse('');
     setSelectedSubject('');
     setProficiencyLevel(7);
     setPreferenceScore(5);
@@ -228,6 +251,11 @@ export default function FacultyQualificationsPage() {
     setCanHandleLab(true);
     setCanHandleTutorial(true);
   };
+
+  // Filter subjects by selected course
+  const filteredSubjectsBySelection = selectedCourse
+    ? subjects.filter(s => s.course_id === selectedCourse)
+    : subjects;
 
   const filteredQualifications = qualifications.filter(qual => {
     const matchesSearch = 
@@ -496,6 +524,28 @@ export default function FacultyQualificationsPage() {
                         </select>
                       </div>
 
+                      {/* Course Selection */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Select Course
+                        </label>
+                        <select
+                          value={selectedCourse}
+                          onChange={(e) => {
+                            setSelectedCourse(e.target.value);
+                            setSelectedSubject(''); // Reset subject when course changes
+                          }}
+                          className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">All Courses</option>
+                          {courses.map(c => (
+                            <option key={c.id} value={c.id}>
+                              {c.title} ({c.code})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
                       {/* Subject Selection */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -507,7 +557,7 @@ export default function FacultyQualificationsPage() {
                           className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
                           <option value="">Choose subject...</option>
-                          {subjects.map(s => (
+                          {filteredSubjectsBySelection.map(s => (
                             <option key={s.id} value={s.id}>
                               Sem {s.semester} - {s.name} ({s.code}) - {s.subject_type}
                             </option>

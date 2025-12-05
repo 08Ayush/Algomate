@@ -68,25 +68,33 @@ export default function ClassroomsPage() {
     }
   }, [router]);
 
-  // Fetch classrooms
+  // Fetch classrooms across all departments (creator/publisher can view all)
   useEffect(() => {
     async function fetchClassrooms() {
       try {
-        if (!user || !user.department_id) return;
+        if (!user) return;
         
-        console.log('Fetching classrooms for department:', user.department_id);
-        const response = await fetch(`/api/classrooms?department_id=${user.department_id}`);
+        // Use admin API for cross-department access
+        const authToken = Buffer.from(JSON.stringify(user)).toString('base64');
+        const response = await fetch('/api/admin/classrooms', {
+          headers: {
+            'Authorization': `Bearer ${authToken}`
+          }
+        });
         
         const result = await response.json();
         console.log('Classrooms API Result:', result);
         
-        if (result.success) {
-          setClassrooms(result.data || []);
-          setStatistics(result.statistics || {
-            totalClassrooms: 0,
-            lectureHalls: 0,
-            labs: 0,
-            smartClassrooms: 0
+        if (result.classrooms) {
+          const classroomsData = result.classrooms;
+          setClassrooms(classroomsData);
+          
+          // Calculate statistics
+          setStatistics({
+            totalClassrooms: classroomsData.length,
+            lectureHalls: classroomsData.filter((c: any) => c.type === 'Lecture Hall').length,
+            labs: classroomsData.filter((c: any) => c.type === 'Lab').length,
+            smartClassrooms: classroomsData.filter((c: any) => c.is_smart_classroom).length
           });
         }
       } catch (error) {
@@ -130,7 +138,7 @@ export default function ClassroomsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Classrooms & Venues</h1>
-                <p className="text-gray-600 dark:text-gray-300">Computer Science Engineering Department</p>
+                <p className="text-gray-600 dark:text-gray-300">All Departments - Cross-Department View</p>
               </div>
             </div>
 

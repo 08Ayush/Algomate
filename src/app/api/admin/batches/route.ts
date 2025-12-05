@@ -7,7 +7,7 @@ const supabase = createClient(
 );
 
 // Helper function to authenticate user from token
-async function authenticateUser(request: NextRequest) {
+async function authenticateUser(request: NextRequest, requireAdmin = false) {
   const authHeader = request.headers.get('authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return null;
@@ -25,7 +25,7 @@ async function authenticateUser(request: NextRequest) {
     // Check if user exists and get updated info
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, role, college_id, department_id, first_name, last_name, email, is_active')
+      .select('id, role, faculty_type, college_id, department_id, first_name, last_name, email, is_active')
       .eq('id', decodedData.id)
       .eq('is_active', true)
       .single();
@@ -33,6 +33,22 @@ async function authenticateUser(request: NextRequest) {
     if (error || !user) {
       console.log('Trying fallback authentication with users table');
       return null;
+    }
+
+    // For write operations, only allow admin/college_admin
+    if (requireAdmin && !['admin', 'college_admin'].includes(user.role)) {
+      return null;
+    }
+
+    // For read operations, allow admin, college_admin, and faculty with creator/publisher types
+    if (!requireAdmin) {
+      const allowedRoles = ['admin', 'college_admin'];
+      const allowedFacultyTypes = ['creator', 'publisher'];
+      
+      if (!allowedRoles.includes(user.role) && 
+          !(user.role === 'faculty' && allowedFacultyTypes.includes(user.faculty_type))) {
+        return null;
+      }
     }
 
     console.log('Authentication successful via decoded token (users fallback)');
@@ -45,8 +61,8 @@ async function authenticateUser(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    // Authenticate user
-    const user = await authenticateUser(request);
+    // Authenticate user - allow read access for creator/publisher
+    const user = await authenticateUser(request, false);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

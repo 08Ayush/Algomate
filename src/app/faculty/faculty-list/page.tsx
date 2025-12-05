@@ -48,23 +48,28 @@ export default function FacultyListPage() {
     }
   }, [router]);
 
-  // Fetch faculty list for user's department
+  // Fetch faculty list across all departments (creator/publisher can view all)
   useEffect(() => {
     async function fetchFaculty() {
       try {
         // Only fetch after user is loaded
-        if (!user || !user.department_id) return;
+        if (!user) return;
         
-        console.log('Fetching faculty for department:', user.department_id);
-        const response = await fetch(`/api/faculty?department_id=${user.department_id}`);
+        // Use admin API for cross-department access
+        const authToken = Buffer.from(JSON.stringify(user)).toString('base64');
+        const response = await fetch('/api/admin/faculty', {
+          headers: {
+            'Authorization': `Bearer ${authToken}`
+          }
+        });
         
         console.log('Response status:', response.status);
         const result = await response.json();
         console.log('API Result:', result);
         
-        if (result.success && Array.isArray(result.data)) {
-          console.log(`Found ${result.data.length} faculty members`);
-          setFacultyList(result.data);
+        if (result.faculty && Array.isArray(result.faculty)) {
+          console.log(`Found ${result.faculty.length} faculty members`);
+          setFacultyList(result.faculty);
         } else {
           console.error('Failed to fetch faculty or no data:', result);
           setFacultyList([]);
@@ -101,7 +106,7 @@ export default function FacultyListPage() {
               <div>
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Faculty Directory</h1>
                 <p className="text-gray-600 dark:text-gray-300">
-                  {user.department_code || user.department_name || ''} Department Faculty Members {facultyList.length > 0 && `(${facultyList.length})`}
+                  All Departments - Faculty Members {facultyList.length > 0 && `(${facultyList.length})`}
                 </p>
               </div>
             </div>
@@ -139,7 +144,14 @@ export default function FacultyListPage() {
                       </div>
                       <div className="flex-1">
                         <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{faculty.title ? faculty.title + ' ' : ''}{faculty.first_name} {faculty.last_name}</h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{faculty.department_name || 'Computer Science & Engineering'}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          {faculty.departments?.name || 'No Department Assigned'}
+                          {faculty.faculty_type && (
+                            <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
+                              {faculty.faculty_type.charAt(0).toUpperCase() + faculty.faculty_type.slice(1)}
+                            </span>
+                          )}
+                        </p>
                         <div className="mt-3 space-y-2">
                           <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
                             <Mail className="w-4 h-4 mr-2" />

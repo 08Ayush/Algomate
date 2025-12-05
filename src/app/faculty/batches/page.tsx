@@ -76,23 +76,37 @@ export default function BatchesPage() {
     }
   }, [router]);
 
-  // Fetch batches
+  // Fetch batches across all departments (creator/publisher can view all)
   const fetchBatches = async () => {
     try {
-      if (!user || !user.department_id) return;
+      if (!user) return;
       
-      console.log('Fetching batches for department:', user.department_id);
-      const response = await fetch(`/api/batches?department_id=${user.department_id}`);
+      // Use admin API for cross-department access
+      const authToken = Buffer.from(JSON.stringify(user)).toString('base64');
+      const response = await fetch('/api/admin/batches', {
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      });
       
       const result = await response.json();
       console.log('Batches API Result:', result);
       
-      if (result.success) {
-        setBatches(result.data || []);
-        setStatistics(result.statistics || {
-          totalBatches: 0,
-          totalStudents: 0,
-          semesterGroups: {}
+      if (result.batches) {
+        const batchesData = result.batches;
+        setBatches(batchesData);
+        
+        // Calculate statistics
+        const semesterGroups = batchesData.reduce((acc: any, batch: any) => {
+          const sem = batch.semester || 1;
+          acc[sem] = (acc[sem] || 0) + 1;
+          return acc;
+        }, {});
+        
+        setStatistics({
+          totalBatches: batchesData.length,
+          totalStudents: batchesData.reduce((sum: number, b: any) => sum + (b.actual_strength || 0), 0),
+          semesterGroups
         });
       }
     } catch (error) {
