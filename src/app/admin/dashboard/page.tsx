@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
+import { Search } from 'lucide-react';
 
 interface Department {
   id: string;
@@ -125,6 +126,8 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedSemester, setSelectedSemester] = useState<number | 'all'>('all');
 
   // Department form state
   const [showDeptForm, setShowDeptForm] = useState(false);
@@ -789,6 +792,53 @@ export default function AdminDashboard() {
     setShowCourseForm(true);
   };
 
+  // Filter data based on search query
+  const filteredDepartments = departments.filter(dept =>
+    dept.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    dept.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (dept.description || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredFaculty = faculty.filter(f =>
+    f.first_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    f.last_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    f.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    f.college_uid.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (f.departments?.name || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredClassrooms = classrooms.filter(c =>
+    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (c.building || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    c.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (c.location_notes || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredBatches = batches.filter(b =>
+    b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    b.section.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    b.academic_year.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (b.departments?.name || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredSubjects = subjects.filter(s => {
+    const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.subject_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (s.nep_category || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (s.departments?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesSemester = selectedSemester === 'all' || s.semester === selectedSemester;
+    
+    return matchesSearch && matchesSemester;
+  });
+
+  const filteredCourses = courses.filter(c =>
+    c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    c.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (c.nature_of_course || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -927,6 +977,20 @@ export default function AdminDashboard() {
             </div>
           </div>
 
+          {/* Search Bar */}
+          <div className="mb-6">
+            <div className="relative max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder={`Search ${activeTab}...`}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+
           {/* Departments Tab */}
           {activeTab === 'departments' && (
             <div className="space-y-6">
@@ -1006,7 +1070,12 @@ export default function AdminDashboard() {
               {/* Departments List */}
               <div className="bg-white shadow overflow-hidden sm:rounded-md">
                 <ul className="divide-y divide-gray-200">
-                  {departments.map((dept) => (
+                  {filteredDepartments.length === 0 ? (
+                    <li className="px-4 py-8 text-center text-gray-500">
+                      No departments found matching "{searchQuery}"
+                    </li>
+                  ) : (
+                    filteredDepartments.map((dept) => (
                     <li key={dept.id}>
                       <div className="px-4 py-4 sm:px-6">
                         <div className="flex items-center justify-between">
@@ -1043,7 +1112,7 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                     </li>
-                  ))}
+                  )))}
                 </ul>
               </div>
             </div>
@@ -1199,7 +1268,12 @@ export default function AdminDashboard() {
               {/* Faculty List */}
               <div className="bg-white shadow overflow-hidden sm:rounded-md">
                 <ul className="divide-y divide-gray-200">
-                  {faculty.map((fac) => (
+                  {filteredFaculty.length === 0 ? (
+                    <li className="px-4 py-8 text-center text-gray-500">
+                      No faculty found matching "{searchQuery}"
+                    </li>
+                  ) : (
+                    filteredFaculty.map((fac) => (
                     <li key={fac.id}>
                       <div className="px-4 py-4 sm:px-6">
                         <div className="flex items-center justify-between">
@@ -1244,7 +1318,7 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                     </li>
-                  ))}
+                  )))}
                 </ul>
               </div>
             </div>
@@ -1477,7 +1551,12 @@ export default function AdminDashboard() {
               {/* Classrooms List */}
               <div className="bg-white shadow overflow-hidden sm:rounded-md">
                 <ul className="divide-y divide-gray-200">
-                  {classrooms.map((classroom) => (
+                  {filteredClassrooms.length === 0 ? (
+                    <li className="px-4 py-8 text-center text-gray-500">
+                      No classrooms found matching "{searchQuery}"
+                    </li>
+                  ) : (
+                    filteredClassrooms.map((classroom) => (
                     <li key={classroom.id}>
                       <div className="px-4 py-4 sm:px-6">
                         <div className="flex items-center justify-between">
@@ -1559,7 +1638,7 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                     </li>
-                  ))}
+                  )))}
                 </ul>
                 {classrooms.length === 0 && (
                   <div className="text-center py-12">
@@ -1583,7 +1662,12 @@ export default function AdminDashboard() {
               {/* Batches List */}
               <div className="bg-white shadow overflow-hidden sm:rounded-md">
                 <ul className="divide-y divide-gray-200">
-                  {batches.map((batch) => (
+                  {filteredBatches.length === 0 ? (
+                    <li className="px-4 py-8 text-center text-gray-500">
+                      No batches found matching "{searchQuery}"
+                    </li>
+                  ) : (
+                    filteredBatches.map((batch) => (
                     <li key={batch.id}>
                       <div className="px-4 py-4 sm:px-6">
                         <div className="flex items-center justify-between">
@@ -1644,7 +1728,7 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                     </li>
-                  ))}
+                  )))}
                 </ul>
                 {batches.length === 0 && (
                   <div className="text-center py-12">
@@ -1659,7 +1743,19 @@ export default function AdminDashboard() {
           {activeTab === 'subjects' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
-                <h2 className="text-xl font-semibold text-gray-900">Subjects</h2>
+                <div className="flex items-center gap-4">
+                  <h2 className="text-xl font-semibold text-gray-900">Subjects</h2>
+                  <select
+                    value={selectedSemester}
+                    onChange={(e) => setSelectedSemester(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                    className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All Semesters</option>
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
+                      <option key={sem} value={sem}>Semester {sem}</option>
+                    ))}
+                  </select>
+                </div>
                 <button
                   onClick={() => {
                     setEditingSubject(null);
@@ -1887,7 +1983,12 @@ export default function AdminDashboard() {
               {/* Subjects List */}
               <div className="bg-white shadow overflow-hidden sm:rounded-md">
                 <ul className="divide-y divide-gray-200">
-                  {subjects.map((subject) => (
+                  {filteredSubjects.length === 0 ? (
+                    <li className="px-4 py-8 text-center text-gray-500">
+                      No subjects found matching "{searchQuery}"
+                    </li>
+                  ) : (
+                    filteredSubjects.map((subject) => (
                     <li key={subject.id}>
                       <div className="px-4 py-4 sm:px-6">
                         <div className="flex items-center justify-between">
@@ -1958,7 +2059,7 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                     </li>
-                  ))}
+                  )))}
                 </ul>
                 {subjects.length === 0 && (
                   <div className="text-center py-12">
@@ -2091,7 +2192,12 @@ export default function AdminDashboard() {
               {/* Courses List */}
               <div className="bg-white shadow overflow-hidden sm:rounded-md">
                 <ul className="divide-y divide-gray-200">
-                  {courses.map((course) => (
+                  {filteredCourses.length === 0 ? (
+                    <li className="px-4 py-8 text-center text-gray-500">
+                      No courses found matching "{searchQuery}"
+                    </li>
+                  ) : (
+                    filteredCourses.map((course) => (
                     <li key={course.id}>
                       <div className="px-4 py-4 sm:px-6">
                         <div className="flex items-center justify-between">
@@ -2150,7 +2256,7 @@ export default function AdminDashboard() {
                         </div>
                       </div>
                     </li>
-                  ))}
+                  )))}
                 </ul>
                 {courses.length === 0 && (
                   <div className="text-center py-12">
