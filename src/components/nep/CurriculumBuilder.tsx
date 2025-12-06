@@ -10,6 +10,7 @@ import {
   useSensor,
   useSensors,
   closestCenter,
+  useDroppable,
 } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useSortable } from '@dnd-kit/sortable';
@@ -61,14 +62,14 @@ function DraggableSubject({ subject }: { subject: Subject }) {
       style={style}
       {...attributes}
       {...listeners}
-      className="bg-white border border-gray-200 rounded-lg p-3 mb-2 cursor-move hover:shadow-md transition-shadow"
+      className="bg-white border border-gray-200 rounded-lg p-3 mb-2 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow hover:border-blue-300"
     >
       <div className="flex justify-between items-start">
-        <div>
-          <p className="font-semibold text-sm text-gray-900">{subject.code}</p>
-          <p className="text-xs text-gray-600">{subject.name}</p>
+        <div className="flex-1">
+          <p className="font-bold text-sm text-gray-900 leading-tight">{subject.name}</p>
+          <p className="text-xs text-gray-500 mt-1">{subject.code}</p>
         </div>
-        <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+        <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded ml-2 whitespace-nowrap">
           {subject.credit_value} credits
         </span>
       </div>
@@ -93,15 +94,30 @@ function DroppableBucket({
   onUpdateSelection: (bucketId: string, min: number, max: number) => void;
   onDeleteBucket: (bucketId: string) => void;
 }) {
-  const { setNodeRef } = useSortable({ id: bucket.id });
+  const { setNodeRef, isOver } = useDroppable({ id: bucket.id });
+
+  // Calculate total credits in bucket
+  const totalCredits = bucket.subjects.reduce((sum, subject) => sum + subject.credit_value, 0);
 
   return (
-    <div ref={setNodeRef} className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-4 mb-4">
+    <div 
+      ref={setNodeRef} 
+      className={`border-2 border-dashed rounded-lg p-4 mb-4 transition-colors ${
+        isOver 
+          ? 'bg-blue-50 border-blue-400 border-solid' 
+          : 'bg-gray-50 border-gray-300'
+      }`}
+    >
       <div className="flex justify-between items-center mb-3">
-        <h3 className="font-bold text-lg text-gray-900">{bucket.bucket_name}</h3>
+        <div>
+          <h3 className="font-bold text-lg text-gray-900">{bucket.bucket_name}</h3>
+          <p className="text-sm text-gray-600 mt-1">
+            {bucket.subjects.length} subjects • <span className="font-semibold text-blue-600">{totalCredits} total credits</span>
+          </p>
+        </div>
         <button
           onClick={() => onDeleteBucket(bucket.id)}
-          className="text-red-600 hover:text-red-800 text-sm"
+          className="text-red-600 hover:text-red-800 text-sm font-medium"
         >
           Delete
         </button>
@@ -178,6 +194,8 @@ export default function CurriculumBuilder({
   semester,
 }: CurriculumBuilderProps) {
   const [availableSubjects, setAvailableSubjects] = useState<Subject[]>([]);
+  const [filteredSubjects, setFilteredSubjects] = useState<Subject[]>([]);
+  const [selectedCredits, setSelectedCredits] = useState<number | null>(null);
   const [buckets, setBuckets] = useState<Bucket[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [newBucketName, setNewBucketName] = useState('');
@@ -188,7 +206,7 @@ export default function CurriculumBuilder({
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8,
+        distance: 3, // Reduced from 8 for smoother drag start
       },
     })
   );
@@ -217,6 +235,18 @@ export default function CurriculumBuilder({
     fetchBuckets();
   }, [collegeId, course, semester]);
 
+  // Filter subjects by selected credits
+  useEffect(() => {
+    if (selectedCredits === null) {
+      setFilteredSubjects(availableSubjects);
+    } else {
+      setFilteredSubjects(availableSubjects.filter(s => s.credit_value === selectedCredits));
+    }
+  }, [selectedCredits, availableSubjects]);
+
+  // Get unique credit values from available subjects
+  const uniqueCredits = Array.from(new Set(availableSubjects.map(s => s.credit_value))).sort((a, b) => a - b);
+
   async function fetchSubjects() {
     try {
       const userData = localStorage.getItem('user');
@@ -228,7 +258,7 @@ export default function CurriculumBuilder({
 
       const authToken = Buffer.from(userData).toString('base64');
       console.log('Auth token created:', authToken.substring(0, 20) + '...');
-      const response = await fetch(`/api/nep/subjects?course=${encodeURIComponent(course)}&semester=${semester}`, {
+      const response = await fetch(`/api/nep/subjects?courseId=${encodeURIComponent(course)}&semester=${semester}`, {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json'
@@ -252,8 +282,9 @@ export default function CurriculumBuilder({
       }
 
       const subjects = await response.json();
-      console.log(`Found ${subjects.length} subjects for ${course} semester ${semester}`);
+      console.log(`Found ${subjects.length} subjects for courseId ${course} semester ${semester}`);
       setAvailableSubjects(subjects);
+      setFilteredSubjects(subjects);
       setError(null); // Clear any previous errors
     } catch (error) {
       console.error('Error fetching subjects:', error);
@@ -272,7 +303,7 @@ export default function CurriculumBuilder({
       }
 
       const authToken = Buffer.from(userData).toString('base64');
-      const response = await fetch(`/api/nep/buckets?course=${encodeURIComponent(course)}&semester=${semester}`, {
+      const response = await fetch(`/api/nep/buckets?courseId=${encodeURIComponent(course)}&semester=${semester}`, {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json'
@@ -318,23 +349,38 @@ export default function CurriculumBuilder({
     const activeId = active.id as string;
     const overId = over.id as string;
 
-    // Find if dragging from available subjects
+    // Find if dragging from available subjects or filtered subjects
     const draggedSubject = availableSubjects.find((s) => s.id === activeId);
 
     if (draggedSubject) {
-      // Find target bucket
-      const targetBucket = buckets.find((b) => b.id === overId);
+      // Check if dropping directly on a bucket
+      let targetBucket = buckets.find((b) => b.id === overId);
+
+      // If not dropped on bucket, check if dropped on a subject within a bucket
+      if (!targetBucket) {
+        for (const bucket of buckets) {
+          if (bucket.subjects.some((s) => s.id === overId)) {
+            targetBucket = bucket;
+            break;
+          }
+        }
+      }
 
       if (targetBucket) {
-        // Move subject to bucket
-        setBuckets((prev) =>
-          prev.map((bucket) =>
-            bucket.id === overId
-              ? { ...bucket, subjects: [...bucket.subjects, draggedSubject] }
-              : bucket
-          )
-        );
-        setAvailableSubjects((prev) => prev.filter((s) => s.id !== activeId));
+        // Check if subject is already in this bucket
+        const alreadyInBucket = targetBucket.subjects.some((s) => s.id === activeId);
+        
+        if (!alreadyInBucket) {
+          // Move subject to bucket
+          setBuckets((prev) =>
+            prev.map((bucket) =>
+              bucket.id === targetBucket!.id
+                ? { ...bucket, subjects: [...bucket.subjects, draggedSubject] }
+                : bucket
+            )
+          );
+          setAvailableSubjects((prev) => prev.filter((s) => s.id !== activeId));
+        }
       }
     }
 
@@ -409,7 +455,7 @@ export default function CurriculumBuilder({
         body: JSON.stringify({
           buckets,
           availableSubjects,
-          course,
+          courseId: course,
           semester
         })
       });
@@ -496,14 +542,53 @@ export default function CurriculumBuilder({
         {/* Left: Available Subjects */}
         <div className="col-span-1">
           <h2 className="text-2xl font-bold mb-4">Available Subjects</h2>
+          
+          {/* Credit Filter Buttons */}
+          <div className="mb-4">
+            <p className="text-sm font-medium text-gray-700 mb-2">Filter by Credits:</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setSelectedCredits(null)}
+                className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                  selectedCredits === null
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                All ({availableSubjects.length})
+              </button>
+              {uniqueCredits.map((credit) => {
+                const count = availableSubjects.filter(s => s.credit_value === credit).length;
+                return (
+                  <button
+                    key={credit}
+                    onClick={() => setSelectedCredits(credit)}
+                    className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                      selectedCredits === credit
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    {credit} Credits ({count})
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          
           <div className="bg-white border border-gray-200 rounded-lg p-4 max-h-[600px] overflow-y-auto">
-            <SortableContext items={availableSubjects.map(s => s.id)} strategy={verticalListSortingStrategy}>
-              {availableSubjects.map((subject) => (
+            <SortableContext items={filteredSubjects.map(s => s.id)} strategy={verticalListSortingStrategy}>
+              {filteredSubjects.map((subject) => (
                 <DraggableSubject key={subject.id} subject={subject} />
               ))}
             </SortableContext>
-            {availableSubjects.length === 0 && (
-              <p className="text-center text-gray-400 py-8">No available subjects</p>
+            {filteredSubjects.length === 0 && (
+              <p className="text-center text-gray-400 py-8">
+                {selectedCredits !== null 
+                  ? `No subjects with ${selectedCredits} credits`
+                  : 'No available subjects'
+                }
+              </p>
             )}
           </div>
         </div>
@@ -538,18 +623,16 @@ export default function CurriculumBuilder({
           </div>
 
           <div className="max-h-[600px] overflow-y-auto">
-            <SortableContext items={buckets.map(b => b.id)} strategy={verticalListSortingStrategy}>
-              {buckets.map((bucket) => (
-                <DroppableBucket
-                  key={bucket.id}
-                  bucket={bucket}
-                  onRemoveSubject={handleRemoveSubject}
-                  onToggleCommonSlot={handleToggleCommonSlot}
-                  onUpdateSelection={handleUpdateSelection}
-                  onDeleteBucket={handleDeleteBucket}
-                />
-              ))}
-            </SortableContext>
+            {buckets.map((bucket) => (
+              <DroppableBucket
+                key={bucket.id}
+                bucket={bucket}
+                onRemoveSubject={handleRemoveSubject}
+                onToggleCommonSlot={handleToggleCommonSlot}
+                onUpdateSelection={handleUpdateSelection}
+                onDeleteBucket={handleDeleteBucket}
+              />
+            ))}
             {buckets.length === 0 && (
               <div className="text-center text-gray-400 py-12 border-2 border-dashed border-gray-300 rounded-lg">
                 Create a bucket to get started
@@ -561,9 +644,19 @@ export default function CurriculumBuilder({
 
       <DragOverlay>
         {activeSubject ? (
-          <div className="bg-white border border-blue-500 rounded-lg p-3 shadow-lg">
-            <p className="font-semibold text-sm">{activeSubject.code}</p>
-            <p className="text-xs text-gray-600">{activeSubject.name}</p>
+          <div className="bg-white border-2 border-blue-500 rounded-lg p-3 shadow-2xl opacity-90 transform rotate-2">
+            <div className="flex justify-between items-start">
+              <div className="flex-1">
+                <p className="font-bold text-sm text-gray-900">{activeSubject.name}</p>
+                <p className="text-xs text-gray-500 mt-1">{activeSubject.code}</p>
+              </div>
+              <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded ml-2 whitespace-nowrap">
+                {activeSubject.credit_value} credits
+              </span>
+            </div>
+            <div className="mt-2 text-xs text-gray-500">
+              L: {activeSubject.lecture_hours} | T: {activeSubject.tutorial_hours} | P: {activeSubject.practical_hours}
+            </div>
           </div>
         ) : null}
       </DragOverlay>

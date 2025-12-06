@@ -60,30 +60,30 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const course = searchParams.get('course');
+    const courseId = searchParams.get('courseId');
     const semester = searchParams.get('semester');
 
-    if (!course || !semester) {
+    if (!courseId || !semester) {
       return NextResponse.json(
-        { error: 'Course and semester are required' },
+        { error: 'Course ID and semester are required' },
         { status: 400 }
       );
     }
 
     const supabase = createClient();
 
-    // First, find the batch for this college, course, and semester
+    // First, find the batch for this college, course_id, and semester
     const { data: batchData, error: batchError } = await supabase
       .from('batches')
-      .select('id, name, semester, college_id')
+      .select('id, name, semester, college_id, course_id')
       .eq('college_id', user.college_id)
       .eq('semester', parseInt(semester))
-      .ilike('name', `%${course}%`)
+      .eq('course_id', courseId)
       .eq('is_active', true)
       .single();
 
     if (batchError || !batchData) {
-      console.log(`No batch found for college ${user.college_id}, course ${course}, semester ${semester}`);
+      console.log(`No batch found for college ${user.college_id}, courseId ${courseId}, semester ${semester}`);
       return NextResponse.json([]);
     }
 
@@ -153,7 +153,7 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    console.log(`Found ${bucketsWithSubjects.length} buckets for batch ${batchData.id}, course ${course}, semester ${semester}`);
+    console.log(`Found ${bucketsWithSubjects.length} buckets for batch ${batchData.id}, courseId ${courseId}, semester ${semester}`);
 
     return NextResponse.json(bucketsWithSubjects);
   } catch (error) {
@@ -173,9 +173,9 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { buckets, availableSubjects, course, semester } = body;
+    const { buckets, availableSubjects, courseId, semester } = body;
 
-    if (!course || !semester || !Array.isArray(buckets)) {
+    if (!courseId || !semester || !Array.isArray(buckets)) {
       return NextResponse.json(
         { error: 'Invalid request body' },
         { status: 400 }
@@ -184,13 +184,13 @@ export async function POST(request: NextRequest) {
 
     const supabase = createClient();
 
-    // First, find or create the batch for this college, course, and semester
+    // First, find or create the batch for this college, course_id, and semester
     let { data: batchData, error: batchError } = await supabase
       .from('batches')
-      .select('id, name, department_id')
+      .select('id, name, department_id, course_id')
       .eq('college_id', user.college_id)
       .eq('semester', parseInt(semester))
-      .ilike('name', `%${course}%`)
+      .eq('course_id', courseId)
       .eq('is_active', true)
       .single();
 
@@ -216,12 +216,20 @@ export async function POST(request: NextRequest) {
       }
 
       if (deptData) {
+        // Get course title for batch name
+        const { data: courseData } = await supabase
+          .from('courses')
+          .select('title')
+          .eq('id', courseId)
+          .single();
+
         const { data: newBatch, error: createBatchError } = await supabase
           .from('batches')
           .insert({
-            name: `${course} - Semester ${semester}`,
+            name: `${courseData?.title || 'Course'} - Semester ${semester}`,
             college_id: user.college_id,
             department_id: deptData.id,
+            course_id: courseId,
             semester: parseInt(semester),
             academic_year: '2025-26',
             is_active: true
@@ -298,7 +306,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log(`Successfully saved curriculum for batch ${batchData.id}, course ${course}, semester ${semester}`);
+    console.log(`Successfully saved curriculum for batch ${batchData.id}, courseId ${courseId}, semester ${semester}`);
 
     return NextResponse.json({ success: true, message: 'Curriculum saved successfully' });
   } catch (error) {

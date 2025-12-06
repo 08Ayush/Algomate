@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const course = searchParams.get('course');
+    const courseId = searchParams.get('courseId');
     const semester = searchParams.get('semester');
     const bucketId = searchParams.get('bucketId');
 
@@ -37,20 +37,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ subjects: data || [] });
     }
 
-    if (!course || !semester) {
+    if (!courseId || !semester) {
       return NextResponse.json(
-        { error: 'Course and semester are required' },
+        { error: 'Course ID and semester are required' },
         { status: 400 }
       );
     }
 
     const supabase = createClient();
 
-    // Fetch subjects for the authenticated user's college
+    // Fetch subjects for the authenticated user's college, filtered by course_id
     const { data, error } = await supabase
       .from('subjects')
       .select('*')
       .eq('college_id', user.college_id)
+      .eq('course_id', courseId)
       .eq('semester', parseInt(semester))
       .eq('is_active', true)
       .is('course_group_id', null) // Only subjects not in buckets
@@ -61,19 +62,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch subjects' }, { status: 500 });
     }
 
-    // Filter by program column first, then fallback to code/name matching
-    const filtered = (data || []).filter((subject: any) => {
-      // Primary filter: Use program column if available
-      if (subject.program) {
-        return subject.program === course;
-      }
-      // Fallback: Check if course name appears in code or name
-      return subject.code?.includes(course) || subject.name?.includes(course);
-    });
+    console.log(`Found ${data?.length || 0} subjects for college ${user.college_id}, course ${courseId}, semester ${semester}`);
 
-    console.log(`Found ${filtered.length} subjects for college ${user.college_id}, course ${course}, semester ${semester}`);
-
-    return NextResponse.json(filtered);
+    return NextResponse.json(data || []);
   } catch (error) {
     console.error('Error in GET /api/nep/subjects:', error);
     return NextResponse.json(

@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { Header } from '@/components/Header';
+import { ArrowLeft } from 'lucide-react';
 import CurriculumBuilder from '@/components/nep/CurriculumBuilder';
 import MockStudentGenerator from '@/components/nep/MockStudentGenerator';
 import { createClient } from '@/lib/supabase/client';
@@ -117,28 +119,39 @@ export default function NEPCurriculumPage() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <div className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">NEP 2020 Curriculum Builder</h1>
-              <p className="text-gray-600 mt-1">
-                Create elective buckets and assign subjects for Choice-Based Credit System
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-500">Logged in as</p>
-              <p className="font-semibold text-gray-900">{user.first_name} {user.last_name}</p>
-              <p className="text-xs text-blue-600">College Admin</p>
+      <Header />
+      
+      <div className="pt-20 pb-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          {/* Back Button and Page Header */}
+          <div className="mb-6">
+            <button
+              onClick={() => router.push('/admin/dashboard')}
+              className="flex items-center text-blue-600 hover:text-blue-800 mb-4 transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5 mr-2" />
+              <span className="font-medium">Back to Admin Dashboard</span>
+            </button>
+            <div className="bg-white border-b border-gray-200 shadow-sm rounded-lg p-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h1 className="text-3xl font-bold text-gray-900">NEP 2020 Curriculum Builder</h1>
+                  <p className="text-gray-600 mt-1">
+                    Create elective buckets and assign subjects for Choice-Based Credit System
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-gray-500">Logged in as</p>
+                  <p className="font-semibold text-gray-900">{user.first_name} {user.last_name}</p>
+                  <p className="text-xs text-blue-600">College Admin</p>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-6">
-        {/* Course and Semester Selector */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Course and Semester Selector */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">"
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Select Course / Program
@@ -187,22 +200,20 @@ export default function NEPCurriculumPage() {
               </p>
             </div>
           </div>
-        </div>
+          </div>
 
-        {/* Curriculum Builder */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <CurriculumBuilder
-            collegeId={user.college_id}
-            course={selectedCourse}
-            semester={selectedSemester}
-          />
-        </div>
-      </div>
+          {/* Curriculum Builder */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200\">"
+            <CurriculumBuilder
+              collegeId={user.college_id}
+              course={selectedCourse}
+              semester={selectedSemester}
+            />
+          </div>
 
-      {/* Help Section */}
-      <div className="max-w-7xl mx-auto px-6 py-6">
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-          <h3 className="font-bold text-blue-900 mb-3 text-lg">📚 How to use the NEP Curriculum Builder:</h3>
+          {/* Help Section */}
+          <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-6">
+            <h3 className="font-bold text-blue-900 mb-3 text-lg">📚 How to use the NEP Curriculum Builder:</h3>
           <ol className="list-decimal list-inside space-y-2 text-blue-800">
             <li><strong>Select Course & Semester:</strong> Choose the program (ITEP/B.Ed/M.Ed) and semester from the dropdowns above</li>
             <li><strong>Create Elective Buckets:</strong> Enter a bucket name (e.g., "Major Pool", "Minor Pool") and click "Create Bucket"</li>
@@ -219,6 +230,7 @@ export default function NEPCurriculumPage() {
               <li>Changes are specific to the selected course and semester combination</li>
               <li>Use this to implement NEP 2020 Choice-Based Credit System (CBCS)</li>
             </ul>
+          </div>
           </div>
         </div>
       </div>

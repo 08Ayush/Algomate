@@ -865,7 +865,7 @@ export default function AdminDashboard() {
               <p className="mt-2 text-gray-600">Manage departments and faculty members</p>
             </div>
             <button
-              onClick={() => router.push('/nep-curriculum')}
+              onClick={() => router.push('/admin/nep-curriculum')}
               className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-lg hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 shadow-md transition-all duration-200 flex items-center space-x-2"
             >
               <svg 
