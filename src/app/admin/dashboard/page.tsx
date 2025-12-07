@@ -644,6 +644,40 @@ export default function AdminDashboard() {
     setShowClassroomForm(true);
   };
 
+  // Batch handlers
+  const handleBatchDelete = async (id: string, batchName: string) => {
+    if (!confirm(`Are you sure you want to delete batch "${batchName}"?\n\nThis will also delete:\n- All elective buckets associated with this batch\n- All subject assignments linked to this batch\n- Student enrollments\n\nThis action cannot be undone.`)) return;
+
+    try {
+      // Get authentication token
+      const userData = localStorage.getItem('user');
+      if (!userData) {
+        router.push('/login');
+        return;
+      }
+      
+      const authToken = Buffer.from(userData).toString('base64');
+      const response = await fetch(`/api/admin/batches?id=${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        alert(data.message || 'Batch deleted successfully');
+        fetchData(); // Refresh the data
+      } else {
+        const data = await response.json();
+        setError(data.error || 'Failed to delete batch');
+      }
+    } catch (error) {
+      console.error('Error deleting batch:', error);
+      setError('Failed to delete batch');
+    }
+  };
+
   // Subject handlers
   const handleSubjectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1903,6 +1937,15 @@ export default function AdminDashboard() {
                                   <span className="bg-yellow-100 px-2 py-1 rounded">Subjects (via course_group_id)</span>
                                 </div>
                               </div>
+                            </div>
+
+                            <div className="mt-4 flex justify-end">
+                              <button
+                                onClick={() => handleBatchDelete(batch.id, batch.name)}
+                                className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors"
+                              >
+                                Delete Batch
+                              </button>
                             </div>
                           </div>
                         </div>

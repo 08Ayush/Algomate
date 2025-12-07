@@ -43,6 +43,16 @@ CREATE TYPE nep_category AS ENUM (
     'PEDAGOGY',     -- Specific to B.Ed/ITEP
     'INTERNSHIP'    -- Block-out events
 );
+CREATE TYPE faculty_designation AS ENUM (
+    'Professor',
+    'Associate Professor',
+    'Assistant Professor',
+    'Guest Faculty',
+    'Lecturer',
+    'Demonstrator',
+    'Physical Director',
+    'Librarian'
+);
 
 -- ============================================================================
 -- 2. MULTI-COLLEGE FOUNDATION TABLES
@@ -115,6 +125,8 @@ CREATE TABLE users (
     department_id UUID REFERENCES departments(id) ON DELETE RESTRICT,
     role user_role NOT NULL,
     faculty_type faculty_role,
+    designation faculty_designation,
+    course_id UUID REFERENCES courses(id) ON DELETE SET NULL,
     access_level access_level DEFAULT 'READ',
     student_id VARCHAR(50),
     admission_year INT,
@@ -272,6 +284,7 @@ CREATE TABLE batches (
     name VARCHAR(100) NOT NULL,
     college_id UUID NOT NULL REFERENCES colleges(id) ON DELETE CASCADE,
     department_id UUID NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+    course_id UUID REFERENCES courses(id) ON DELETE CASCADE,
     semester INT NOT NULL CHECK (semester BETWEEN 1 AND 8),
     academic_year VARCHAR(10) NOT NULL,
     expected_strength INT DEFAULT 60 CHECK (expected_strength BETWEEN 1 AND 200),
@@ -601,6 +614,7 @@ CREATE INDEX idx_users_college_role ON users(college_id, role, is_active);
 CREATE INDEX idx_users_faculty_active ON users(college_id, role, is_active) WHERE role = 'faculty';
 CREATE INDEX idx_users_department_role ON users(department_id, role);
 CREATE INDEX idx_users_student_semester ON users(college_id, current_semester, is_active) WHERE role = 'student';
+CREATE INDEX IF NOT EXISTS idx_users_course_id ON users(course_id);
 CREATE INDEX idx_departments_college ON departments(college_id, is_active);
 CREATE INDEX idx_subjects_college_department ON subjects(college_id, department_id, is_active);
 CREATE INDEX idx_subjects_course ON subjects(course_id);
@@ -614,6 +628,7 @@ CREATE INDEX idx_classrooms_college ON classrooms(college_id, is_available);
 CREATE INDEX idx_classrooms_capacity_features ON classrooms(college_id, capacity, has_projector, has_lab_equipment, is_available);
 CREATE INDEX idx_batches_college_dept_semester ON batches(college_id, department_id, semester, academic_year, is_active);
 CREATE INDEX idx_batches_access_control ON batches(college_id, department_id, semester, section);
+CREATE INDEX IF NOT EXISTS idx_batches_course_id ON batches(course_id);
 CREATE INDEX idx_time_slots_college_algorithm ON time_slots(college_id, day, start_time, is_active) WHERE NOT is_break_time;
 CREATE INDEX idx_faculty_qualifications_lookup ON faculty_qualified_subjects(faculty_id, subject_id, proficiency_level);
 CREATE INDEX idx_faculty_availability_lookup ON faculty_availability(faculty_id, time_slot_id, is_available);
@@ -1508,4 +1523,192 @@ DO $$
 BEGIN
     -- Update subjects to have college_id from their department
     UPDATE subjects 
-    SET college_id
+    SET college_id = (
+        SELECT college_id FROM departments 
+        WHERE departments.id = subjects.department_id
+    )
+    WHERE college_id IS NULL 
+    AND department_id IS NOT NULL;
+    
+    -- If still NULL and only one college exists, assign to that college
+    UPDATE subjects 
+    SET college_id = (SELECT id FROM colleges LIMIT 1)
+    WHERE college_id IS NULL 
+    AND EXISTS (SELECT 1 FROM colleges);
+    
+    RAISE NOTICE '✓ College ID assignment completed';
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE '⚠ College ID assignment skipped (subjects not yet created)';
+END $$;
+
+-- Migration 3: Intelligent Department Mapping for GCOEJ Subjects
+DO $$ 
+DECLARE 
+    v_college_id UUID;
+    
+    -- Department IDs
+    v_edu_dept UUID;
+    v_eng_dept UUID;
+    v_hist_dept UUID;
+    v_pol_dept UUID;
+    v_geo_dept UUID;
+    v_hin_dept UUID;
+    v_urd_dept UUID;
+    v_math_dept UUID;
+    v_sci_dept UUID;
+BEGIN
+    -- Get College ID (GCOEJ)
+    SELECT id INTO v_college_id FROM colleges WHERE code = 'GCOEJ' LIMIT 1;
+
+    IF v_college_id IS NOT NULL THEN
+        
+        -- Fetch Department IDs
+        SELECT id INTO v_edu_dept FROM departments WHERE code = 'EDU' AND college_id = v_college_id;
+        SELECT id INTO v_eng_dept FROM departments WHERE code = 'ENG' AND college_id = v_college_id;
+        SELECT id INTO v_hist_dept FROM departments WHERE code = 'HIST' AND college_id = v_college_id;
+        SELECT id INTO v_hin_dept FROM departments WHERE code = 'HIN' AND college_id = v_college_id;
+        SELECT id INTO v_urd_dept FROM departments WHERE code = 'URDU' AND college_id = v_college_id;
+        SELECT id INTO v_math_dept FROM departments WHERE code = 'MATH' AND college_id = v_college_id;
+        SELECT id INTO v_sci_dept FROM departments WHERE code = 'SCI' AND college_id = v_college_id;
+        
+        -- === A. Map Languages & Humanities ===
+        
+        -- English Subjects -> English Dept
+        IF v_eng_dept IS NOT NULL THEN
+            UPDATE subjects SET department_id = v_eng_dept 
+            WHERE college_id = v_college_id 
+            AND (name ILIKE '%English%' OR name ILIKE '%Literature%' OR name ILIKE '%Communication%');
+        END IF;
+
+        -- Hindi Subjects -> Hindi Dept
+        IF v_hin_dept IS NOT NULL THEN
+            UPDATE subjects SET department_id = v_hin_dept 
+            WHERE college_id = v_college_id 
+            AND (name ILIKE '%Hindi%' OR name ILIKE '%Bhasha%');
+        END IF;
+
+        -- Urdu Subjects -> Urdu Dept
+        IF v_urd_dept IS NOT NULL THEN
+            UPDATE subjects SET department_id = v_urd_dept 
+            WHERE college_id = v_college_id 
+            AND (name ILIKE '%Urdu%' OR name ILIKE '%Tarseel%');
+        END IF;
+
+        -- History Subjects -> History Dept
+        IF v_hist_dept IS NOT NULL THEN
+            UPDATE subjects SET department_id = v_hist_dept 
+            WHERE college_id = v_college_id 
+            AND (name ILIKE '%History%' OR name ILIKE '%Ancient%' OR name ILIKE '%Medieval%');
+        END IF;
+
+        -- === B. Map Sciences ===
+
+        -- Math Subjects -> Math Dept
+        IF v_math_dept IS NOT NULL THEN
+            UPDATE subjects SET department_id = v_math_dept 
+            WHERE college_id = v_college_id 
+            AND (name ILIKE '%Math%' OR name ILIKE '%Algebra%' OR name ILIKE '%Statistics%');
+        END IF;
+
+        -- Science Subjects -> Science Dept
+        IF v_sci_dept IS NOT NULL THEN
+            UPDATE subjects SET department_id = v_sci_dept 
+            WHERE college_id = v_college_id 
+            AND (name ILIKE '%Science%' OR name ILIKE '%Physics%' OR name ILIKE '%Chemistry%')
+            AND name NOT ILIKE '%Political%'; -- Exclude Political Science
+        END IF;
+
+        -- === C. Map Core Education ===
+        
+        -- Everything else defaults to Education Dept (e.g., "Childhood and Growing Up")
+        IF v_edu_dept IS NOT NULL THEN
+            UPDATE subjects SET department_id = v_edu_dept 
+            WHERE college_id = v_college_id 
+            AND department_id IS NULL; 
+        END IF;
+
+        RAISE NOTICE '✓ Department ID mapping completed for GCOEJ subjects';
+        
+    ELSE
+        RAISE NOTICE '⚠ GCOEJ college not found - department mapping skipped';
+    END IF;
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE '⚠ Department mapping skipped (subjects or departments not yet created)';
+END $$;
+
+-- ============================================================================
+-- VERIFICATION QUERIES (Run these after setup to verify data)
+-- ============================================================================
+
+-- Uncomment and run these queries to verify your data:
+/*
+-- Check subject program distribution
+SELECT 
+    program,
+    COUNT(*) as subject_count,
+    MIN(semester) as min_semester,
+    MAX(semester) as max_semester
+FROM subjects 
+WHERE is_active = true
+GROUP BY program
+ORDER BY program;
+
+-- Check subjects by department and program
+SELECT 
+    d.name as department_name,
+    s.program,
+    COUNT(*) as count
+FROM subjects s
+JOIN departments d ON s.department_id = d.id
+WHERE s.is_active = true
+GROUP BY d.name, s.program
+ORDER BY d.name;
+
+-- Check for subjects without program assigned
+SELECT 
+    COUNT(*) FILTER (WHERE program IS NOT NULL) as tagged_subjects,
+    COUNT(*) FILTER (WHERE program IS NULL) as untagged_subjects,
+    COUNT(*) as total_active_subjects
+FROM subjects 
+WHERE is_active = true;
+
+-- Check for subjects without college_id
+SELECT 
+    college_id,
+    COUNT(*) as subject_count
+FROM subjects 
+WHERE is_active = true
+GROUP BY college_id;
+*/
+
+-- ============================================================================
+-- COMMENTS FOR DOCUMENTATION
+-- ============================================================================
+
+COMMENT ON TABLE events IS 'Stores all college events with conflict detection and queue management';
+COMMENT ON TABLE event_registrations IS 'Stores user registrations for events';
+COMMENT ON TABLE event_notifications IS 'Stores event-related notifications for users';
+COMMENT ON FUNCTION check_event_conflicts() IS 'Automatically detects venue and time conflicts for events';
+COMMENT ON FUNCTION update_event_participants() IS 'Maintains accurate participant count for events';
+COMMENT ON FUNCTION send_event_notification() IS 'Sends notifications to users when event status changes';
+
+-- NEP 2020 Documentation
+COMMENT ON TYPE nep_category IS 'NEP 2020 course categories for choice-based credit system';
+COMMENT ON TABLE courses IS 'Stores academic programs like B.Ed, M.Ed, ITEP with intake and duration details';
+COMMENT ON TABLE elective_buckets IS 'NEP 2020 elective pools where students choose from multiple subject options';
+COMMENT ON TABLE student_course_selections IS 'Tracks individual student choices for major/minor subjects under NEP 2020';
+COMMENT ON COLUMN subjects.credit_value IS 'NEP 2020 standard credit calculation: L + T + (P/2)';
+COMMENT ON COLUMN subjects.nep_category IS 'NEP 2020 course classification for structured learning outcomes';
+COMMENT ON COLUMN subjects.subject_type IS 'Type of subject delivery (THEORY, LAB, PRACTICAL, TUTORIAL)';
+COMMENT ON COLUMN subjects.course_id IS 'Links subject to academic program/course (B.Ed, M.Ed, ITEP)';
+COMMENT ON COLUMN subjects.department_id IS 'Links subject to teaching department (nullable for flexibility)';
+COMMENT ON COLUMN subjects.block_start_week IS 'Starting week for block-scheduled subjects (e.g., internships, intensive courses)';
+COMMENT ON COLUMN subjects.block_end_week IS 'Ending week for block-scheduled subjects';
+COMMENT ON COLUMN subjects.time_restriction IS 'Time of day restriction for scheduling (MORNING, AFTERNOON, EVENING, FULL_DAY)';
+COMMENT ON COLUMN subjects.is_special_event IS 'Flag indicating if subject is a special event (automatically set based on nep_category)';
+COMMENT ON COLUMN subjects.special_event_notes IS 'Additional notes for special event subjects';
+COMMENT ON FUNCTION update_special_event_flag() IS 'Automatically sets is_special_event flag based on nep_category (INTERNSHIP = true, others = false)';

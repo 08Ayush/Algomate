@@ -108,3 +108,146 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    // Authenticate user - require admin access for deletion
+    const user = await authenticateUser(request, true);
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Check if user is admin
+    if (!['admin', 'college_admin', 'super_admin'].includes(user.role)) {
+      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+    }
+
+    // Get batch_id from query parameters
+    const { searchParams } = new URL(request.url);
+    const batchId = searchParams.get('id');
+
+    if (!batchId) {
+      return NextResponse.json({ error: 'Batch ID is required' }, { status: 400 });
+    }
+
+    // Verify batch exists and belongs to user's college (for college admins)
+    const { data: batch, error: fetchError } = await supabase
+      .from('batches')
+      .select('id, college_id, name')
+      .eq('id', batchId)
+      .single();
+
+    if (fetchError || !batch) {
+      return NextResponse.json({ error: 'Batch not found' }, { status: 404 });
+    }
+
+    // Check college authorization for college_admin
+    if (user.role === 'college_admin' && batch.college_id !== user.college_id) {
+      return NextResponse.json({ error: 'Unauthorized to delete this batch' }, { status: 403 });
+    }
+
+    // Delete related records first (in order of dependencies)
+    
+    // 1. First, get all elective buckets for this batch
+    const { data: buckets } = await supabase
+      .from('elective_buckets')
+      .select('id')
+      .eq('batch_id', batchId);
+
+    const bucketIds = buckets?.map(b => b.id) || [];
+
+    // 2. Get all subjects linked to these buckets
+    let subjectIds: string[] = [];
+    if (bucketIds.length > 0) {
+      const { data: subjects } = await supabase
+        .from('subjects')
+        .select('id')
+        .in('course_group_id', bucketIds);
+      
+      subjectIds = subjects?.map(s => s.id) || [];
+    }
+
+    // 3. Delete student course selections for these subjects
+    if (subjectIds.length > 0) {
+      const { error: selectionsError } = await supabase
+        .from('student_course_selections')
+        .delete()
+        .in('subject_id', subjectIds);
+      
+      if (selectionsError) {
+        console.log('Note: Error deleting student course selections:', selectionsError.message);
+      }
+    }
+
+    // 2. Delete student batch enrollments
+    const { error: enrollmentError } = await supabase
+      .from('student_batch_enrollment')
+      .delete()
+      .eq('batch_id', batchId);
+
+    if (enrollmentError) {
+      console.error('Error deleting student enrollments:', enrollmentError);
+      return NextResponse.json({ 
+        error: 'Failed to delete student enrollments', 
+        details: enrollmentError.message 
+      }, { status: 500 });
+    }
+
+    // 3. Delete batch subjects
+    const { error: batchSubjectsError } = await supabase
+      .from('batch_subjects')
+      .delete()
+      .eq('batch_id', batchId);
+
+    if (batchSubjectsError) {
+      console.error('Error deleting batch subjects:', batchSubjectsError);
+      return NextResponse.json({ 
+        error: 'Failed to delete batch subjects', 
+        details: batchSubjectsError.message 
+      }, { status: 500 });
+    }
+
+    // 4. Delete scheduled classes
+    const { error: scheduledClassesError } = await supabase
+      .from('scheduled_classes')
+      .delete()
+      .eq('batch_id', batchId);
+
+    if (scheduledClassesError) {
+      console.log('Note: No scheduled classes to delete or error:', scheduledClassesError.message);
+    }
+
+    // 5. Delete elective buckets (will cascade delete subjects via course_group_id)
+    const { error: bucketsError } = await supabase
+      .from('elective_buckets')
+      .delete()
+      .eq('batch_id', batchId);
+
+    if (bucketsError) {
+      console.log('Note: No elective buckets to delete or error:', bucketsError.message);
+    }
+
+    // 6. Finally, delete the batch itself
+    const { error: deleteError } = await supabase
+      .from('batches')
+      .delete()
+      .eq('id', batchId);
+
+    if (deleteError) {
+      console.error('Delete error:', deleteError);
+      return NextResponse.json({ 
+        error: 'Failed to delete batch', 
+        details: deleteError.message 
+      }, { status: 500 });
+    }
+
+    return NextResponse.json({ 
+      success: true,
+      message: `Batch "${batch.name}" and all related data (elective buckets, subjects) have been deleted successfully`
+    });
+
+  } catch (error) {
+    console.error('Server error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
