@@ -36,13 +36,14 @@ export async function GET(request: NextRequest) {
           .single();
         
         if (!error && studentUser) {
+          const colleges = studentUser.colleges as any;
           user = {
             id: studentUser.id,
             email: studentUser.email,
             name: `${studentUser.first_name} ${studentUser.last_name}`,
             role: studentUser.role,
             college_id: studentUser.college_id,
-            college_name: Array.isArray(studentUser.colleges) ? studentUser.colleges[0]?.name : studentUser.colleges?.name
+            college_name: Array.isArray(colleges) ? colleges[0]?.name : colleges?.name
           };
           console.log('Fallback authentication successful for student');
         }
@@ -243,6 +244,10 @@ export async function POST(request: NextRequest) {
       batchData = newBatch;
     }
 
+    if (!batchData) {
+      return NextResponse.json({ error: 'Failed to get or create batch' }, { status: 500 });
+    }
+
     // Create the new bucket
     const { data: newBucket, error: bucketError } = await supabase
       .from('elective_buckets')
@@ -357,6 +362,10 @@ async function handleBulkSave(request: NextRequest, user: any, body: any) {
       } else {
         return NextResponse.json({ error: 'No suitable department found for creating batch' }, { status: 500 });
       }
+    }
+
+    if (!batchData) {
+      return NextResponse.json({ error: 'Failed to get or create batch for curriculum' }, { status: 500 });
     }
 
     // Delete existing buckets for this batch
