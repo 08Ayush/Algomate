@@ -140,6 +140,7 @@ export default function AdminDashboard() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [courseFilter, setCourseFilter] = useState<string>('all');
+  const [courseSemesterFilter, setCourseSemesterFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -985,8 +986,9 @@ export default function AdminDashboard() {
       (s.departments?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
     
     const matchesSemester = selectedSemester === 'all' || s.semester === selectedSemester;
+    const matchesCourse = courseSemesterFilter === 'all' || s.course_id === courseSemesterFilter;
     
-    return matchesSearch && matchesSemester;
+    return matchesSearch && matchesSemester && matchesCourse;
   });
 
   const filteredCourses = courses.filter(c =>
@@ -1923,6 +1925,18 @@ export default function AdminDashboard() {
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-4">
                   <h2 className="text-xl font-semibold text-gray-900">Subjects</h2>
+                  <select
+                    value={courseSemesterFilter}
+                    onChange={(e) => setCourseSemesterFilter(e.target.value)}
+                    className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All Courses</option>
+                    {courses.map(course => (
+                      <option key={course.id} value={course.id}>
+                        {course.code} - {course.title}
+                      </option>
+                    ))}
+                  </select>
                   <select
                     value={selectedSemester}
                     onChange={(e) => setSelectedSemester(e.target.value === 'all' ? 'all' : Number(e.target.value))}
