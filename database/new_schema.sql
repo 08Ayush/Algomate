@@ -325,6 +325,7 @@ CREATE TABLE time_slots (
     preference_score INT DEFAULT 5 CHECK (preference_score BETWEEN 1 AND 10),
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT valid_time_slot CHECK (end_time > start_time),
     CONSTRAINT reasonable_duration CHECK (
         EXTRACT(EPOCH FROM (end_time - start_time)) / 60 BETWEEN 30 AND 240
@@ -343,6 +344,7 @@ CREATE TABLE faculty_qualified_subjects (
     can_handle_lab BOOLEAN DEFAULT TRUE,
     can_handle_tutorial BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(faculty_id, subject_id)
 );
 
@@ -788,12 +790,15 @@ CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECU
 CREATE TRIGGER update_subjects_updated_at BEFORE UPDATE ON subjects FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_classrooms_updated_at BEFORE UPDATE ON classrooms FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_batches_updated_at BEFORE UPDATE ON batches FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_time_slots_updated_at BEFORE UPDATE ON time_slots FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_faculty_qualified_subjects_updated_at BEFORE UPDATE ON faculty_qualified_subjects FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_faculty_availability_updated_at BEFORE UPDATE ON faculty_availability FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_batch_subjects_updated_at BEFORE UPDATE ON batch_subjects FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_constraint_rules_updated_at BEFORE UPDATE ON constraint_rules FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_generation_tasks_updated_at BEFORE UPDATE ON timetable_generation_tasks FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_generated_timetables_updated_at BEFORE UPDATE ON generated_timetables FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_scheduled_classes_updated_at BEFORE UPDATE ON scheduled_classes FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_student_batch_enrollment_updated_at BEFORE UPDATE ON student_batch_enrollment FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_elective_buckets_updated_at BEFORE UPDATE ON elective_buckets FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Apply special event flag trigger

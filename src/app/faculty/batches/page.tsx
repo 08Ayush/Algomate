@@ -4,7 +4,32 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
 import LeftSidebar from '@/components/LeftSidebar';
-import { Users, Plus, Search, Trash2, Clock, Calendar } from 'lucide-react';
+import { Users, Search, Calendar, BookOpen, Package, ChevronDown, ChevronUp } from 'lucide-react';
+
+interface Subject {
+  id: string;
+  code: string;
+  name: string;
+  credit_value: number;
+  subject_type: string;
+  nep_category: string;
+  is_active: boolean;
+  lecture_hours?: number;
+  tutorial_hours?: number;
+  practical_hours?: number;
+  description?: string;
+}
+
+interface ElectiveBucket {
+  id: string;
+  bucket_name: string;
+  max_selection: number;
+  min_selection: number;
+  is_common_slot?: boolean;
+  created_at: string;
+  subjects: Subject[];
+  subjectCount: number;
+}
 
 interface Batch {
   id: string;
@@ -12,16 +37,35 @@ interface Batch {
   semester: number;
   academic_year: string;
   section: string;
-  division?: string;
   expected_strength: number;
   actual_strength: number;
-  max_hours_per_day: number;
-  preferred_start_time: string;
-  preferred_end_time: string;
-  department_name: string;
-  department_code: string;
-  coordinator_name?: string;
-  coordinator_email?: string;
+  course_id: string;
+  college_id: string;
+  department_id: string;
+  is_active: boolean;
+  created_at: string;
+  course?: {
+    id: string;
+    title: string;
+    code: string;
+    nature_of_course: string;
+  };
+  departments?: {
+    id: string;
+    name: string;
+    code: string;
+  };
+  buckets: ElectiveBucket[];
+  bucketsCount: number;
+  totalSubjects: number;
+}
+
+interface Statistics {
+  totalBatches: number;
+  totalBuckets: number;
+  totalSubjects: number;
+  totalStudents: number;
+  bySemester: Record<number, { batches: number; buckets: number; subjects: number }>;
 }
 
 export default function BatchesPage() {
@@ -29,22 +73,16 @@ export default function BatchesPage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [batches, setBatches] = useState<Batch[]>([]);
-  const [statistics, setStatistics] = useState({
+  const [statistics, setStatistics] = useState<Statistics>({
     totalBatches: 0,
+    totalBuckets: 0,
+    totalSubjects: 0,
     totalStudents: 0,
-    semesterGroups: {}
+    bySemester: {}
   });
   const [searchQuery, setSearchQuery] = useState('');
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [newBatch, setNewBatch] = useState({
-    name: '',
-    semester: 1,
-    academic_year: '2025-26',
-    section: 'A',
-    division: '',
-    expected_strength: 60,
-    actual_strength: 60
-  });
+  const [expandedBatches, setExpandedBatches] = useState<Set<string>>(new Set());
+  const [expandedBuckets, setExpandedBuckets] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -76,37 +114,53 @@ export default function BatchesPage() {
     }
   }, [router]);
 
-  // Fetch batches across all departments (creator/publisher can view all)
+  // Fetch NEP batches with buckets and subjects
   const fetchBatches = async () => {
     try {
       if (!user) return;
       
-      // Use admin API for cross-department access
-      const authToken = Buffer.from(JSON.stringify(user)).toString('base64');
-      const response = await fetch('/api/admin/batches', {
-        headers: {
-          'Authorization': `Bearer ${authToken}`
-        }
+      console.log('📋 Fetching batches for faculty:', {
+        userId: user.id,
+        collegeId: user.college_id,
+        courseId: user.course_id,
+        facultyType: user.faculty_type
       });
       
-      const result = await response.json();
-      console.log('Batches API Result:', result);
+      const response = await fetch(`/api/faculty/nep-batches?userId=${user.id}`);
       
-      if (result.batches) {
-        const batchesData = result.batches;
-        setBatches(batchesData);
+      if (!response.ok) {
+        throw new Error('Failed to fetch batches');
+      }
+      
+      const result = await response.json();
+      console.log('🔥 NEP Batches API Result:', JSON.stringify(result, null, 2));
+      console.log('🔥 Number of batches:', result.batches?.length);
+      
+      // Debug each batch's buckets and subjects
+      result.batches?.forEach((batch: any, batchIdx: number) => {
+        console.log(`📦 Batch ${batchIdx + 1}: ${batch.course?.code}-${batch.section} (Sem ${batch.semester})`);
+        console.log(`   - Buckets array:`, batch.buckets);
+        console.log(`   - Buckets count field: ${batch.bucketsCount}`);
+        console.log(`   - Buckets length: ${batch.buckets?.length}`);
+        console.log(`   - Total subjects: ${batch.totalSubjects}`);
         
-        // Calculate statistics
-        const semesterGroups = batchesData.reduce((acc: any, batch: any) => {
-          const sem = batch.semester || 1;
-          acc[sem] = (acc[sem] || 0) + 1;
-          return acc;
-        }, {});
-        
-        setStatistics({
-          totalBatches: batchesData.length,
-          totalStudents: batchesData.reduce((sum: number, b: any) => sum + (b.actual_strength || 0), 0),
-          semesterGroups
+        batch.buckets?.forEach((bucket: any, bucketIdx: number) => {
+          console.log(`   🎯 Bucket ${bucketIdx + 1}: ${bucket.bucket_name}`);
+          console.log(`      - Subjects: ${bucket.subjects?.length || 0}`);
+          bucket.subjects?.forEach((subject: any) => {
+            console.log(`         ✓ ${subject.code}: ${subject.name} (${subject.nep_category})`);
+          });
+        });
+      });
+      
+      if (result.success) {
+        setBatches(result.batches || []);
+        setStatistics(result.statistics || {
+          totalBatches: 0,
+          totalBuckets: 0,
+          totalSubjects: 0,
+          totalStudents: 0,
+          bySemester: {}
         });
       }
     } catch (error) {
@@ -115,68 +169,33 @@ export default function BatchesPage() {
   };
 
   useEffect(() => {
-    fetchBatches();
+    if (user) {
+      fetchBatches();
+    }
   }, [user]);
 
-  // Handle add batch
-  const handleAddBatch = async () => {
-    try {
-      const response = await fetch('/api/batches', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...newBatch,
-          department_code: 'CSE'
-        })
-      });
-
-      const result = await response.json();
-      
-      if (result.success) {
-        alert('Batch added successfully!');
-        setShowAddModal(false);
-        setNewBatch({
-          name: '',
-          semester: 1,
-          academic_year: '2025-26',
-          section: 'A',
-          division: '',
-          expected_strength: 60,
-          actual_strength: 60
-        });
-        fetchBatches();
+  const toggleBatchExpansion = (batchId: string) => {
+    setExpandedBatches(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(batchId)) {
+        newSet.delete(batchId);
       } else {
-        alert(`Error: ${result.error}`);
+        newSet.add(batchId);
       }
-    } catch (error) {
-      console.error('Error adding batch:', error);
-      alert('Failed to add batch');
-    }
+      return newSet;
+    });
   };
 
-  // Handle delete batch
-  const handleDeleteBatch = async (batchId: string, batchName: string) => {
-    if (!confirm(`Are you sure you want to delete batch "${batchName}"?`)) {
-      return;
-    }
-
-    try {
-      const response = await fetch(`/api/batches?id=${batchId}`, {
-        method: 'DELETE'
-      });
-
-      const result = await response.json();
-      
-      if (result.success) {
-        alert('Batch deleted successfully!');
-        fetchBatches();
+  const toggleBucketExpansion = (bucketId: string) => {
+    setExpandedBuckets(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(bucketId)) {
+        newSet.delete(bucketId);
       } else {
-        alert(`Error: ${result.error}`);
+        newSet.add(bucketId);
       }
-    } catch (error) {
-      console.error('Error deleting batch:', error);
-      alert('Failed to delete batch');
-    }
+      return newSet;
+    });
   };
 
   if (loading) {
@@ -196,7 +215,9 @@ export default function BatchesPage() {
     const matchesSearch = searchQuery === '' ||
       batch.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       batch.section.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      batch.semester.toString().includes(searchQuery);
+      batch.semester.toString().includes(searchQuery) ||
+      batch.course?.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      batch.course?.title.toLowerCase().includes(searchQuery.toLowerCase());
     
     return matchesSearch;
   });
@@ -211,24 +232,17 @@ export default function BatchesPage() {
             {/* Page Header */}
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Student Batches</h1>
-                <p className="text-gray-600 dark:text-gray-300">Computer Science Engineering Department</p>
+                <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">NEP 2020 Batches</h1>
+                <p className="text-gray-600 dark:text-gray-300">View batches with elective buckets and subjects</p>
               </div>
-              <button 
-                onClick={() => setShowAddModal(true)}
-                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <Plus className="w-5 h-5 mr-2" />
-                Add Batch
-              </button>
             </div>
 
             {/* Statistics Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Batches</h3>
-                  <Users className="w-5 h-5 text-gray-400" />
+                  <Users className="w-5 h-5 text-blue-500" />
                 </div>
                 <p className="text-3xl font-bold text-gray-900 dark:text-white">{statistics.totalBatches}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Active batches</p>
@@ -236,20 +250,29 @@ export default function BatchesPage() {
 
               <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Students</h3>
-                  <Users className="w-5 h-5 text-gray-400" />
+                  <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Elective Buckets</h3>
+                  <Package className="w-5 h-5 text-purple-500" />
                 </div>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">{statistics.totalStudents}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Enrolled students</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">{statistics.totalBuckets}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Total buckets</p>
               </div>
 
               <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Academic Year</h3>
-                  <Calendar className="w-5 h-5 text-gray-400" />
+                  <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Subjects</h3>
+                  <BookOpen className="w-5 h-5 text-green-500" />
                 </div>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">2025-26</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Current session</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">{statistics.totalSubjects}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">In all buckets</p>
+              </div>
+
+              <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Students</h3>
+                  <Users className="w-5 h-5 text-orange-500" />
+                </div>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">{statistics.totalStudents}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Enrolled students</p>
               </div>
             </div>
 
@@ -261,7 +284,7 @@ export default function BatchesPage() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search batches by name, semester, or section..."
+                  placeholder="Search batches by name, semester, course code, or section..."
                   className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
                 />
               </div>
@@ -277,175 +300,240 @@ export default function BatchesPage() {
               </span>
             </div>
 
-            {/* Batches Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Batches List */}
+            <div className="space-y-4">
               {filteredBatches.length === 0 ? (
-                <div className="col-span-full bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-12 text-center">
-                  <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500 dark:text-gray-400">No batches found</p>
+                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-12 text-center">
+                  <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <p className="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-2">No NEP Batches Available</p>
+                  <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto">
+                    NEP 2020 batches with elective buckets will appear here once they are created from the Admin Dashboard.
+                  </p>
+                  <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg max-w-lg mx-auto text-left">
+                    <p className="text-sm text-blue-900 dark:text-blue-200 font-semibold mb-2">📝 How to create NEP batches:</p>
+                    <ol className="text-sm text-blue-800 dark:text-blue-300 space-y-1 list-decimal list-inside">
+                      <li>Go to <strong>Admin Dashboard</strong></li>
+                      <li>Navigate to <strong>NEP Curriculum Builder</strong></li>
+                      <li>Select your course and semester</li>
+                      <li>Create <strong>Elective Buckets</strong> and assign subjects</li>
+                      <li>Click <strong>Save Curriculum</strong></li>
+                    </ol>
+                    <p className="text-xs text-blue-700 dark:text-blue-400 mt-3">
+                      Batches are automatically created when you save the curriculum with elective buckets.
+                    </p>
+                  </div>
                 </div>
               ) : (
-                filteredBatches.map((batch) => (
-                  <div key={batch.id} className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6 hover:shadow-md transition-shadow">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">{batch.name}</h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                          Semester {batch.semester} - Section {batch.section}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => handleDeleteBatch(batch.id, batch.name)}
-                        className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                filteredBatches.map((batch) => {
+                  const isExpanded = expandedBatches.has(batch.id);
+                  
+                  return (
+                    <div key={batch.id} className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden">
+                      {/* Batch Header */}
+                      <div 
+                        className="p-6 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
+                        onClick={() => toggleBatchExpansion(batch.id)}
                       >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600 dark:text-gray-400">Students</span>
-                        <div className="flex items-center text-gray-900 dark:text-white">
-                          <Users className="w-4 h-4 mr-1" />
-                          <span className="font-medium">{batch.actual_strength}/{batch.expected_strength}</span>
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+                                {batch.course?.code || batch.name} - Section {batch.section}
+                              </h3>
+                              <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-sm font-medium rounded-full">
+                                Semester {batch.semester}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                              {batch.course?.title} • {batch.academic_year}
+                            </p>
+                            <div className="flex items-center gap-6 text-sm">
+                              <div className="flex items-center gap-2">
+                                <Users className="w-4 h-4 text-gray-400" />
+                                <span className="text-gray-600 dark:text-gray-400">
+                                  {batch.actual_strength}/{batch.expected_strength} Students
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Package className="w-4 h-4 text-purple-500" />
+                                <span className="text-gray-600 dark:text-gray-400">
+                                  {batch.bucketsCount} Buckets
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <BookOpen className="w-4 h-4 text-green-500" />
+                                <span className="text-gray-600 dark:text-gray-400">
+                                  {batch.totalSubjects} Subjects
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <button className="p-2 hover:bg-gray-100 dark:hover:bg-slate-600 rounded-lg transition-colors">
+                            {isExpanded ? (
+                              <ChevronUp className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                            ) : (
+                              <ChevronDown className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                            )}
+                          </button>
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600 dark:text-gray-400">Academic Year</span>
-                        <span className="font-medium text-gray-900 dark:text-white">{batch.academic_year}</span>
-                      </div>
+                      {/* Expanded Content - Buckets */}
+                      {isExpanded && (
+                        <div className="border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-900/50 p-6">
+                          {batch.buckets.length === 0 ? (
+                            <div className="text-center py-8">
+                              <Package className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                              <p className="text-gray-600 dark:text-gray-400 font-medium mb-2">
+                                No elective buckets for Semester {batch.semester}
+                              </p>
+                              <p className="text-sm text-gray-500 dark:text-gray-500">
+                                Admin needs to create buckets in <strong>NEP Curriculum Builder</strong> for<br/>
+                                <span className="text-blue-600 dark:text-blue-400">{batch.course?.title} - Semester {batch.semester}</span>
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                                Elective Buckets:
+                              </h4>
+                              {batch.buckets.map((bucket) => {
+                                const isBucketExpanded = expandedBuckets.has(bucket.id);
+                                
+                                return (
+                                  <div key={bucket.id} className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700">
+                                    <div 
+                                      className="p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleBucketExpansion(bucket.id);
+                                      }}
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex-1">
+                                          <div className="flex items-center gap-2">
+                                            <Package className="w-4 h-4 text-purple-500" />
+                                            <h5 className="font-semibold text-gray-900 dark:text-white">
+                                              {bucket.bucket_name}
+                                            </h5>
+                                            <span className="px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-medium rounded">
+                                              {bucket.subjectCount} subjects
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-3 mt-1">
+                                            <p className="text-xs text-gray-500 dark:text-gray-500">
+                                              Select {bucket.min_selection} to {bucket.max_selection} subjects
+                                            </p>
+                                            {bucket.is_common_slot && (
+                                              <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-xs rounded">
+                                                Common Slot
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <button className="p-1 hover:bg-gray-100 dark:hover:bg-slate-600 rounded transition-colors">
+                                          {isBucketExpanded ? (
+                                            <ChevronUp className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                                          ) : (
+                                            <ChevronDown className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                                          )}
+                                        </button>
+                                      </div>
+                                    </div>
 
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600 dark:text-gray-400">Hours/Day</span>
-                        <div className="flex items-center text-gray-900 dark:text-white">
-                          <Clock className="w-4 h-4 mr-1" />
-                          <span className="font-medium">{batch.max_hours_per_day}</span>
-                        </div>
-                      </div>
+                                    {/* Expanded Bucket - Subjects */}
+                                    {isBucketExpanded && (
+                                      <div className="border-t border-gray-200 dark:border-slate-700 p-4 bg-gray-50 dark:bg-slate-900/50">
+                                        {bucket.subjects.length === 0 ? (
+                                          <p className="text-center text-gray-500 dark:text-gray-400 py-4 text-sm">
+                                            No subjects in this bucket
+                                          </p>
+                                        ) : (
+                                          <div className="space-y-3">
+                                            {/* Group subjects by NEP category */}
+                                            {(() => {
+                                              const groupedSubjects = bucket.subjects.reduce((acc, subject) => {
+                                                const category = subject.nep_category || 'OTHER';
+                                                if (!acc[category]) {
+                                                  acc[category] = [];
+                                                }
+                                                acc[category].push(subject);
+                                                return acc;
+                                              }, {} as Record<string, Subject[]>);
 
-                      {batch.coordinator_name && (
-                        <div className="pt-3 border-t border-gray-200 dark:border-slate-700">
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Class Coordinator:</p>
-                          <p className="text-sm font-medium text-gray-900 dark:text-white">{batch.coordinator_name}</p>
+                                              const categoryOrder = ['MAJOR', 'MINOR', 'CORE', 'ELECTIVE', 'SEC', 'AEC', 'VAC', 'OE', 'INTERNSHIP', 'OTHER'];
+                                              const sortedCategories = Object.keys(groupedSubjects).sort(
+                                                (a, b) => categoryOrder.indexOf(a) - categoryOrder.indexOf(b)
+                                              );
+
+                                              return sortedCategories.map(category => (
+                                                <div key={category} className="space-y-2">
+                                                  <h6 className="text-sm font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                                                    <span className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs rounded-md">
+                                                      {category}
+                                                    </span>
+                                                    <span className="text-gray-500 dark:text-gray-400 text-xs">
+                                                      ({groupedSubjects[category].length} subjects)
+                                                    </span>
+                                                  </h6>
+                                                  <div className="grid grid-cols-1 gap-2">
+                                                    {groupedSubjects[category].map((subject) => (
+                                                      <div key={subject.id} className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg p-3 hover:shadow-md transition-shadow">
+                                                        <div className="flex justify-between items-start">
+                                                          <div className="flex-1">
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                              <span className="font-mono text-xs font-bold text-blue-600 dark:text-blue-400">
+                                                                {subject.code}
+                                                              </span>
+                                                              <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-xs rounded">
+                                                                {subject.subject_type}
+                                                              </span>
+                                                            </div>
+                                                            <p className="font-bold text-sm text-gray-900 dark:text-white leading-tight mb-1">
+                                                              {subject.name}
+                                                            </p>
+                                                            <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+                                                              <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                                                {subject.credit_value || 0} credits
+                                                              </span>
+                                                              <span>•</span>
+                                                              <span>
+                                                                L: {subject.lecture_hours || 0} | T: {subject.tutorial_hours || 0} | P: {subject.practical_hours || 0}
+                                                              </span>
+                                                            </div>
+                                                            {subject.description && (
+                                                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 line-clamp-2">
+                                                                {subject.description}
+                                                              </p>
+                                                            )}
+                                                          </div>
+                                                        </div>
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                                </div>
+                                              ));
+                                            })()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
         </main>
       </div>
 
-      {/* Add Batch Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl max-w-md w-full p-6">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Add New Batch</h2>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Batch Name
-                </label>
-                <input
-                  type="text"
-                  value={newBatch.name}
-                  onChange={(e) => setNewBatch({...newBatch, name: e.target.value})}
-                  placeholder="e.g., CSE-5A"
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Semester
-                  </label>
-                  <select
-                    value={newBatch.semester}
-                    onChange={(e) => setNewBatch({...newBatch, semester: parseInt(e.target.value)})}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
-                  >
-                    {[1,2,3,4,5,6,7,8].map(sem => (
-                      <option key={sem} value={sem}>Sem {sem}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Section
-                  </label>
-                  <input
-                    type="text"
-                    value={newBatch.section}
-                    onChange={(e) => setNewBatch({...newBatch, section: e.target.value})}
-                    placeholder="A"
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Academic Year
-                </label>
-                <input
-                  type="text"
-                  value={newBatch.academic_year}
-                  onChange={(e) => setNewBatch({...newBatch, academic_year: e.target.value})}
-                  placeholder="2025-26"
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Expected Strength
-                  </label>
-                  <input
-                    type="number"
-                    value={newBatch.expected_strength}
-                    onChange={(e) => setNewBatch({...newBatch, expected_strength: parseInt(e.target.value)})}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Actual Strength
-                  </label>
-                  <input
-                    type="number"
-                    value={newBatch.actual_strength}
-                    onChange={(e) => setNewBatch({...newBatch, actual_strength: parseInt(e.target.value)})}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-4 mt-6">
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAddBatch}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                Add Batch
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Fetch user details with department and college info
+    // Fetch user details with course and college info
     const { data: userData, error: userError } = await supabase
       .from('users')
       .select(`
@@ -30,12 +30,14 @@ export async function GET(request: NextRequest) {
         role,
         faculty_type,
         current_semester,
-        department_id,
+        college_uid,
+        course_id,
         college_id,
-        department:departments!department_id (
+        course:courses!course_id (
           id,
-          name,
-          code
+          title,
+          code,
+          nature_of_course
         ),
         college:colleges!college_id (
           id,
@@ -55,76 +57,122 @@ export async function GET(request: NextRequest) {
 
     let additionalData: any = {};
 
-    // For students, fetch batch and enrollment info
+    // For students, fetch batch based on course_id and current_semester
     if (userRole === 'student') {
-      // Get student's batch enrollment
-      const { data: enrollmentData, error: enrollmentError } = await supabase
-        .from('student_batch_enrollment')
-        .select(`
-          batch_id,
-          batch:batches!batch_id (
+      console.log('🎓 Looking for batch:');
+      console.log('  Student ID:', userId);
+      console.log('  Course ID:', userData.course_id);
+      console.log('  Current Semester:', userData.current_semester);
+
+      if (userData.course_id && userData.current_semester) {
+        // Find the batch for this course and semester
+        const { data: batchData, error: batchError } = await supabase
+          .from('batches')
+          .select(`
             id,
             name,
             section,
             semester,
             academic_year,
-            actual_strength
-          )
-        `)
-        .eq('student_id', userId)
-        .eq('is_active', true)
-        .single();
+            actual_strength,
+            course_id,
+            course:courses!course_id (
+              code
+            )
+          `)
+          .eq('college_id', userData.college_id)
+          .eq('course_id', userData.course_id)
+          .eq('semester', userData.current_semester)
+          .eq('is_active', true)
+          .limit(1)
+          .single();
 
-      console.log('🎓 Batch Enrollment Query:');
-      console.log('  Student ID:', userId);
-      console.log('  Enrollment Data:', JSON.stringify(enrollmentData, null, 2));
-      console.log('  Enrollment Error:', enrollmentError);
+        console.log('  Batch Query Result:', batchData);
+        console.log('  Batch Query Error:', batchError);
 
-      if (enrollmentData && !enrollmentError) {
-        additionalData.batch = enrollmentData.batch;
-        additionalData.batchId = enrollmentData.batch_id;
-        console.log('✅ Batch data set:', additionalData.batch);
+        if (batchData && !batchError) {
+          additionalData.batch = batchData;
+          additionalData.batchId = batchData.id;
+          console.log('✅ Found batch for course + semester:', batchData.name);
+        } else {
+          console.error('❌ No batch found for course_id:', userData.course_id, 'semester:', userData.current_semester);
+          console.error('   Error:', batchError);
+        }
       } else {
-        console.error('❌ Error fetching enrollment:', enrollmentError);
+        console.error('❌ Student missing course_id or current_semester');
       }
     }
 
-    // Get faculty count for the department
-    const { count: facultyCount, error: facultyError } = await supabase
+    // Get faculty members for the course
+    const { data: facultyMembers, error: facultyError } = await supabase
       .from('users')
-      .select('id', { count: 'exact', head: true })
-      .eq('department_id', userData.department_id)
-      .eq('role', 'faculty')
-      .eq('is_active', true);
-
-    if (!facultyError) {
-      additionalData.facultyCount = facultyCount || 0;
-    }
-
-    // Get all approved events for the student's department (using actual DB schema)
-    const { data: eventsData, error: eventsError } = await supabase
-      .from('events')
       .select(`
         id,
-        title,
-        description,
-        event_type,
-        event_date,
-        event_time,
-        end_time,
-        location,
-        status,
-        created_by,
-        creator:users!events_created_by_fkey (
-          first_name,
-          last_name,
-          faculty_type
+        first_name,
+        last_name,
+        email,
+        college_uid,
+        faculty_type,
+        department_id,
+        departments:departments!users_department_id_fkey (
+          name,
+          code
         )
       `)
-      .eq('department_id', userData.department_id)
-      .in('status', ['draft', 'published'])
-      .order('event_date', { ascending: false })
-      .limit(10);
+      .eq('course_id', userData.course_id)
+      .eq('role', 'faculty')
+      .eq('is_active', true)
+      .order('first_name');
+
+    if (!facultyError && facultyMembers) {
+      additionalData.facultyMembers = facultyMembers;
+      additionalData.facultyCount = facultyMembers.length;
+    } else {
+      additionalData.facultyMembers = [];
+      additionalData.facultyCount = 0;
+    }
+
+    // Get all approved events for the student's course (via batches linked to course)
+    // First get batches for the student's course
+    const { data: courseBatches } = await supabase
+      .from('batches')
+      .select('id, department_id')
+      .eq('course_id', userData.course_id)
+      .eq('is_active', true);
+    
+    const departmentIds = [...new Set(courseBatches?.map(b => b.department_id).filter(Boolean))] || [];
+    
+    let eventsData = [];
+    let eventsError = null;
+    
+    if (departmentIds.length > 0) {
+      const { data, error } = await supabase
+        .from('events')
+        .select(`
+          id,
+          title,
+          description,
+          event_type,
+          event_date,
+          event_time,
+          end_time,
+          location,
+          status,
+          created_by,
+          creator:users!events_created_by_fkey (
+            first_name,
+            last_name,
+            faculty_type
+          )
+        `)
+        .in('department_id', departmentIds)
+        .in('status', ['draft', 'published'])
+        .order('event_date', { ascending: false })
+        .limit(10);
+      
+      eventsData = data || [];
+      eventsError = error;
+    }
 
     if (eventsError) {
       console.error('Error fetching events:', eventsError);
@@ -133,10 +181,10 @@ export async function GET(request: NextRequest) {
     // Debug logging
     console.log('🔍 Dashboard API Response Data:');
     console.log('  User ID:', userData.id);
-    console.log('  Department:', userData.department);
+    console.log('  Course:', userData.course);
     console.log('  College:', userData.college);
     console.log('  Additional Data:', JSON.stringify(additionalData, null, 2));
-    console.log('  Approved Events for Department:', eventsData?.length || 0);
+    console.log('  Approved Events for Course:', eventsData?.length || 0);
 
     return NextResponse.json({
       success: true,

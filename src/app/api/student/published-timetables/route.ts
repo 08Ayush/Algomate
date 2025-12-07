@@ -9,13 +9,13 @@ const supabase = createClient(
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const departmentId = searchParams.get('departmentId');
+    const courseId = searchParams.get('courseId');
     const semester = searchParams.get('semester');
     const batchId = searchParams.get('batchId');
 
-    if (!departmentId) {
+    if (!courseId) {
       return NextResponse.json(
-        { error: 'Department ID is required' },
+        { error: 'Course ID is required' },
         { status: 400 }
       );
     }
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
           section,
           semester,
           academic_year,
-          department_id
+          course_id
         )
       `)
       .eq('status', 'published')
@@ -65,16 +65,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Filter timetables by department (through batch)
+    // Filter timetables by course (through batch)
     const filteredTimetables = timetables?.filter(
-      (tt: any) => tt.batches?.department_id === departmentId
+      (tt: any) => tt.batches?.course_id === courseId
     ) || [];
 
-    // Get all batches for the department
+    // Get all batches for the course
     const { data: batchesData, error: batchesError } = await supabase
       .from('batches')
       .select('id, name, section, semester, academic_year')
-      .eq('department_id', departmentId)
+      .eq('course_id', courseId)
       .eq('is_active', true)
       .order('semester', { ascending: true })
       .order('section', { ascending: true });

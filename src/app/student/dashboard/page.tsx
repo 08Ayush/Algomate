@@ -20,12 +20,27 @@ import {
 } from "lucide-react";
 
 // Types
+interface FacultyMember {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  college_uid: string;
+  faculty_type?: string;
+  department_id: string;
+  departments?: {
+    name: string;
+    code: string;
+  };
+}
+
 interface DashboardData {
   user: any;
   additionalData: {
     batch?: any;
     batchId?: string;
     facultyCount?: number;
+    facultyMembers?: FacultyMember[];
   };
   events: any[];
 }
@@ -79,7 +94,8 @@ interface Subject {
   id: string;
   code: string;
   name: string;
-  credits: number;
+  credits?: number;
+  credit_value?: number;
   nep_category: string;
   subject_type: string;
   course_group_id: string;
@@ -109,6 +125,7 @@ export default function StudentDashboard() {
   const [timeSlots, setTimeSlots] = useState<string[]>([]);
   const [days] = useState(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
   const [loadingTimetable, setLoadingTimetable] = useState(false);
+  const [showFacultyList, setShowFacultyList] = useState(false);
 
   // NEP Curriculum Selection States
   const [electiveBuckets, setElectiveBuckets] = useState<ElectiveBucket[]>([]);
@@ -165,11 +182,28 @@ export default function StudentDashboard() {
       }
       
       const data = await response.json();
+      console.log('📥 Dashboard data received:', data);
       setDashboardData(data);
 
-      // Fetch published timetables for the department
+      // Update localStorage with complete user data including course info
+      if (data.user) {
+        const updatedUser = {
+          ...user,
+          college_uid: data.user.college_uid,
+          current_semester: data.user.current_semester || data.additionalData?.batch?.semester,
+          course: data.user.course,
+          course_id: data.user.course_id
+        };
+        console.log('🔄 Updating user with course_id:', updatedUser.course_id);
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        setUser(updatedUser);
+      } else {
+        console.warn('⚠️ No user data in API response, keeping original user');
+      }
+
+      // Fetch published timetables for the course
       const timetablesResponse = await fetch(
-        `/api/student/published-timetables?departmentId=${user.department_id}${user.role === 'student' && data.additionalData.batch ? `&semester=${data.additionalData.batch.semester}` : ''}`
+        `/api/student/published-timetables?courseId=${user.course_id}${user.role === 'student' && data.additionalData.batch ? `&semester=${data.additionalData.batch.semester}` : ''}`
       );
       
       if (timetablesResponse.ok) {
@@ -226,32 +260,63 @@ export default function StudentDashboard() {
 
   // NEP Curriculum Functions
   const fetchNepCurriculumData = async (user: any) => {
-    if (!dashboardData?.additionalData?.batch) return;
+    console.log('🎯 fetchNepCurriculumData called with user:', {
+      userId: user.id,
+      course_id: user.course_id,
+      email: user.email,
+      role: user.role
+    });
+    
+    if (!dashboardData?.additionalData?.batch) {
+      console.error('❌ No batch data found in dashboardData:', dashboardData);
+      return;
+    }
     
     try {
       setLoadingBuckets(true);
       
       // Get user's current semester from batch
       const semester = dashboardData.additionalData.batch.semester;
+      const batchInfo = dashboardData.additionalData.batch;
       
-      // Fetch elective buckets for student's semester
+      console.log('📚 Fetching buckets with params:', {
+        courseId: user.course_id,
+        semester: semester,
+        studentId: user.id,
+        batchInfo: batchInfo
+      });
+      
+      // Fetch elective buckets for student's semester using courseId from user
       const bucketsResponse = await fetch(
-        `/api/nep/buckets?course=${encodeURIComponent('B.Ed')}&semester=${semester}&studentId=${user.id}`
+        `/api/nep/buckets?courseId=${user.course_id}&semester=${semester}&studentId=${user.id}`
       );
+      
+      console.log('📡 Buckets API response status:', bucketsResponse.status);
       
       if (bucketsResponse.ok) {
         const bucketsData = await bucketsResponse.json();
+        console.log('✅ Buckets data received:', {
+          count: Array.isArray(bucketsData) ? bucketsData.length : 0,
+          data: bucketsData
+        });
+        
         setElectiveBuckets(bucketsData || []);
         
         // Extract subjects from buckets response (subjects are already included)
         const subjectsMap = (bucketsData || []).reduce((acc: any, bucket: any) => {
           acc[bucket.id] = bucket.subjects || [];
+          console.log(`  Bucket "${bucket.bucket_name}" has ${bucket.subjects?.length || 0} subjects`);
           return acc;
         }, {} as { [bucketId: string]: Subject[] });
         
         setBucketSubjects(subjectsMap);
-        console.log('Loaded buckets with subjects:', bucketsData.length, 'buckets');
-        console.log('Subjects map:', subjectsMap);
+        console.log('✅ Final state:', {
+          bucketsCount: bucketsData.length,
+          totalSubjects: Object.values(subjectsMap).reduce((sum: number, subjects: any) => sum + subjects.length, 0)
+        });
+      } else {
+        const errorData = await bucketsResponse.json();
+        console.error('❌ Buckets API error:', errorData);
       }
       
       // Fetch student's existing selections
@@ -525,23 +590,31 @@ export default function StudentDashboard() {
             </p>
           </div>
           <div className="text-right">
-            <div className="text-sm text-gray-500 dark:text-gray-400">Your Department</div>
+            <div className="text-sm text-gray-500 dark:text-gray-400">Your Course</div>
             <Badge className="bg-blue-500 text-white mt-1">
-              {dashboardData?.user.department?.code || 'N/A'}
+              {dashboardData?.user.course?.code || 'N/A'}
             </Badge>
+            {user?.role === 'student' && dashboardData?.additionalData.batch?.semester && (
+              <div className="mt-2">
+                <div className="text-sm text-gray-500 dark:text-gray-400">Current Semester</div>
+                <Badge className="bg-green-500 text-white mt-1">
+                  Semester {dashboardData.additionalData.batch.semester}
+                </Badge>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Department Info Card */}
+      {/* Course Info Card */}
       <Card className="border-blue-200 dark:border-blue-800">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <BookOpen className="h-5 w-5 text-blue-600" />
-            {dashboardData?.user.department?.name || 'Department'}
+            {dashboardData?.user.course?.title || 'Course'}
           </CardTitle>
           <div className="text-sm text-gray-600 dark:text-gray-300">
-            {dashboardData?.user.college?.name || 'College'}
+            {dashboardData?.user.college?.name || 'College'} • {dashboardData?.user.course?.nature_of_course || 'Program'}
           </div>
         </CardHeader>
         <CardContent>
@@ -556,7 +629,9 @@ export default function StudentDashboard() {
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-green-600">
-                    {dashboardData?.additionalData.batch?.name && dashboardData?.additionalData.batch?.section 
+                    {dashboardData?.additionalData.batch?.course?.code
+                      ? `${dashboardData.additionalData.batch.course.code}-${dashboardData.additionalData.batch.section || 'A'}`
+                      : dashboardData?.additionalData.batch?.name && dashboardData?.additionalData.batch?.section 
                       ? `${dashboardData.additionalData.batch.name} ${dashboardData.additionalData.batch.section}`
                       : '-'}
                   </div>
@@ -564,7 +639,7 @@ export default function StudentDashboard() {
                 </div>
                 <div className="text-center">
                   <div className="text-2xl font-bold text-purple-600">
-                    {user.email?.split('@')[0]?.toUpperCase() || '-'}
+                    {dashboardData?.user.college_uid?.toUpperCase() || user.college_uid?.toUpperCase() || user.email?.split('@')[0]?.toUpperCase() || '-'}
                   </div>
                   <div className="text-sm text-gray-500">UID</div>
                 </div>
@@ -593,12 +668,59 @@ export default function StudentDashboard() {
               </>
             )}
             <div className="text-center">
-              <div className="text-2xl font-bold text-orange-600">
+              <div className="text-2xl font-bold text-orange-600 cursor-pointer hover:text-orange-700 transition-colors" onClick={() => setShowFacultyList(!showFacultyList)}>
                 {dashboardData?.additionalData.facultyCount || 0}
               </div>
-              <div className="text-sm text-gray-500">Faculty Members</div>
+              <div className="text-sm text-gray-500">
+                Faculty Members
+                <button 
+                  onClick={() => setShowFacultyList(!showFacultyList)}
+                  className="ml-1 text-xs text-blue-600 hover:text-blue-700"
+                >
+                  {showFacultyList ? '▼' : '▶'}
+                </button>
+              </div>
             </div>
           </div>
+          
+          {/* Faculty Members List */}
+          {showFacultyList && dashboardData?.additionalData.facultyMembers && dashboardData.additionalData.facultyMembers.length > 0 && (
+            <div className="mt-6 pt-6 border-t">
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <GraduationCap className="h-5 w-5 text-orange-600" />
+                Faculty Members ({dashboardData.additionalData.facultyCount})
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {dashboardData.additionalData.facultyMembers.map((faculty: FacultyMember) => (
+                  <div key={faculty.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:shadow-md transition-shadow">
+                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white font-semibold">
+                      {faculty.first_name.charAt(0)}{faculty.last_name.charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
+                        {faculty.first_name} {faculty.last_name}
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                        {faculty.email}
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        {faculty.faculty_type && (
+                          <Badge variant="outline" className="text-xs py-0 px-1">
+                            {faculty.faculty_type}
+                          </Badge>
+                        )}
+                        {faculty.departments && (
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            {faculty.departments.code}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -22,21 +22,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Student not found' }, { status: 404 });
     }
 
-    // Get department data
-    const { data: department, error: departmentError } = await supabase
-      .from('departments')
+    // Get course data
+    const { data: course, error: courseError } = await supabase
+      .from('courses')
       .select('*')
-      .eq('id', student.department_id)
+      .eq('id', student.course_id)
       .single();
 
-    if (departmentError) {
-      console.error('Department fetch error:', departmentError);
-      return NextResponse.json({ error: 'Department not found' }, { status: 404 });
+    if (courseError) {
+      console.error('Course fetch error:', courseError);
+      return NextResponse.json({ error: 'Course not found' }, { status: 404 });
     }
 
     return NextResponse.json({
       student,
-      department
+      course
     });
 
   } catch (error) {

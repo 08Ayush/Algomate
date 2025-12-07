@@ -2026,33 +2026,33 @@ export default function AdminDashboard() {
                     <form onSubmit={handleSubjectSubmit}>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">Department *</label>
+                          <label className="block text-sm font-medium text-gray-700">Course *</label>
                           <select
                             required
-                            value={subjectForm.department_id}
-                            onChange={(e) => setSubjectForm({...subjectForm, department_id: e.target.value})}
+                            value={subjectForm.course_id}
+                            onChange={(e) => setSubjectForm({...subjectForm, course_id: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                           >
-                            <option value="">Select Department</option>
-                            {departments.map(dept => (
-                              <option key={dept.id} value={dept.id}>
-                                {dept.name} ({dept.code})
+                            <option value="">Select Course</option>
+                            {courses.map(course => (
+                              <option key={course.id} value={course.id}>
+                                {course.title} ({course.code})
                               </option>
                             ))}
                           </select>
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">Course</label>
+                          <label className="block text-sm font-medium text-gray-700">Department (Optional)</label>
                           <select
-                            value={subjectForm.course_id}
-                            onChange={(e) => setSubjectForm({...subjectForm, course_id: e.target.value})}
+                            value={subjectForm.department_id}
+                            onChange={(e) => setSubjectForm({...subjectForm, department_id: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                           >
-                            <option value="">Select Course (Optional)</option>
-                            {courses.map(course => (
-                              <option key={course.id} value={course.id}>
-                                {course.title} ({course.code})
+                            <option value="">None (No Department)</option>
+                            {departments.map(dept => (
+                              <option key={dept.id} value={dept.id}>
+                                {dept.name} ({dept.code})
                               </option>
                             ))}
                           </select>
@@ -2243,18 +2243,18 @@ export default function AdminDashboard() {
                               }`}>
                                 {subject.subject_type}
                               </span>
-                              {subject.category && (
+                              {subject.nep_category && (
                                 <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                  subject.category === 'MAJOR' ? 'bg-indigo-100 text-indigo-800' :
-                                  subject.category === 'MINOR' ? 'bg-pink-100 text-pink-800' :
-                                  subject.category === 'CORE' ? 'bg-cyan-100 text-cyan-800' :
-                                  subject.category === 'MULTIDISCIPLINARY' ? 'bg-teal-100 text-teal-800' :
-                                  subject.category === 'AEC' ? 'bg-orange-100 text-orange-800' :
-                                  subject.category === 'VAC' ? 'bg-lime-100 text-lime-800' :
-                                  subject.category === 'PEDAGOGY' ? 'bg-amber-100 text-amber-800' :
+                                  subject.nep_category === 'MAJOR' ? 'bg-indigo-100 text-indigo-800' :
+                                  subject.nep_category === 'MINOR' ? 'bg-pink-100 text-pink-800' :
+                                  subject.nep_category === 'CORE' ? 'bg-cyan-100 text-cyan-800' :
+                                  subject.nep_category === 'MULTIDISCIPLINARY' ? 'bg-teal-100 text-teal-800' :
+                                  subject.nep_category === 'AEC' ? 'bg-orange-100 text-orange-800' :
+                                  subject.nep_category === 'VAC' ? 'bg-lime-100 text-lime-800' :
+                                  subject.nep_category === 'PEDAGOGY' ? 'bg-amber-100 text-amber-800' :
                                   'bg-rose-100 text-rose-800'
                                 }`}>
-                                  {subject.category}
+                                  {subject.nep_category}
                                 </span>
                               )}
                               <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -2269,8 +2269,8 @@ export default function AdminDashboard() {
                               {subject.departments && (
                                 <span className="mr-4">🏢 {subject.departments.name}</span>
                               )}
-                              {subject.courses && (
-                                <span className="mr-4">🎓 {subject.courses.code}</span>
+                              {subject.course_id && courses.find(c => c.id === subject.course_id) && (
+                                <span className="mr-4">🎓 {courses.find(c => c.id === subject.course_id)?.code}</span>
                               )}
                             </div>
                             <p className="mt-2 text-xs text-gray-500">

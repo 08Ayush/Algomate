@@ -16,8 +16,14 @@ interface UserData {
   role: 'admin' | 'college_admin' | 'faculty' | 'student';
   faculty_type?: 'creator' | 'publisher' | 'general' | 'guest';
   department_id?: string;
+  course_id?: string;
+  current_semester?: number;
   departments?: {
     name: string;
+    code: string;
+  };
+  course?: {
+    title: string;
     code: string;
   };
 }
@@ -209,8 +215,25 @@ export function Header() {
                         <p className="text-sm font-mono font-semibold">{user.college_uid}</p>
                       </div>
 
-                      {/* Department Info - Only show for non-admin users */}
-                      {user.role !== 'admin' && user.role !== 'college_admin' && user.departments && (
+                      {/* Course Info - For Students */}
+                      {user.role === 'student' && user.course && (
+                        <div className="mt-2 p-2 bg-muted/50 rounded-md">
+                          <p className="text-xs text-muted-foreground">Course</p>
+                          <p className="text-sm font-semibold">{user.course.title}</p>
+                          <p className="text-xs text-muted-foreground">{user.course.code}</p>
+                        </div>
+                      )}
+
+                      {/* Semester Info - For Students */}
+                      {user.role === 'student' && user.current_semester && (
+                        <div className="mt-2 p-2 bg-muted/50 rounded-md">
+                          <p className="text-xs text-muted-foreground">Current Semester</p>
+                          <p className="text-sm font-semibold">Semester {user.current_semester}</p>
+                        </div>
+                      )}
+
+                      {/* Department Info - Only show for non-admin, non-student users */}
+                      {user.role !== 'admin' && user.role !== 'college_admin' && user.role !== 'student' && user.departments && (
                         <div className="mt-2 p-2 bg-muted/50 rounded-md">
                           <p className="text-xs text-muted-foreground">Department</p>
                           <p className="text-sm font-semibold">{user.departments.name}</p>
