@@ -15,6 +15,7 @@ import {
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { Trash2 } from 'lucide-react';
 
 
 // Types
@@ -117,8 +118,10 @@ function DroppableBucket({
         </div>
         <button
           onClick={() => onDeleteBucket(bucket.id)}
-          className="text-red-600 hover:text-red-800 text-sm font-medium"
+          className="flex items-center gap-1 px-3 py-1.5 text-red-600 hover:text-white hover:bg-red-600 border border-red-600 rounded-md text-sm font-medium transition-colors"
+          title="Delete this bucket"
         >
+          <Trash2 className="w-4 h-4" />
           Delete
         </button>
       </div>
@@ -202,6 +205,7 @@ export default function CurriculumBuilder({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -371,7 +375,7 @@ export default function CurriculumBuilder({
         const alreadyInBucket = targetBucket.subjects.some((s) => s.id === activeId);
         
         if (!alreadyInBucket) {
-          // Move subject to bucket
+          // Update local state immediately for responsiveness
           setBuckets((prev) =>
             prev.map((bucket) =>
               bucket.id === targetBucket!.id
@@ -380,6 +384,14 @@ export default function CurriculumBuilder({
             )
           );
           setAvailableSubjects((prev) => prev.filter((s) => s.id !== activeId));
+
+          // If it's a temporary bucket, just mark as unsaved
+          if (targetBucket.id.startsWith('temp-')) {
+            setHasUnsavedChanges(true);
+          } else {
+            // For saved buckets, save to database
+            saveSubjectToBucket(targetBucket.id, activeId, draggedSubject);
+          }
         }
       }
     }
@@ -387,54 +399,276 @@ export default function CurriculumBuilder({
     setActiveId(null);
   }
 
-  function handleRemoveSubject(bucketId: string, subjectId: string) {
-    const bucket = buckets.find((b) => b.id === bucketId);
-    const subject = bucket?.subjects.find((s) => s.id === subjectId);
+  async function saveSubjectToBucket(bucketId: string, subjectId: string, subject: Subject) {
+    try {
+      const userData = localStorage.getItem('user');
+      if (!userData) return;
 
-    if (subject) {
+      const authToken = Buffer.from(userData).toString('base64');
+      const response = await fetch(`/api/nep/buckets/${bucketId}/subjects`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ subjectIds: [subjectId] })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to add subject');
+      }
+    } catch (error) {
+      console.error('Error adding subject to bucket:', error);
+      // Revert on error
       setBuckets((prev) =>
-        prev.map((b) =>
-          b.id === bucketId ? { ...b, subjects: b.subjects.filter((s) => s.id !== subjectId) } : b
+        prev.map((bucket) =>
+          bucket.id === bucketId
+            ? { ...bucket, subjects: bucket.subjects.filter(s => s.id !== subjectId) }
+            : bucket
         )
       );
       setAvailableSubjects((prev) => [...prev, subject]);
+      alert('Failed to add subject to bucket');
     }
   }
 
-  function handleToggleCommonSlot(bucketId: string) {
+  async function handleRemoveSubject(bucketId: string, subjectId: string) {
+    const bucket = buckets.find((b) => b.id === bucketId);
+    const subject = bucket?.subjects.find((s) => s.id === subjectId);
+
+    if (!subject) return;
+
+    // Update local state immediately
     setBuckets((prev) =>
-      prev.map((b) => (b.id === bucketId ? { ...b, is_common_slot: !b.is_common_slot } : b))
+      prev.map((b) =>
+        b.id === bucketId ? { ...b, subjects: b.subjects.filter((s) => s.id !== subjectId) } : b
+      )
     );
+    setAvailableSubjects((prev) => [...prev, subject]);
+
+    // If temporary bucket, just mark as unsaved
+    if (bucketId.startsWith('temp-')) {
+      setHasUnsavedChanges(true);
+      return;
+    }
+
+    // For saved buckets, update database
+    try {
+      const userData = localStorage.getItem('user');
+      if (!userData) return;
+
+      const authToken = Buffer.from(userData).toString('base64');
+      const response = await fetch(`/api/nep/buckets/${bucketId}/subjects?subjectId=${subjectId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to remove subject');
+      }
+    } catch (error) {
+      console.error('Error removing subject from bucket:', error);
+      // Revert on error
+      setBuckets((prev) =>
+        prev.map((b) =>
+          b.id === bucketId ? { ...b, subjects: [...b.subjects, subject] } : b
+        )
+      );
+      setAvailableSubjects((prev) => prev.filter((s) => s.id !== subjectId));
+      alert('Failed to remove subject from bucket');
+    }
   }
 
-  function handleUpdateSelection(bucketId: string, min: number, max: number) {
+  async function handleToggleCommonSlot(bucketId: string) {
+    const bucket = buckets.find(b => b.id === bucketId);
+    if (!bucket) return;
+
+    const newValue = !bucket.is_common_slot;
+    
+    // Update local state immediately for responsiveness
+    setBuckets((prev) =>
+      prev.map((b) => (b.id === bucketId ? { ...b, is_common_slot: newValue } : b))
+    );
+
+    // If temporary bucket, just mark as unsaved
+    if (bucketId.startsWith('temp-')) {
+      setHasUnsavedChanges(true);
+      return;
+    }
+
+    // For saved buckets, update database
+    try {
+      const userData = localStorage.getItem('user');
+      if (!userData) return;
+
+      const authToken = Buffer.from(userData).toString('base64');
+      const response = await fetch(`/api/nep/buckets/${bucketId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ is_common_slot: newValue })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update bucket');
+      }
+    } catch (error) {
+      console.error('Error updating common slot:', error);
+      // Revert on error
+      setBuckets((prev) =>
+        prev.map((b) => (b.id === bucketId ? { ...b, is_common_slot: !newValue } : b))
+      );
+      alert('Failed to update common slot setting');
+    }
+  }
+
+  async function handleUpdateSelection(bucketId: string, min: number, max: number) {
+    // Update local state immediately
     setBuckets((prev) =>
       prev.map((b) => (b.id === bucketId ? { ...b, min_selection: min, max_selection: max } : b))
     );
+
+    // If temporary bucket, just mark as unsaved
+    if (bucketId.startsWith('temp-')) {
+      setHasUnsavedChanges(true);
+      return;
+    }
+
+    // For saved buckets, update database
+    try {
+      const userData = localStorage.getItem('user');
+      if (!userData) return;
+
+      const authToken = Buffer.from(userData).toString('base64');
+      const response = await fetch(`/api/nep/buckets/${bucketId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ min_selection: min, max_selection: max })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update bucket');
+      }
+    } catch (error) {
+      console.error('Error updating selection limits:', error);
+      alert('Failed to update selection limits');
+    }
   }
 
-  function handleDeleteBucket(bucketId: string) {
+  async function handleDeleteBucket(bucketId: string) {
     const bucket = buckets.find((b) => b.id === bucketId);
-    if (bucket) {
+    if (!bucket) return;
+
+    // Show confirmation dialog
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete the bucket "${bucket.bucket_name}"?\n\n` +
+      `This will remove ${bucket.subjects.length} subject(s) from this bucket and return them to the available subjects list.\n\n` +
+      `This action will be immediately saved to the database.`
+    );
+
+    if (!confirmDelete) return;
+
+    // If it's a temporary bucket (not saved yet), just remove from state
+    if (bucketId.startsWith('temp-')) {
       setAvailableSubjects((prev) => [...prev, ...bucket.subjects]);
       setBuckets((prev) => prev.filter((b) => b.id !== bucketId));
+      setHasUnsavedChanges(true);
+      return;
+    }
+
+    // For saved buckets, delete from database
+    try {
+      const userData = localStorage.getItem('user');
+      if (!userData) {
+        throw new Error('No user data found');
+      }
+
+      const authToken = Buffer.from(userData).toString('base64');
+      const response = await fetch(`/api/nep/buckets/${bucketId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete bucket');
+      }
+
+      const result = await response.json();
+      
+      // Update local state - return subjects to available list and remove bucket
+      setAvailableSubjects((prev) => [...prev, ...bucket.subjects]);
+      setBuckets((prev) => prev.filter((b) => b.id !== bucketId));
+      
+      alert(`Bucket deleted successfully! ${result.subjectsReset || 0} subject(s) returned to available pool.`);
+    } catch (error) {
+      console.error('Error deleting bucket:', error);
+      alert(`Failed to delete bucket: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
   async function handleCreateBucket() {
-    if (!newBucketName.trim()) return;
+    if (!newBucketName.trim()) {
+      alert('Please enter a bucket name');
+      return;
+    }
 
-    const newBucket: Bucket = {
-      id: `temp-${Date.now()}`,
-      bucket_name: newBucketName,
-      is_common_slot: true,
-      min_selection: 1,
-      max_selection: 1,
-      subjects: [],
-    };
+    try {
+      const userData = localStorage.getItem('user');
+      if (!userData) {
+        throw new Error('No user data found');
+      }
 
-    setBuckets((prev) => [...prev, newBucket]);
-    setNewBucketName('');
+      const authToken = Buffer.from(userData).toString('base64');
+      const response = await fetch('/api/nep/buckets', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          bucket_name: newBucketName,
+          courseId: course,
+          semester: semester
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create bucket');
+      }
+
+      const result = await response.json();
+      
+      // Add the newly created bucket to state with real ID from database
+      const newBucket: Bucket = {
+        id: result.bucket.id,
+        bucket_name: result.bucket.bucket_name,
+        is_common_slot: result.bucket.is_common_slot,
+        min_selection: result.bucket.min_selection,
+        max_selection: result.bucket.max_selection,
+        subjects: [],
+      };
+
+      setBuckets((prev) => [...prev, newBucket]);
+      setNewBucketName('');
+      
+      alert('Bucket created successfully!');
+    } catch (error) {
+      console.error('Error creating bucket:', error);
+      alert(`Failed to create bucket: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   async function handleSave() {
@@ -466,6 +700,7 @@ export default function CurriculumBuilder({
       }
 
       const result = await response.json();
+      setHasUnsavedChanges(false);
       alert('Curriculum saved successfully!');
       await fetchBuckets();
     } catch (error) {
@@ -597,13 +832,11 @@ export default function CurriculumBuilder({
         <div className="col-span-2">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-2xl font-bold">Elective Buckets</h2>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Save Curriculum'}
-            </button>
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <span className="bg-green-50 border border-green-200 px-3 py-1.5 rounded-md">
+                ✓ Auto-save enabled
+              </span>
+            </div>
           </div>
 
           <div className="mb-4 flex gap-2">

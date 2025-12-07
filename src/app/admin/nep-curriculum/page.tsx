@@ -216,19 +216,21 @@ export default function NEPCurriculumPage() {
             <h3 className="font-bold text-blue-900 mb-3 text-lg">📚 How to use the NEP Curriculum Builder:</h3>
           <ol className="list-decimal list-inside space-y-2 text-blue-800">
             <li><strong>Select Course & Semester:</strong> Choose the program (ITEP/B.Ed/M.Ed) and semester from the dropdowns above</li>
-            <li><strong>Create Elective Buckets:</strong> Enter a bucket name (e.g., "Major Pool", "Minor Pool") and click "Create Bucket"</li>
-            <li><strong>Drag & Drop Subjects:</strong> Drag subjects from the available list on the left into the appropriate bucket on the right</li>
-            <li><strong>Configure Common Time Slot:</strong> Toggle this option if all subjects in the bucket should run simultaneously (students choose one)</li>
-            <li><strong>Set Selection Limits:</strong> Define minimum and maximum number of subjects students can choose from this bucket</li>
-            <li><strong>Save Curriculum:</strong> Click "Save Curriculum" to persist your elective structure to the database</li>
+            <li><strong>Create Elective Buckets:</strong> Enter a bucket name (e.g., "Major Pool", "Minor Pool") and click "Create Bucket" - saves immediately!</li>
+            <li><strong>Drag & Drop Subjects:</strong> Drag subjects from the available list on the left into the appropriate bucket on the right - auto-saved!</li>
+            <li><strong>Configure Common Time Slot:</strong> Toggle this option if all subjects in the bucket should run simultaneously - updates instantly!</li>
+            <li><strong>Set Selection Limits:</strong> Define minimum and maximum number of subjects students can choose - saved automatically!</li>
+            <li><strong>Delete Buckets:</strong> Click the "Delete" button on any bucket to permanently remove it and return subjects to available pool</li>
           </ol>
           <div className="mt-4 p-4 bg-white rounded-lg border border-blue-300">
             <h4 className="font-semibold text-blue-900 mb-2">📌 Important Notes:</h4>
             <ul className="list-disc list-inside space-y-1 text-sm text-blue-700">
+              <li><strong>✓ Auto-Save:</strong> All changes (create, update, delete) are saved immediately to the database</li>
               <li>Subjects are filtered based on your college, selected course, and semester</li>
               <li>Only College Admins can access this page</li>
               <li>Changes are specific to the selected course and semester combination</li>
               <li>Use this to implement NEP 2020 Choice-Based Credit System (CBCS)</li>
+              <li>Deleted buckets cannot be recovered - confirm before deleting!</li>
             </ul>
           </div>
           </div>

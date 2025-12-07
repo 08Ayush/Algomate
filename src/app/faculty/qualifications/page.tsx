@@ -13,6 +13,7 @@ interface Faculty {
   last_name: string;
   email: string;
   department_id: string;
+  course_id?: string;
 }
 
 interface Subject {
@@ -54,15 +55,17 @@ export default function FacultyQualificationsPage() {
   const [faculty, setFaculty] = useState<Faculty[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
-  const [departmentName, setDepartmentName] = useState<string>('');
+  const [courseName, setCourseName] = useState<string>('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSemester, setSelectedSemester] = useState<number | 'all'>('all');
+  const [selectedCourseFilter, setSelectedCourseFilter] = useState<string>('all');
   const [saving, setSaving] = useState(false);
 
   // Form state
   const [selectedFaculty, setSelectedFaculty] = useState('');
   const [selectedCourse, setSelectedCourse] = useState('');
+  const [selectedSemesterModal, setSelectedSemesterModal] = useState<number | ''>('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [proficiencyLevel, setProficiencyLevel] = useState(7);
   const [preferenceScore, setPreferenceScore] = useState(5);
@@ -98,61 +101,57 @@ export default function FacultyQualificationsPage() {
     try {
       setLoading(true);
 
-      // Get user's department_id
-      const userDepartmentId = userData.department_id;
-      console.log('👤 Loading data for department:', userDepartmentId);
+      // Get user's course_id (optional)
+      const userCourseId = userData.course_id;
+      console.log('👤 Loading data for user:', userData.email);
 
-      if (!userDepartmentId) {
-        alert('Your profile is missing department information. Please contact administrator.');
-        setLoading(false);
-        return;
+      // Load course name if user has a course assigned
+      if (userCourseId) {
+        const { data: courseData, error: courseError } = await supabase
+          .from('courses')
+          .select('title, code')
+          .eq('id', userCourseId)
+          .single();
+
+        if (!courseError && courseData) {
+          setCourseName(`${courseData.title} (${courseData.code})`);
+        }
       }
 
-      // Load department name
-      const { data: deptData, error: deptError } = await supabase
-        .from('departments')
-        .select('name, code')
-        .eq('id', userDepartmentId)
-        .single();
-
-      if (!deptError && deptData) {
-        setDepartmentName(`${deptData.name} (${deptData.code})`);
-      }
-
-      // Load qualifications for this department only
-      const qualRes = await fetch(`/api/faculty/qualifications?department_id=${userDepartmentId}`);
+      // Load qualifications for the entire college (not just one course)
+      const qualRes = await fetch(`/api/faculty/qualifications?college_id=${userData.college_id}`);
       const qualData = await qualRes.json();
       if (qualData.success) {
         setQualifications(qualData.qualifications);
-        console.log(`✅ Loaded ${qualData.qualifications.length} qualifications for department`);
+        console.log(`✅ Loaded ${qualData.qualifications.length} qualifications for college`);
       }
 
-      // Load faculty from same department only
+      // Load all faculty from the college (not just one course)
       const { data: facultyData, error: facultyError } = await supabase
         .from('users')
-        .select('id, first_name, last_name, email, department_id')
+        .select('id, first_name, last_name, email, department_id, course_id')
         .eq('role', 'faculty')
-        .eq('department_id', userDepartmentId)
+        .eq('college_id', userData.college_id)
         .eq('is_active', true)
         .order('first_name');
 
       if (!facultyError && facultyData) {
         setFaculty(facultyData);
-        console.log(`✅ Loaded ${facultyData.length} faculty from department`);
+        console.log(`✅ Loaded ${facultyData.length} faculty from college`);
       }
 
-      // Load subjects from same department only
+      // Load all subjects from the college (not just one course)
       const { data: subjectsData, error: subjectsError } = await supabase
         .from('subjects')
         .select('id, name, code, semester, subject_type, credits_per_week, department_id, course_id')
-        .eq('department_id', userDepartmentId)
+        .eq('college_id', userData.college_id)
         .eq('is_active', true)
         .order('semester', { ascending: true })
         .order('name');
 
       if (!subjectsError && subjectsData) {
         setSubjects(subjectsData);
-        console.log(`✅ Loaded ${subjectsData.length} subjects from department`);
+        console.log(`✅ Loaded ${subjectsData.length} subjects from college`);
       }
 
       // Load courses for the college
@@ -207,7 +206,9 @@ export default function FacultyQualificationsPage() {
         resetForm();
         loadData(user);
       } else {
-        alert(`Error: ${data.error}`);
+        const errorMsg = data.details ? `${data.error}\n\nDetails: ${data.details}` : data.error;
+        console.error('API Error:', data);
+        alert(`Error: ${errorMsg}`);
       }
     } catch (error) {
       console.error('Error adding qualification:', error);
@@ -244,6 +245,7 @@ export default function FacultyQualificationsPage() {
   const resetForm = () => {
     setSelectedFaculty('');
     setSelectedCourse('');
+    setSelectedSemesterModal('');
     setSelectedSubject('');
     setProficiencyLevel(7);
     setPreferenceScore(5);
@@ -252,11 +254,14 @@ export default function FacultyQualificationsPage() {
     setCanHandleTutorial(true);
   };
 
-  // Filter subjects by selected course
-  const filteredSubjectsBySelection = selectedCourse
-    ? subjects.filter(s => s.course_id === selectedCourse)
-    : subjects;
+  // Filter subjects by selected course and semester (for adding new qualifications)
+  const filteredSubjectsBySelection = subjects.filter(s => {
+    const matchesCourse = !selectedCourse || s.course_id === selectedCourse;
+    const matchesSemester = !selectedSemesterModal || s.semester === selectedSemesterModal;
+    return matchesCourse && matchesSemester;
+  });
 
+  // Filter qualifications by search, semester, and course
   const filteredQualifications = qualifications.filter(qual => {
     const matchesSearch = 
       qual.faculty?.first_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -266,18 +271,26 @@ export default function FacultyQualificationsPage() {
     
     const matchesSemester = selectedSemester === 'all' || qual.subject?.semester === selectedSemester;
     
-    return matchesSearch && matchesSemester;
+    const matchesCourse = selectedCourseFilter === 'all' || qual.subject?.course_id === selectedCourseFilter;
+    
+    return matchesSearch && matchesSemester && matchesCourse;
   });
 
-  // Group by semester
-  const qualificationsBySemester = filteredQualifications.reduce((acc, qual) => {
-    const semester = qual.subject?.semester || 0;
-    if (!acc[semester]) {
-      acc[semester] = [];
+  // Group by faculty to show all faculty members individually
+  const qualificationsByFaculty = filteredQualifications.reduce((acc, qual) => {
+    const facultyId = qual.faculty?.id || 'unknown';
+    const facultyName = `${qual.faculty?.first_name || ''} ${qual.faculty?.last_name || ''}`;
+    
+    if (!acc[facultyId]) {
+      acc[facultyId] = {
+        name: facultyName,
+        email: qual.faculty?.email || '',
+        qualifications: []
+      };
     }
-    acc[semester].push(qual);
+    acc[facultyId].qualifications.push(qual);
     return acc;
-  }, {} as Record<number, Qualification[]>);
+  }, {} as Record<string, { name: string; email: string; qualifications: Qualification[] }>);
 
   if (loading) {
     return (
@@ -302,13 +315,13 @@ export default function FacultyQualificationsPage() {
               <p className="text-gray-600 dark:text-gray-300 mb-3">
                 Manage which faculty members are qualified to teach specific subjects
               </p>
-              {departmentName && (
+              {courseName && (
                 <div className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                   <svg className="w-5 h-5 text-blue-600 dark:text-blue-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                   </svg>
                   <span className="text-sm font-semibold text-blue-800 dark:text-blue-300">
-                    {departmentName}
+                    {courseName}
                   </span>
                 </div>
               )}
@@ -350,6 +363,18 @@ export default function FacultyQualificationsPage() {
                   />
                 </div>
                 <select
+                  value={selectedCourseFilter}
+                  onChange={(e) => setSelectedCourseFilter(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All Courses</option>
+                  {courses.map(course => (
+                    <option key={course.id} value={course.id}>
+                      {course.code} - {course.title}
+                    </option>
+                  ))}
+                </select>
+                <select
                   value={selectedSemester}
                   onChange={(e) => setSelectedSemester(e.target.value === 'all' ? 'all' : Number(e.target.value))}
                   className="px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -370,7 +395,7 @@ export default function FacultyQualificationsPage() {
             </div>
 
             {/* Qualifications List */}
-            {Object.keys(qualificationsBySemester).length === 0 ? (
+            {Object.keys(qualificationsByFaculty).length === 0 ? (
               <div className="bg-white dark:bg-slate-800 rounded-lg p-8 text-center border border-gray-200 dark:border-slate-700">
                 <AlertCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
@@ -388,20 +413,30 @@ export default function FacultyQualificationsPage() {
                 </button>
               </div>
             ) : (
-              Object.keys(qualificationsBySemester).sort((a, b) => Number(a) - Number(b)).map(semester => (
-                <div key={semester} className="mb-6">
-                  <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">
-                    Semester {semester} ({qualificationsBySemester[Number(semester)].length})
-                  </h2>
+              Object.entries(qualificationsByFaculty).map(([facultyId, facultyData]) => (
+                <div key={facultyId} className="mb-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                        {facultyData.name}
+                      </h2>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        {facultyData.email} • {facultyData.qualifications.length} Qualification{facultyData.qualifications.length !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                  </div>
                   <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
                     <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
                       <thead className="bg-gray-50 dark:bg-slate-900">
                         <tr>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Faculty
+                            Subject
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Subject
+                            Semester
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            Type
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                             Proficiency
@@ -415,34 +450,27 @@ export default function FacultyQualificationsPage() {
                         </tr>
                       </thead>
                       <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-slate-700">
-                        {qualificationsBySemester[Number(semester)].map(qual => (
+                        {facultyData.qualifications.map(qual => (
                           <tr key={qual.id} className="hover:bg-gray-50 dark:hover:bg-slate-700">
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center">
-                                <div className="flex-shrink-0 h-10 w-10 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
-                                  <span className="text-blue-600 dark:text-blue-400 font-semibold">
-                                    {qual.faculty?.first_name?.[0]}{qual.faculty?.last_name?.[0]}
-                                  </span>
-                                </div>
-                                <div className="ml-4">
-                                  <div className="text-sm font-medium text-gray-900 dark:text-white">
-                                    {qual.faculty?.first_name} {qual.faculty?.last_name}
-                                  </div>
-                                  <div className="text-sm text-gray-500 dark:text-gray-400">
-                                    {qual.faculty?.email}
-                                  </div>
-                                </div>
-                              </div>
-                            </td>
                             <td className="px-6 py-4">
                               <div className="text-sm font-medium text-gray-900 dark:text-white">
                                 {qual.subject?.name}
                               </div>
                               <div className="text-sm text-gray-500 dark:text-gray-400">
-                                {qual.subject?.code} • {qual.subject?.subject_type}
+                                {qual.subject?.code}
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
+                              <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
+                                Sem {qual.subject?.semester}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className="text-sm text-gray-900 dark:text-white">
+                                {qual.subject?.subject_type}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
                               <div className="flex items-center gap-2">
                                 <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-2 max-w-[100px]">
                                   <div
@@ -541,6 +569,28 @@ export default function FacultyQualificationsPage() {
                           {courses.map(c => (
                             <option key={c.id} value={c.id}>
                               {c.title} ({c.code})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Semester Selection */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Select Semester
+                        </label>
+                        <select
+                          value={selectedSemesterModal}
+                          onChange={(e) => {
+                            setSelectedSemesterModal(e.target.value ? Number(e.target.value) : '');
+                            setSelectedSubject(''); // Reset subject when semester changes
+                          }}
+                          className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">All Semesters</option>
+                          {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
+                            <option key={sem} value={sem}>
+                              Semester {sem}
                             </option>
                           ))}
                         </select>

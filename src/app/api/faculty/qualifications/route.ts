@@ -6,9 +6,10 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const facultyId = searchParams.get('faculty_id');
-    const departmentId = searchParams.get('department_id');
+    const courseId = searchParams.get('course_id');
+    const collegeId = searchParams.get('college_id');
 
-    console.log('📥 Fetching faculty qualifications:', { facultyId, departmentId });
+    console.log('📥 Fetching faculty qualifications:', { facultyId, courseId, collegeId });
 
     let query = supabase
       .from('faculty_qualified_subjects')
@@ -28,7 +29,8 @@ export async function GET(request: NextRequest) {
           first_name,
           last_name,
           email,
-          department_id
+          course_id,
+          college_id
         ),
         subject:subjects(
           id,
@@ -38,7 +40,8 @@ export async function GET(request: NextRequest) {
           semester,
           credits_per_week,
           requires_lab,
-          department_id
+          course_id,
+          college_id
         )
       `)
       .order('created_at', { ascending: false });
@@ -58,16 +61,24 @@ export async function GET(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // Filter by department if specified (post-query filtering since we can't filter on nested fields directly)
+    // Filter by course or college if specified (post-query filtering since we can't filter on nested fields directly)
     let filteredData = data || [];
-    if (departmentId) {
+    
+    if (collegeId) {
       filteredData = filteredData.filter(qual => {
         const faculty = Array.isArray(qual.faculty) ? qual.faculty[0] : qual.faculty;
         const subject = Array.isArray(qual.subject) ? qual.subject[0] : qual.subject;
-        return faculty?.department_id === departmentId && 
-               subject?.department_id === departmentId;
+        return faculty?.college_id === collegeId && subject?.college_id === collegeId;
       });
-      console.log(`🔍 Filtered to ${filteredData.length} qualifications for department ${departmentId}`);
+      console.log(`🔍 Filtered to ${filteredData.length} qualifications for college ${collegeId}`);
+    } else if (courseId) {
+      filteredData = filteredData.filter(qual => {
+        const faculty = Array.isArray(qual.faculty) ? qual.faculty[0] : qual.faculty;
+        const subject = Array.isArray(qual.subject) ? qual.subject[0] : qual.subject;
+        return faculty?.course_id === courseId && 
+               subject?.course_id === courseId;
+      });
+      console.log(`🔍 Filtered to ${filteredData.length} qualifications for course ${courseId}`);
     }
 
     console.log(`✅ Found ${filteredData.length} qualifications`);
@@ -116,6 +127,38 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // Verify faculty exists
+    const { data: facultyCheck, error: facultyError } = await supabase
+      .from('users')
+      .select('id, first_name, last_name, role')
+      .eq('id', faculty_id)
+      .maybeSingle();
+
+    if (facultyError || !facultyCheck) {
+      console.error('❌ Faculty not found:', faculty_id, facultyError);
+      return NextResponse.json({
+        success: false,
+        error: 'Selected faculty not found in database'
+      }, { status: 404 });
+    }
+
+    // Verify subject exists
+    const { data: subjectCheck, error: subjectError } = await supabase
+      .from('subjects')
+      .select('id, name, code')
+      .eq('id', subject_id)
+      .maybeSingle();
+
+    if (subjectError || !subjectCheck) {
+      console.error('❌ Subject not found:', subject_id, subjectError);
+      return NextResponse.json({
+        success: false,
+        error: 'Selected subject not found in database'
+      }, { status: 404 });
+    }
+
+    console.log('✅ Validation passed - Faculty:', facultyCheck.first_name, facultyCheck.last_name, '| Subject:', subjectCheck.name);
+
     // Check if qualification already exists
     const { data: existing } = await supabase
       .from('faculty_qualified_subjects')
@@ -144,37 +187,47 @@ export async function POST(request: NextRequest) {
         can_handle_lab,
         can_handle_tutorial
       })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Error adding qualification:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to add qualification',
+        details: error.message,
+        code: error.code,
+        hint: error.hint
+      }, { status: 500 });
+    }
+
+    // Fetch the complete record with relations
+    const { data: completeData } = await supabase
+      .from('faculty_qualified_subjects')
       .select(`
         *,
-        faculty:users!faculty_qualified_subjects_faculty_id_fkey(
+        faculty:users(
           id,
           first_name,
           last_name,
           email
         ),
-        subject:subjects!faculty_qualified_subjects_subject_id_fkey(
+        subject:subjects(
           id,
           name,
           code,
           semester
         )
       `)
+      .eq('id', data.id)
       .single();
-
-    if (error) {
-      console.error('❌ Error adding qualification:', error);
-      return NextResponse.json({
-        success: false,
-        error: 'Failed to add qualification',
-        details: error.message
-      }, { status: 500 });
-    }
 
     console.log('✅ Qualification added successfully');
 
     return NextResponse.json({
       success: true,
-      qualification: data
+      qualification: completeData || data
     });
 
   } catch (error: any) {

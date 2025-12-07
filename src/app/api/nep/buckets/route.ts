@@ -173,6 +173,118 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+    const { bucket_name, courseId, semester } = body;
+
+    // Check if this is a single bucket creation or bulk save
+    const isBulkSave = body.buckets !== undefined;
+
+    if (isBulkSave) {
+      // Handle bulk save (existing logic)
+      return handleBulkSave(request, user, body);
+    }
+
+    // Handle single bucket creation
+    if (!bucket_name || !courseId || !semester) {
+      return NextResponse.json(
+        { error: 'Bucket name, course ID, and semester are required' },
+        { status: 400 }
+      );
+    }
+
+    const supabase = createClient();
+
+    // Find or create batch for this course and semester
+    let { data: batchData, error: batchError } = await supabase
+      .from('batches')
+      .select('id, name, department_id, course_id')
+      .eq('college_id', user.college_id)
+      .eq('semester', parseInt(semester))
+      .eq('course_id', courseId)
+      .eq('is_active', true)
+      .single();
+
+    if (batchError || !batchData) {
+      // Create batch if it doesn't exist
+      const { data: deptData } = await supabase
+        .from('departments')
+        .select('id, name')
+        .eq('college_id', user.college_id)
+        .limit(1)
+        .single();
+
+      if (!deptData) {
+        return NextResponse.json({ error: 'No department found' }, { status: 500 });
+      }
+
+      const { data: courseData } = await supabase
+        .from('courses')
+        .select('title')
+        .eq('id', courseId)
+        .single();
+
+      const { data: newBatch, error: createBatchError } = await supabase
+        .from('batches')
+        .insert({
+          name: `${courseData?.title || 'Course'} - Semester ${semester}`,
+          college_id: user.college_id,
+          department_id: deptData.id,
+          course_id: courseId,
+          semester: parseInt(semester),
+          academic_year: '2025-26',
+          is_active: true
+        })
+        .select()
+        .single();
+
+      if (createBatchError) {
+        console.error('Error creating batch:', createBatchError);
+        return NextResponse.json({ error: 'Failed to create batch' }, { status: 500 });
+      }
+      batchData = newBatch;
+    }
+
+    // Create the new bucket
+    const { data: newBucket, error: bucketError } = await supabase
+      .from('elective_buckets')
+      .insert({
+        batch_id: batchData.id,
+        bucket_name: bucket_name,
+        is_common_slot: true,
+        min_selection: 1,
+        max_selection: 1,
+      })
+      .select()
+      .single();
+
+    if (bucketError) {
+      console.error('Error creating bucket:', bucketError);
+      return NextResponse.json({ error: 'Failed to create bucket' }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Bucket created successfully',
+      bucket: {
+        id: newBucket.id,
+        bucket_name: newBucket.bucket_name,
+        is_common_slot: newBucket.is_common_slot,
+        min_selection: newBucket.min_selection,
+        max_selection: newBucket.max_selection,
+        batch_id: newBucket.batch_id,
+        subjects: []
+      }
+    });
+  } catch (error) {
+    console.error('Error in POST /api/nep/buckets:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+async function handleBulkSave(request: NextRequest, user: any, body: any) {
+  try {
     const { buckets, availableSubjects, courseId, semester } = body;
 
     if (!courseId || !semester || !Array.isArray(buckets)) {
@@ -310,7 +422,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, message: 'Curriculum saved successfully' });
   } catch (error) {
-    console.error('Error in POST /api/nep/buckets:', error);
+    console.error('Error in handleBulkSave:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
