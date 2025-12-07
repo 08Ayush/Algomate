@@ -114,15 +114,32 @@ interface Course {
   created_at: string;
 }
 
+interface Student {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  college_uid: string;
+  student_id?: string;
+  phone?: string;
+  admission_year: number;
+  current_semester: number;
+  course_id?: string;
+  is_active: boolean;
+  created_at: string;
+}
+
 export default function AdminDashboard() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'departments' | 'faculty' | 'classrooms' | 'batches' | 'subjects' | 'courses'>('departments');
+  const [activeTab, setActiveTab] = useState<'departments' | 'faculty' | 'classrooms' | 'batches' | 'subjects' | 'courses' | 'students'>('departments');
   const [departments, setDepartments] = useState<Department[]>([]);
   const [faculty, setFaculty] = useState<Faculty[]>([]);
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [courseFilter, setCourseFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -200,6 +217,21 @@ export default function AdminDashboard() {
     nature_of_course: '',
     intake: 0,
     duration_years: 4
+  });
+
+  // Student form state
+  const [showStudentForm, setShowStudentForm] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [studentForm, setStudentForm] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    student_id: '',
+    phone: '',
+    current_semester: 1,
+    admission_year: new Date().getFullYear(),
+    course_id: '',
+    is_active: true
   });
 
   useEffect(() => {
@@ -306,6 +338,16 @@ export default function AdminDashboard() {
         const courseData = await courseResponse.json();
         setCourses(courseData.courses || []);
       } else if (courseResponse.status === 401) {
+        router.push('/login?message=Session expired');
+        return;
+      }
+
+      // Fetch students
+      const studentResponse = await fetch('/api/admin/students', { headers });
+      if (studentResponse.ok) {
+        const studentData = await studentResponse.json();
+        setStudents(studentData.students || []);
+      } else if (studentResponse.status === 401) {
         router.push('/login?message=Session expired');
         return;
       }
@@ -792,6 +834,120 @@ export default function AdminDashboard() {
     setShowCourseForm(true);
   };
 
+  // Student handlers
+  const handleStudentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validate course selection
+    if (!studentForm.course_id) {
+      setError('Course selection is required');
+      setTimeout(() => setError(''), 3000);
+      return;
+    }
+    
+    try {
+      const userData = localStorage.getItem('user');
+      if (!userData) {
+        router.push('/login');
+        return;
+      }
+      
+      const authToken = Buffer.from(userData).toString('base64');
+      const url = editingStudent 
+        ? `/api/admin/students/${editingStudent.id}` 
+        : '/api/admin/students';
+      
+      const response = await fetch(url, {
+        method: editingStudent ? 'PUT' : 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify(studentForm)
+      });
+
+      if (response.ok) {
+        setShowStudentForm(false);
+        setEditingStudent(null);
+        setStudentForm({
+          first_name: '',
+          last_name: '',
+          email: '',
+          student_id: '',
+          phone: '',
+          current_semester: 1,
+          admission_year: new Date().getFullYear(),
+          course_id: '',
+          is_active: true
+        });
+        setSuccessMessage(editingStudent ? 'Student updated successfully' : 'Student created successfully');
+        fetchData();
+        setTimeout(() => setSuccessMessage(''), 5000);
+      } else {
+        const data = await response.json();
+        setError(data.error || 'Failed to save student');
+      }
+    } catch (error) {
+      setError('Failed to save student');
+    }
+  };
+
+  const handleStudentDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this student?')) return;
+
+    try {
+      const userData = localStorage.getItem('user');
+      if (!userData) {
+        router.push('/login');
+        return;
+      }
+      
+      const authToken = Buffer.from(userData).toString('base64');
+      const response = await fetch(`/api/admin/students/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      });
+
+      if (response.ok) {
+        setSuccessMessage('Student deleted successfully');
+        fetchData();
+        setTimeout(() => setSuccessMessage(''), 5000);
+      } else {
+        const data = await response.json();
+        setError(data.error || 'Failed to delete student');
+      }
+    } catch (error) {
+      setError('Failed to delete student');
+    }
+  };
+
+  const startEditStudent = (student: Student) => {
+    setEditingStudent(student);
+    setStudentForm({
+      first_name: student.first_name,
+      last_name: student.last_name,
+      email: student.email,
+      student_id: student.student_id || '',
+      phone: student.phone || '',
+      current_semester: student.current_semester,
+      admission_year: student.admission_year,
+      course_id: student.course_id || '',
+      is_active: student.is_active
+    });
+    setShowStudentForm(true);
+  };
+
+  // Helper function to get max semesters for a course
+  const getMaxSemestersForCourse = (courseId: string): number => {
+    if (!courseId) return 8; // Default max
+    const course = courses.find(c => c.id === courseId);
+    if (!course || !course.duration_years) return 8;
+    // Each year has 2 semesters
+    return course.duration_years * 2;
+  };
+
   // Filter data based on search query
   const filteredDepartments = departments.filter(dept =>
     dept.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -838,6 +994,18 @@ export default function AdminDashboard() {
     c.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (c.nature_of_course || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const filteredStudents = students.filter(s => {
+    const matchesSearch = s.first_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.last_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.college_uid.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (s.student_id || '').toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesCourse = courseFilter === 'all' || s.course_id === courseFilter;
+    
+    return matchesSearch && matchesCourse;
+  });
 
   if (loading) {
     return (
@@ -972,6 +1140,16 @@ export default function AdminDashboard() {
                   }`}
                 >
                   Courses ({courses.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('students')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'students'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Students ({students.length})
                 </button>
               </nav>
             </div>
@@ -2286,6 +2464,275 @@ export default function AdminDashboard() {
                         Add Course
                       </button>
                     </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Students Tab */}
+          {activeTab === 'students' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center space-x-4">
+                  <h2 className="text-xl font-semibold text-gray-900">Students</h2>
+                  <select
+                    value={courseFilter}
+                    onChange={(e) => setCourseFilter(e.target.value)}
+                    className="rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  >
+                    <option value="all">All Courses</option>
+                    {courses.map(course => (
+                      <option key={course.id} value={course.id}>
+                        {course.code} - {course.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  onClick={() => {
+                    setEditingStudent(null);
+                    setStudentForm({
+                      first_name: '',
+                      last_name: '',
+                      email: '',
+                      student_id: '',
+                      phone: '',
+                      current_semester: 1,
+                      admission_year: new Date().getFullYear(),
+                      course_id: '',
+                      is_active: true
+                    });
+                    setShowStudentForm(true);
+                  }}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  Add Student
+                </button>
+              </div>
+
+              {/* Student Form Modal */}
+              {showStudentForm && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                  <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-screen overflow-y-auto">
+                    <h3 className="text-lg font-semibold mb-4">
+                      {editingStudent ? 'Edit Student' : 'Add Student'}
+                    </h3>
+                    <form onSubmit={handleStudentSubmit}>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">First Name *</label>
+                          <input
+                            type="text"
+                            required
+                            value={studentForm.first_name}
+                            onChange={(e) => setStudentForm({...studentForm, first_name: e.target.value})}
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Last Name *</label>
+                          <input
+                            type="text"
+                            required
+                            value={studentForm.last_name}
+                            onChange={(e) => setStudentForm({...studentForm, last_name: e.target.value})}
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Email *</label>
+                          <input
+                            type="email"
+                            required
+                            value={studentForm.email}
+                            onChange={(e) => setStudentForm({...studentForm, email: e.target.value})}
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Student ID</label>
+                          <input
+                            type="text"
+                            value={studentForm.student_id}
+                            onChange={(e) => setStudentForm({...studentForm, student_id: e.target.value})}
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            placeholder="e.g., STU001"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Phone</label>
+                          <input
+                            type="tel"
+                            value={studentForm.phone}
+                            onChange={(e) => setStudentForm({...studentForm, phone: e.target.value})}
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Current Semester *</label>
+                          <select
+                            required
+                            value={studentForm.current_semester}
+                            onChange={(e) => setStudentForm({...studentForm, current_semester: parseInt(e.target.value)})}
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            disabled={!studentForm.course_id}
+                          >
+                            {Array.from({ length: getMaxSemestersForCourse(studentForm.course_id) }, (_, i) => i + 1).map(sem => (
+                              <option key={sem} value={sem}>Semester {sem}</option>
+                            ))}
+                          </select>
+                          {!studentForm.course_id && (
+                            <p className="mt-1 text-sm text-gray-500">Please select a course first</p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Admission Year *</label>
+                          <input
+                            type="number"
+                            required
+                            value={studentForm.admission_year}
+                            onChange={(e) => setStudentForm({...studentForm, admission_year: parseInt(e.target.value)})}
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            placeholder="e.g., 2024"
+                            min="2000"
+                            max="2099"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Course *</label>
+                          <select
+                            required
+                            value={studentForm.course_id}
+                            onChange={(e) => {
+                              const newCourseId = e.target.value;
+                              const maxSemesters = getMaxSemestersForCourse(newCourseId);
+                              // Reset semester to 1 if current semester exceeds max for new course
+                              const newSemester = studentForm.current_semester > maxSemesters ? 1 : studentForm.current_semester;
+                              setStudentForm({...studentForm, course_id: newCourseId, current_semester: newSemester});
+                            }}
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          >
+                            <option value="">Select Course *</option>
+                            {courses.map(course => (
+                              <option key={course.id} value={course.id}>
+                                {course.code} - {course.title} ({course.duration_years} years)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="flex items-center">
+                          <input
+                            type="checkbox"
+                            id="student_is_active"
+                            checked={studentForm.is_active}
+                            onChange={(e) => setStudentForm({...studentForm, is_active: e.target.checked})}
+                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                          />
+                          <label htmlFor="student_is_active" className="ml-2 block text-sm text-gray-900">
+                            Active Student
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="mt-6 flex justify-end space-x-3">
+                        <button
+                          type="button"
+                          onClick={() => setShowStudentForm(false)}
+                          className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700"
+                        >
+                          {editingStudent ? 'Update' : 'Create'} Student
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+
+              {/* Students List */}
+              <div className="bg-white shadow overflow-hidden sm:rounded-md">
+                <ul className="divide-y divide-gray-200">
+                  {filteredStudents.length === 0 ? (
+                    <li className="px-4 py-8 text-center text-gray-500">
+                      No students found matching "{searchQuery}"
+                    </li>
+                  ) : (
+                    filteredStudents.map((student) => (
+                      <li key={student.id}>
+                        <div className="px-4 py-4 sm:px-6">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <h3 className="text-lg font-medium text-gray-900">
+                                    {student.first_name} {student.last_name}
+                                    {!student.is_active && (
+                                      <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                        Inactive
+                                      </span>
+                                    )}
+                                  </h3>
+                                  <div className="mt-1 flex items-center space-x-4 text-sm text-gray-500">
+                                    <span>📧 {student.email}</span>
+                                    <span>🆔 {student.college_uid}</span>
+                                    {student.student_id && <span>🎓 {student.student_id}</span>}
+                                    {student.phone && <span>📱 {student.phone}</span>}
+                                    {student.course_id && (
+                                      <span>📚 {courses.find(c => c.id === student.course_id)?.code || 'N/A'}</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="text-sm font-medium text-blue-600">
+                                    Semester {student.current_semester}
+                                  </div>
+                                  <div className="text-sm text-gray-500">
+                                    Admitted {student.admission_year}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="ml-4 flex space-x-2">
+                              <button
+                                onClick={() => startEditStudent(student)}
+                                className="text-blue-600 hover:text-blue-800 font-medium"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleStudentDelete(student.id)}
+                                className="text-red-600 hover:text-red-800 font-medium"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </li>
+                    ))
+                  )}
+                </ul>
+                {students.length === 0 && (
+                  <div className="text-center py-12">
+                    <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">No students found</h3>
+                    <p className="mt-1 text-sm text-gray-500">Get started by adding your first student.</p>
                   </div>
                 )}
               </div>
