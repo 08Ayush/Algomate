@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       deptId = deptData?.id;
     }
 
-    // Build query to fetch batches
+    // Build query to fetch batches - simplified without joins
     let query = supabase
       .from('batches')
       .select(`
@@ -56,8 +56,7 @@ export async function GET(request: NextRequest) {
         preferred_end_time,
         is_active,
         created_at,
-        department:departments!batches_department_id_fkey(id, name, code),
-        class_coordinator:users!batches_class_coordinator_fkey(id, first_name, last_name, email)
+        class_coordinator
       `)
       .eq('is_active', true);
 
@@ -79,33 +78,25 @@ export async function GET(request: NextRequest) {
 
     console.log(`Found ${batchesData?.length || 0} batches`);
 
-    // Transform data
-    const transformedData = batchesData?.map((batch: any) => {
-      const department = Array.isArray(batch.department) ? batch.department[0] : batch.department;
-      const coordinator = Array.isArray(batch.class_coordinator) ? batch.class_coordinator[0] : batch.class_coordinator;
-      
-      return {
-        id: batch.id,
-        name: batch.name,
-        semester: batch.semester,
-        academic_year: batch.academic_year,
-        section: batch.section,
-        division: batch.division,
-        department_id: batch.department_id,
-        college_id: batch.college_id,
-        expected_strength: batch.expected_strength,
-        actual_strength: batch.actual_strength,
-        max_hours_per_day: batch.max_hours_per_day,
-        preferred_start_time: batch.preferred_start_time,
-        preferred_end_time: batch.preferred_end_time,
-        is_active: batch.is_active,
-        created_at: batch.created_at,
-        department_name: department?.name || '',
-        department_code: department?.code || '',
-        coordinator_name: coordinator ? `${coordinator.first_name} ${coordinator.last_name}` : null,
-        coordinator_email: coordinator?.email || null
-      };
-    }) || [];
+    // Transform data - simplified without joins
+    const transformedData = batchesData?.map((batch: any) => ({
+      id: batch.id,
+      name: batch.name,
+      semester: batch.semester,
+      academic_year: batch.academic_year,
+      section: batch.section,
+      division: batch.division,
+      department_id: batch.department_id,
+      college_id: batch.college_id,
+      expected_strength: batch.expected_strength,
+      actual_strength: batch.actual_strength,
+      max_hours_per_day: batch.max_hours_per_day,
+      preferred_start_time: batch.preferred_start_time,
+      preferred_end_time: batch.preferred_end_time,
+      is_active: batch.is_active,
+      created_at: batch.created_at,
+      class_coordinator: batch.class_coordinator
+    })) || [];
 
     // Calculate statistics
     const totalBatches = transformedData.length;

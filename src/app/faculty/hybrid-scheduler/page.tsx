@@ -114,13 +114,26 @@ export default function HybridSchedulerPage() {
 
   const fetchBatches = async (departmentId: string) => {
     try {
+      console.log('🔍 Fetching batches for department_id:', departmentId);
       const response = await fetch(`/api/batches?department_id=${departmentId}`);
       const data = await response.json();
-      if (data.success) {
+      console.log('📦 API Response:', data);
+      
+      if (data.success && data.data) {
+        console.log(`✅ Loaded ${data.data.length} batches`);
         setBatches(data.data);
+        
+        if (data.data.length === 0) {
+          console.warn('⚠️ No batches found for this department. Check:');
+          console.warn('   1. Does your user have a valid department_id?');
+          console.warn('   2. Do batches exist for this department in database?');
+          console.warn('   3. Are batches marked as is_active = true?');
+        }
+      } else {
+        console.error('❌ Failed to fetch batches:', data.error);
       }
     } catch (error) {
-      console.error('Error fetching batches:', error);
+      console.error('❌ Error fetching batches:', error);
     }
   };
 
@@ -389,19 +402,32 @@ export default function HybridSchedulerPage() {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Target Batch
+                        {batches.length > 0 && (
+                          <span className="ml-2 text-xs text-gray-500">
+                            ({batches.length} batches available)
+                          </span>
+                        )}
                       </label>
                       <select
                         value={selectedBatch}
                         onChange={(e) => setSelectedBatch(e.target.value)}
                         className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-slate-700 dark:text-white"
+                        disabled={batches.length === 0}
                       >
-                        <option value="">Select Batch</option>
+                        <option value="">
+                          {batches.length === 0 ? 'No batches available' : 'Select Batch'}
+                        </option>
                         {batches.map(batch => (
                           <option key={batch.id} value={batch.id}>
                             {batch.name} - Semester {batch.semester}
                           </option>
                         ))}
                       </select>
+                      {batches.length === 0 && (
+                        <p className="mt-2 text-sm text-amber-600 dark:text-amber-400">
+                          ⚠️ No batches found for your department. Please check browser console (F12) for details.
+                        </p>
+                      )}
                     </div>
 
                     {/* Academic Year */}
