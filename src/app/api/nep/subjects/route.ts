@@ -17,7 +17,19 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const courseId = searchParams.get('courseId');
     const semester = searchParams.get('semester');
+    const departmentId = searchParams.get('departmentId');
     const bucketId = searchParams.get('bucketId');
+
+    // Security check: If user has department_id, verify it matches the requested departmentId
+    if (user.department_id && departmentId && user.department_id !== departmentId) {
+      return NextResponse.json({ 
+        error: 'You can only access subjects for your own department',
+        code: 'UNAUTHORIZED_DEPARTMENT'
+      }, { status: 403 });
+    }
+
+    // If user has department_id but none provided in request, use user's department
+    const targetDepartmentId = departmentId || user.department_id;
 
     // If bucketId is provided, fetch subjects from that bucket
     if (bucketId) {
@@ -46,23 +58,30 @@ export async function GET(request: NextRequest) {
 
     const supabase = createClient();
 
-    // Fetch subjects for the authenticated user's college, filtered by course_id
-    const { data, error } = await supabase
+    // Build query for subjects
+    let query = supabase
       .from('subjects')
       .select('*')
       .eq('college_id', user.college_id)
       .eq('course_id', courseId)
       .eq('semester', parseInt(semester))
       .eq('is_active', true)
-      .is('course_group_id', null) // Only subjects not in buckets
-      .order('code');
+      .is('course_group_id', null); // Only subjects not in buckets
+
+    // Add department filter (use validated targetDepartmentId)
+    if (targetDepartmentId) {
+      query = query.eq('department_id', targetDepartmentId);
+    }
+
+    const { data, error } = await query.order('code');
 
     if (error) {
       console.error('Database error:', error);
       return NextResponse.json({ error: 'Failed to fetch subjects' }, { status: 500 });
     }
 
-    console.log(`Found ${data?.length || 0} subjects for college ${user.college_id}, course ${courseId}, semester ${semester}`);
+    const filterInfo = targetDepartmentId ? `, department ${targetDepartmentId}` : '';
+    console.log(`Found ${data?.length || 0} subjects for college ${user.college_id}, course ${courseId}, semester ${semester}${filterInfo}`);
 
     return NextResponse.json(data || []);
   } catch (error) {

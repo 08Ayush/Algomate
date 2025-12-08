@@ -42,6 +42,7 @@ interface Bucket {
 interface CurriculumBuilderProps {
   collegeId: string;
   course: string;
+  department?: string; // Optional for backward compatibility
   semester: number;
 }
 
@@ -194,6 +195,7 @@ function DroppableBucket({
 export default function CurriculumBuilder({
   collegeId,
   course,
+  department,
   semester,
 }: CurriculumBuilderProps) {
   const [availableSubjects, setAvailableSubjects] = useState<Subject[]>([]);
@@ -237,7 +239,7 @@ export default function CurriculumBuilder({
 
     fetchSubjects();
     fetchBuckets();
-  }, [collegeId, course, semester]);
+  }, [collegeId, course, department, semester]);
 
   // Filter subjects by selected credits
   useEffect(() => {
@@ -262,7 +264,17 @@ export default function CurriculumBuilder({
 
       const authToken = Buffer.from(userData).toString('base64');
       console.log('Auth token created:', authToken.substring(0, 20) + '...');
-      const response = await fetch(`/api/nep/subjects?courseId=${encodeURIComponent(course)}&semester=${semester}`, {
+      
+      // Build query params
+      const params = new URLSearchParams({
+        courseId: course,
+        semester: semester.toString()
+      });
+      if (department) {
+        params.append('departmentId', department);
+      }
+      
+      const response = await fetch(`/api/nep/subjects?${params.toString()}`, {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json'
@@ -307,7 +319,17 @@ export default function CurriculumBuilder({
       }
 
       const authToken = Buffer.from(userData).toString('base64');
-      const response = await fetch(`/api/nep/buckets?courseId=${encodeURIComponent(course)}&semester=${semester}`, {
+      
+      // Build query params
+      const params = new URLSearchParams({
+        courseId: course,
+        semester: semester.toString()
+      });
+      if (department) {
+        params.append('departmentId', department);
+      }
+      
+      const response = await fetch(`/api/nep/buckets?${params.toString()}`, {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json'
@@ -640,7 +662,8 @@ export default function CurriculumBuilder({
         body: JSON.stringify({
           bucket_name: newBucketName,
           courseId: course,
-          semester: semester
+          semester: semester,
+          departmentId: department // Include department ID
         })
       });
 

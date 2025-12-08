@@ -125,8 +125,14 @@ interface Student {
   admission_year: number;
   current_semester: number;
   course_id?: string;
+  department_id?: string | null;
   is_active: boolean;
   created_at: string;
+  departments?: {
+    id: string;
+    name: string;
+    code: string;
+  } | null;
 }
 
 export default function AdminDashboard() {
@@ -141,6 +147,7 @@ export default function AdminDashboard() {
   const [students, setStudents] = useState<Student[]>([]);
   const [courseFilter, setCourseFilter] = useState<string>('all');
   const [courseSemesterFilter, setCourseSemesterFilter] = useState<string>('all');
+  const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -232,6 +239,7 @@ export default function AdminDashboard() {
     current_semester: 1,
     admission_year: new Date().getFullYear(),
     course_id: '',
+    department_id: '',
     is_active: true
   });
 
@@ -913,6 +921,7 @@ export default function AdminDashboard() {
           current_semester: 1,
           admission_year: new Date().getFullYear(),
           course_id: '',
+          department_id: '',
           is_active: true
         });
         setSuccessMessage(editingStudent ? 'Student updated successfully' : 'Student created successfully');
@@ -969,6 +978,7 @@ export default function AdminDashboard() {
       current_semester: student.current_semester,
       admission_year: student.admission_year,
       course_id: student.course_id || '',
+      department_id: student.department_id || '',
       is_active: student.is_active
     });
     setShowStudentForm(true);
@@ -990,27 +1000,37 @@ export default function AdminDashboard() {
     (dept.description || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const filteredFaculty = faculty.filter(f =>
-    f.first_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    f.last_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    f.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    f.college_uid.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (f.departments?.name || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredFaculty = faculty.filter(f => {
+    const matchesSearch = f.first_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      f.last_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      f.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      f.college_uid.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (f.departments?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesDepartment = departmentFilter === 'all' || f.department_id === departmentFilter;
+    
+    return matchesSearch && matchesDepartment;
+  });
 
-  const filteredClassrooms = classrooms.filter(c =>
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (c.building || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (c.location_notes || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredClassrooms = classrooms.filter(c => {
+    const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.building || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.location_notes || '').toLowerCase().includes(searchQuery.toLowerCase());
+    
+    return matchesSearch;
+  });
 
-  const filteredBatches = batches.filter(b =>
-    b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    b.section.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    b.academic_year.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (b.departments?.name || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredBatches = batches.filter(b => {
+    const matchesSearch = b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      b.section.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      b.academic_year.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (b.departments?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesDepartment = departmentFilter === 'all' || b.department_id === departmentFilter;
+    
+    return matchesSearch && matchesDepartment;
+  });
 
   const filteredSubjects = subjects.filter(s => {
     const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1021,8 +1041,9 @@ export default function AdminDashboard() {
     
     const matchesSemester = selectedSemester === 'all' || s.semester === selectedSemester;
     const matchesCourse = courseSemesterFilter === 'all' || s.course_id === courseSemesterFilter;
+    const matchesDepartment = departmentFilter === 'all' || s.department_id === departmentFilter;
     
-    return matchesSearch && matchesSemester && matchesCourse;
+    return matchesSearch && matchesSemester && matchesCourse && matchesDepartment;
   });
 
   const filteredCourses = courses.filter(c =>
@@ -1036,11 +1057,13 @@ export default function AdminDashboard() {
       s.last_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.college_uid.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (s.student_id || '').toLowerCase().includes(searchQuery.toLowerCase());
+      (s.student_id || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (s.departments?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
     
     const matchesCourse = courseFilter === 'all' || s.course_id === courseFilter;
+    const matchesDepartment = departmentFilter === 'all' || s.department_id === departmentFilter;
     
-    return matchesSearch && matchesCourse;
+    return matchesSearch && matchesCourse && matchesDepartment;
   });
 
   if (loading) {
@@ -1063,30 +1086,9 @@ export default function AdminDashboard() {
       
       <div className="pt-20 pb-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
-          <div className="mb-8 flex justify-between items-start">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-              <p className="mt-2 text-gray-600">Manage departments and faculty members</p>
-            </div>
-            <button
-              onClick={() => router.push('/admin/nep-curriculum')}
-              className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-lg hover:from-blue-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 shadow-md transition-all duration-200 flex items-center space-x-2"
-            >
-              <svg 
-                className="w-5 h-5" 
-                fill="none" 
-                stroke="currentColor" 
-                viewBox="0 0 24 24"
-              >
-                <path 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  strokeWidth={2} 
-                  d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" 
-                />
-              </svg>
-              <span className="font-semibold">NEP Curriculum Builder</span>
-            </button>
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+            <p className="mt-2 text-gray-600">Manage departments and faculty members. Creator Faculty can access NEP Curriculum Builder from their dashboard.</p>
           </div>
 
           {error && (
@@ -1336,7 +1338,21 @@ export default function AdminDashboard() {
           {activeTab === 'faculty' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
-                <h2 className="text-xl font-semibold text-gray-900">Faculty</h2>
+                <div className="flex items-center gap-4">
+                  <h2 className="text-xl font-semibold text-gray-900">Faculty</h2>
+                  <select
+                    value={departmentFilter}
+                    onChange={(e) => setDepartmentFilter(e.target.value)}
+                    className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All Departments</option>
+                    {departments.map(dept => (
+                      <option key={dept.id} value={dept.id}>
+                        {dept.code} - {dept.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <button
                   onClick={() => {
                     setEditingFaculty(null);
@@ -1542,7 +1558,21 @@ export default function AdminDashboard() {
           {activeTab === 'classrooms' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
-                <h2 className="text-xl font-semibold text-gray-900">Classrooms & Labs</h2>
+                <div className="flex items-center gap-4">
+                  <h2 className="text-xl font-semibold text-gray-900">Classrooms & Labs</h2>
+                  <select
+                    value={departmentFilter}
+                    onChange={(e) => setDepartmentFilter(e.target.value)}
+                    className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All Departments</option>
+                    {departments.map(dept => (
+                      <option key={dept.id} value={dept.id}>
+                        {dept.code} - {dept.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <button
                   onClick={() => {
                     setEditingClassroom(null);
@@ -1867,7 +1897,21 @@ export default function AdminDashboard() {
           {activeTab === 'batches' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
-                <h2 className="text-xl font-semibold text-gray-900">Student Batches</h2>
+                <div className="flex items-center gap-4">
+                  <h2 className="text-xl font-semibold text-gray-900">Student Batches</h2>
+                  <select
+                    value={departmentFilter}
+                    onChange={(e) => setDepartmentFilter(e.target.value)}
+                    className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All Departments</option>
+                    {departments.map(dept => (
+                      <option key={dept.id} value={dept.id}>
+                        {dept.code} - {dept.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div className="text-sm text-gray-600">
                   <p>Batches are created automatically when you create NEP curriculum buckets</p>
                 </div>
@@ -1968,6 +2012,18 @@ export default function AdminDashboard() {
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-4">
                   <h2 className="text-xl font-semibold text-gray-900">Subjects</h2>
+                  <select
+                    value={departmentFilter}
+                    onChange={(e) => setDepartmentFilter(e.target.value)}
+                    className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All Departments</option>
+                    {departments.map(dept => (
+                      <option key={dept.id} value={dept.id}>
+                        {dept.code} - {dept.name}
+                      </option>
+                    ))}
+                  </select>
                   <select
                     value={courseSemesterFilter}
                     onChange={(e) => setCourseSemesterFilter(e.target.value)}
@@ -2531,12 +2587,24 @@ export default function AdminDashboard() {
           {activeTab === 'students' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
-                <div className="flex items-center space-x-4">
+                <div className="flex items-center gap-4">
                   <h2 className="text-xl font-semibold text-gray-900">Students</h2>
+                  <select
+                    value={departmentFilter}
+                    onChange={(e) => setDepartmentFilter(e.target.value)}
+                    className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All Departments</option>
+                    {departments.map(dept => (
+                      <option key={dept.id} value={dept.id}>
+                        {dept.code} - {dept.name}
+                      </option>
+                    ))}
+                  </select>
                   <select
                     value={courseFilter}
                     onChange={(e) => setCourseFilter(e.target.value)}
-                    className="rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="all">All Courses</option>
                     {courses.map(course => (
@@ -2558,6 +2626,7 @@ export default function AdminDashboard() {
                       current_semester: 1,
                       admission_year: new Date().getFullYear(),
                       course_id: '',
+                      department_id: '',
                       is_active: true
                     });
                     setShowStudentForm(true);
@@ -2686,6 +2755,22 @@ export default function AdminDashboard() {
                           </select>
                         </div>
 
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Department (Optional)</label>
+                          <select
+                            value={studentForm.department_id}
+                            onChange={(e) => setStudentForm({...studentForm, department_id: e.target.value})}
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          >
+                            <option value="">No Department</option>
+                            {departments.map(dept => (
+                              <option key={dept.id} value={dept.id}>
+                                {dept.code} - {dept.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
                         <div className="flex items-center">
                           <input
                             type="checkbox"
@@ -2750,6 +2835,9 @@ export default function AdminDashboard() {
                                     {student.phone && <span>📱 {student.phone}</span>}
                                     {student.course_id && (
                                       <span>📚 {courses.find(c => c.id === student.course_id)?.code || 'N/A'}</span>
+                                    )}
+                                    {student.departments && (
+                                      <span>🏢 {student.departments.code} - {student.departments.name}</span>
                                     )}
                                   </div>
                                 </div>
