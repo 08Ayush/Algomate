@@ -19,10 +19,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get user details to verify they are creator/publisher
+    // Get user details to verify they are creator/publisher - include department_id
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('id, role, faculty_type, college_id, course_id')
+      .select('id, role, faculty_type, college_id, course_id, department_id')
       .eq('id', userId)
       .single();
 
@@ -46,7 +46,8 @@ export async function GET(request: NextRequest) {
       role: user.role,
       faculty_type: user.faculty_type,
       college_id: user.college_id,
-      course_id: user.course_id
+      course_id: user.course_id,
+      department_id: user.department_id
     });
 
     // Build query for batches with elective buckets
@@ -78,7 +79,15 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('college_id', user.college_id)
-      .eq('is_active', true)
+      .eq('is_active', true);
+
+    // Filter by department for creator users
+    if (user.faculty_type === 'creator' && user.department_id) {
+      batchesQuery = batchesQuery.eq('department_id', user.department_id);
+      console.log('🔍 Filtering batches by department_id:', user.department_id);
+    }
+
+    batchesQuery = batchesQuery
       .order('semester', { ascending: true })
       .order('section', { ascending: true });
 

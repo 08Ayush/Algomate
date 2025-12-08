@@ -27,10 +27,10 @@ async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) 
     const userString = Buffer.from(token, 'base64').toString();
     const user = JSON.parse(userString);
     
-    // Verify user exists and is active
+    // Verify user exists and is active - include department_id
     const { data: dbUser, error } = await supabaseAdmin
       .from('users')
-      .select('id, college_id, role, faculty_type, is_active')
+      .select('id, college_id, department_id, role, faculty_type, is_active')
       .eq('id', user.id)
       .eq('is_active', true)
       .single();
@@ -61,7 +61,7 @@ async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) 
   }
 }
 
-// GET - Fetch subjects for authenticated user's college
+// GET - Fetch subjects for authenticated user's college (and department if creator)
 export async function GET(request: NextRequest) {
   try {
     // Get authenticated user - allow read access for creator/publisher
@@ -73,8 +73,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Fetch subjects only for user's college with department info
-    const { data: subjects, error } = await supabaseAdmin
+    // Build query based on user role
+    let query = supabaseAdmin
       .from('subjects')
       .select(`
         *,
@@ -89,7 +89,14 @@ export async function GET(request: NextRequest) {
           code
         )
       `)
-      .eq('college_id', user.college_id)
+      .eq('college_id', user.college_id);
+
+    // Filter by department for creator role
+    if (user.role === 'faculty' && user.faculty_type === 'creator' && user.department_id) {
+      query = query.eq('department_id', user.department_id);
+    }
+
+    const { data: subjects, error } = await query
       .order('semester')
       .order('code');
 

@@ -41,7 +41,11 @@ CREATE TYPE nep_category AS ENUM (
     'VAC',          -- Value Added Course
     'CORE', 
     'PEDAGOGY',     -- Specific to B.Ed/ITEP
-    'INTERNSHIP'    -- Block-out events
+    'INTERNSHIP',   -- Block-out events
+    'Major I',      -- Major specialization I
+    'Major II',     -- Major specialization II
+    'CORE COMPLETELY',  -- Fully required core subject
+    'CORE PARTIAL'      -- Partially required core subject
 );
 CREATE TYPE faculty_designation AS ENUM (
     'Professor',
@@ -131,6 +135,7 @@ CREATE TABLE users (
     student_id VARCHAR(50),
     admission_year INT,
     current_semester INT CHECK (current_semester BETWEEN 1 AND 8),
+    credit DECIMAL(5,2),
     max_hours_per_day INT DEFAULT 6 CHECK (max_hours_per_day BETWEEN 1 AND 12),
     max_hours_per_week INT DEFAULT 30 CHECK (max_hours_per_week BETWEEN 1 AND 60),
     min_hours_per_week INT DEFAULT 10 CHECK (min_hours_per_week >= 0),
@@ -300,10 +305,29 @@ CREATE TABLE batches (
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(college_id, department_id, semester, academic_year, name, section),
+    semester_start_date DATE,
+    semester_end_date DATE,
+    is_current_semester BOOLEAN DEFAULT FALSE,
     CONSTRAINT valid_batch_times CHECK (preferred_start_time < preferred_end_time),
-    CONSTRAINT valid_strength CHECK (actual_strength <= expected_strength + 10)
+    CONSTRAINT valid_strength CHECK (actual_strength <= expected_strength + 10),
+    CONSTRAINT valid_semester_dates CHECK (
+        (semester_start_date IS NULL) OR 
+        (semester_end_date IS NULL) OR 
+        (semester_start_date < semester_end_date)
+    )
 );
+
+-- Add unique constraint for batches with named constraint
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'batches_unique_key'
+    ) THEN
+        ALTER TABLE batches
+        ADD CONSTRAINT batches_unique_key 
+        UNIQUE (college_id, department_id, semester, academic_year, name, section);
+    END IF;
+END $$;
 
 -- ============================================================================
 -- 3. ALGORITHM-CRITICAL TABLES
@@ -631,6 +655,7 @@ CREATE INDEX idx_classrooms_capacity_features ON classrooms(college_id, capacity
 CREATE INDEX idx_batches_college_dept_semester ON batches(college_id, department_id, semester, academic_year, is_active);
 CREATE INDEX idx_batches_access_control ON batches(college_id, department_id, semester, section);
 CREATE INDEX IF NOT EXISTS idx_batches_course_id ON batches(course_id);
+CREATE INDEX IF NOT EXISTS idx_batches_semester_validity ON batches(semester_start_date, semester_end_date, is_current_semester) WHERE is_active = TRUE;
 CREATE INDEX idx_time_slots_college_algorithm ON time_slots(college_id, day, start_time, is_active) WHERE NOT is_break_time;
 CREATE INDEX idx_faculty_qualifications_lookup ON faculty_qualified_subjects(faculty_id, subject_id, proficiency_level);
 CREATE INDEX idx_faculty_availability_lookup ON faculty_availability(faculty_id, time_slot_id, is_available);
@@ -783,6 +808,20 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+CREATE OR REPLACE FUNCTION update_current_semester_flag()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Automatically set is_current_semester flag based on semester dates
+    IF NEW.semester_start_date IS NOT NULL AND NEW.semester_end_date IS NOT NULL THEN
+        NEW.is_current_semester := (CURRENT_DATE BETWEEN NEW.semester_start_date AND NEW.semester_end_date);
+    ELSE
+        NEW.is_current_semester := FALSE;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
 -- Apply timestamp triggers
 CREATE TRIGGER update_colleges_updated_at BEFORE UPDATE ON colleges FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_departments_updated_at BEFORE UPDATE ON departments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -803,6 +842,9 @@ CREATE TRIGGER update_elective_buckets_updated_at BEFORE UPDATE ON elective_buck
 
 -- Apply special event flag trigger
 CREATE TRIGGER set_special_event_flag BEFORE INSERT OR UPDATE OF nep_category ON subjects FOR EACH ROW EXECUTE FUNCTION update_special_event_flag();
+
+-- Apply current semester flag trigger
+CREATE TRIGGER trigger_update_current_semester BEFORE INSERT OR UPDATE OF semester_start_date, semester_end_date ON batches FOR EACH ROW EXECUTE FUNCTION update_current_semester_flag();
 
 -- Apply audit triggers
 CREATE TRIGGER audit_users AFTER INSERT OR UPDATE OR DELETE ON users FOR EACH ROW EXECUTE FUNCTION log_audit_changes();

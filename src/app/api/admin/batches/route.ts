@@ -67,12 +67,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user is admin
-    if (!['admin', 'college_admin', 'super_admin'].includes(user.role)) {
-      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
-    }
-
-    // Fetch batches based on user's college
+    // Build query based on user role
     let query = supabase
       .from('batches')
       .select(`
@@ -83,15 +78,19 @@ export async function GET(request: NextRequest) {
           code
         )
       `)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false });
+      .eq('is_active', true);
 
-    // Filter by college for college admin
-    if (user.role === 'college_admin' && user.college_id) {
+    // Filter by college for college admin and faculty
+    if (user.college_id) {
       query = query.eq('college_id', user.college_id);
     }
 
-    const { data: batches, error } = await query;
+    // Filter by department for creator role
+    if (user.role === 'faculty' && user.faculty_type === 'creator' && user.department_id) {
+      query = query.eq('department_id', user.department_id);
+    }
+
+    const { data: batches, error } = await query.order('created_at', { ascending: false });
 
     if (error) {
       console.error('Database error:', error);

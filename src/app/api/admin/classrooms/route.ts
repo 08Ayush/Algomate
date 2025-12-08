@@ -26,10 +26,10 @@ async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) 
     const userString = Buffer.from(token, 'base64').toString();
     const user = JSON.parse(userString);
     
-    // Verify user exists and is active
+    // Verify user exists and is active - include department_id
     const { data: dbUser, error } = await supabaseAdmin
       .from('users')
-      .select('id, college_id, role, faculty_type, is_active')
+      .select('id, college_id, department_id, role, faculty_type, is_active')
       .eq('id', user.id)
       .eq('is_active', true)
       .single();
@@ -71,12 +71,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Fetch classrooms only for user's college
-    const { data: classrooms, error } = await supabaseAdmin
+    // Build query based on user role
+    let query = supabaseAdmin
       .from('classrooms')
       .select('*')
-      .eq('college_id', user.college_id)
-      .order('name');
+      .eq('college_id', user.college_id);
+
+    // Filter by department for creator role
+    if (user.role === 'faculty' && user.faculty_type === 'creator' && user.department_id) {
+      query = query.eq('department_id', user.department_id);
+    }
+
+    const { data: classrooms, error } = await query.order('name');
 
     if (error) {
       console.error('Error fetching classrooms:', error);

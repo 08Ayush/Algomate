@@ -118,12 +118,17 @@ export default function FacultyQualificationsPage() {
         }
       }
 
-      // Load qualifications for the entire college (not just one course)
-      const qualRes = await fetch(`/api/faculty/qualifications?college_id=${userData.college_id}`);
+      // Load qualifications for the entire college (filtered by department for creators)
+      const authToken = Buffer.from(JSON.stringify(userData)).toString('base64');
+      const qualRes = await fetch('/api/faculty/qualifications', {
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      });
       const qualData = await qualRes.json();
       if (qualData.success) {
         setQualifications(qualData.qualifications);
-        console.log(`✅ Loaded ${qualData.qualifications.length} qualifications for college`);
+        console.log(`✅ Loaded ${qualData.qualifications.length} qualifications`);
       }
 
       // Load all faculty from the college (not just one course)
@@ -182,10 +187,12 @@ export default function FacultyQualificationsPage() {
     setSaving(true);
 
     try {
+      const authToken = Buffer.from(JSON.stringify(user)).toString('base64');
       const response = await fetch('/api/faculty/qualifications', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
         },
         body: JSON.stringify({
           faculty_id: selectedFaculty,
@@ -224,8 +231,12 @@ export default function FacultyQualificationsPage() {
     }
 
     try {
+      const authToken = Buffer.from(JSON.stringify(user)).toString('base64');
       const response = await fetch(`/api/faculty/qualifications?id=${id}`, {
         method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
       });
 
       const data = await response.json();
