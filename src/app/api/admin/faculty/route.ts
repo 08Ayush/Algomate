@@ -73,6 +73,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    console.log('🔍 Faculty API - User authenticated:', {
+      id: user.id,
+      role: user.role,
+      department_id: user.department_id,
+      college_id: user.college_id
+    });
+
     // Build query based on user role
     let query = supabaseAdmin
       .from('users')
@@ -93,12 +100,17 @@ export async function GET(request: NextRequest) {
       .eq('college_id', user.college_id)
       .in('role', ['admin', 'faculty']);
 
-    // Filter by department for creator role
-    if (user.role === 'faculty' && user.faculty_type === 'creator' && user.department_id) {
+    // Filter by department for non-admin users
+    if (user.role !== 'admin' && user.role !== 'college_admin' && user.department_id) {
+      console.log('🔒 Filtering faculty by department_id:', user.department_id);
       query = query.eq('department_id', user.department_id);
+    } else {
+      console.log('👤 User role:', user.role, '- No department filtering applied');
     }
 
     const { data: faculty, error } = await query.order('first_name');
+    
+    console.log(`📊 Fetched ${faculty?.length || 0} faculty members for user role: ${user.role}, dept: ${user.department_id}`);
 
     if (error) {
       console.error('Faculty fetch error:', error);

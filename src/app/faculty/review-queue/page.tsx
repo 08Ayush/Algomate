@@ -74,13 +74,38 @@ export default function ReviewQueuePage() {
 
       console.log('🔍 Fetching pending timetables for review from department:', userDepartmentId);
       
-      const { data, error} = await supabase
+      // First, get all batches for this department
+      const { data: departmentBatches, error: batchError } = await supabase
+        .from('batches')
+        .select('id')
+        .eq('department_id', userDepartmentId);
+
+      if (batchError) {
+        console.error('❌ Error fetching department batches:', batchError);
+        setLoading(false);
+        return;
+      }
+
+      const batchIds = departmentBatches?.map(b => b.id) || [];
+      
+      if (batchIds.length === 0) {
+        console.log('⚠️ No batches found for this department');
+        setPendingTimetables([]);
+        setLoading(false);
+        return;
+      }
+
+      console.log('📦 Found', batchIds.length, 'batches for department:', userDepartmentId);
+
+      // Now fetch timetables only for those batches
+      const { data, error } = await supabase
         .from('generated_timetables')
         .select(`
           *,
           batch:batches(id, name, department_id)
         `)
         .eq('status', 'pending_approval')
+        .in('batch_id', batchIds)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -89,17 +114,8 @@ export default function ReviewQueuePage() {
         return;
       }
 
-      // Log raw data before filtering
-      console.log('📦 Raw pending timetables data:', data);
-      console.log('🔍 Filtering by department:', userDepartmentId);
-
-      // Filter by department after fetching
-      const filteredData = data?.filter((tt: any) => {
-        console.log('Checking timetable:', tt.id, 'batch:', tt.batch, 'dept:', tt.batch?.department_id);
-        return tt.batch?.department_id === userDepartmentId;
-      });
-      
-      console.log('✅ Filtered pending timetables:', filteredData?.length);
+      console.log('✅ Fetched', data?.length || 0, 'pending timetables for this department');
+      const filteredData = data;
 
       // Get additional details for each timetable
       const timetablesWithCounts = await Promise.all(
@@ -199,7 +215,47 @@ export default function ReviewQueuePage() {
       }
 
       console.log('✅ Timetable approved and published successfully');
-      alert('Timetable approved and published successfully!');
+      
+      // Send email notifications to all students and faculty
+      try {
+        const notifyResponse = await fetch('/api/email/sendUpdate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+          },
+          body: JSON.stringify({
+            timetableId,
+            publishedBy: `${user.first_name} ${user.last_name}`
+          })
+        });
+
+        const notifyData = await notifyResponse.json();
+        
+        if (notifyData.success) {
+          const stats = notifyData.stats;
+          alert(
+            `✅ Timetable approved and published successfully!\n\n` +
+            `📧 Email notifications sent to:\n` +
+            `• ${stats.students} students\n` +
+            `• ${stats.faculty} faculty members\n` +
+            `Total: ${stats.sent}/${stats.total} emails sent`
+          );
+        } else {
+          alert(
+            `✅ Timetable approved and published successfully!\n\n` +
+            `⚠️ Warning: Failed to send email notifications.\n` +
+            `Please inform students manually.`
+          );
+        }
+      } catch (emailError) {
+        console.error('❌ Error sending email notifications:', emailError);
+        alert(
+          `✅ Timetable approved and published successfully!\n\n` +
+          `⚠️ Warning: Failed to send email notifications.\n` +
+          `Please inform students manually.`
+        );
+      }
       
       // Refresh the list
       fetchPendingTimetables(user?.department_id);

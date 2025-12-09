@@ -237,15 +237,39 @@ export default function TimetablesPage() {
     console.log('🗑️ Deleting timetable:', timetableId);
 
     try {
-      // Delete timetable (cascade will handle scheduled_classes, workflow_approvals, etc.)
-      const { error } = await supabase
+      // Step 1: Delete workflow approvals first (foreign key constraint)
+      const { error: approvalError } = await supabase
+        .from('workflow_approvals')
+        .delete()
+        .eq('timetable_id', timetableId);
+
+      if (approvalError) {
+        console.error('❌ Error deleting workflow approvals:', approvalError);
+        alert(`Failed to delete workflow approvals: ${approvalError.message}`);
+        setIsDeleting(null);
+        return;
+      }
+
+      // Step 2: Delete scheduled classes (if not cascade)
+      const { error: classesError } = await supabase
+        .from('scheduled_classes')
+        .delete()
+        .eq('timetable_id', timetableId);
+
+      if (classesError) {
+        console.error('❌ Error deleting scheduled classes:', classesError);
+        // Continue anyway, might cascade
+      }
+
+      // Step 3: Delete the timetable
+      const { error: timetableError } = await supabase
         .from('generated_timetables')
         .delete()
         .eq('id', timetableId);
 
-      if (error) {
-        console.error('❌ Error deleting timetable:', error);
-        alert(`Failed to delete timetable: ${error.message}`);
+      if (timetableError) {
+        console.error('❌ Error deleting timetable:', timetableError);
+        alert(`Failed to delete timetable: ${timetableError.message}`);
         setIsDeleting(null);
         return;
       }

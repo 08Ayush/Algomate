@@ -48,14 +48,14 @@ export default function FacultyListPage() {
     }
   }, [router]);
 
-  // Fetch faculty list across all departments (creator/publisher can view all)
+  // Fetch faculty list (filtered by department for non-admin users)
   useEffect(() => {
     async function fetchFaculty() {
       try {
         // Only fetch after user is loaded
         if (!user) return;
         
-        // Use admin API for cross-department access
+        // Use admin API with authentication
         const authToken = Buffer.from(JSON.stringify(user)).toString('base64');
         const response = await fetch('/api/admin/faculty', {
           headers: {
@@ -106,7 +106,7 @@ export default function FacultyListPage() {
               <div>
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Faculty Directory</h1>
                 <p className="text-gray-600 dark:text-gray-300">
-                  All Departments - Faculty Members {facultyList.length > 0 && `(${facultyList.length})`}
+                  {user?.department_name || user?.department_code || 'Your Department'} - Faculty Members {facultyList.length > 0 && `(${facultyList.length})`}
                 </p>
               </div>
             </div>

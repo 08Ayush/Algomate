@@ -53,7 +53,7 @@ export function Footer() {
             </div>
             <p className="text-muted-foreground mb-6 max-w-md">
               Empowering students to navigate their educational journey with personalized guidance, 
-              resources, and tools for academic success.
+              resources, and tools for academic success. Fully compliant with National Education Policy (NEP) 2020.
             </p>
             <div className="flex space-x-4">
               <a href="#" className="text-muted-foreground hover:text-foreground transition-colors">

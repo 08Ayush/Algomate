@@ -103,7 +103,7 @@ export default function HybridSchedulerPage() {
       const parsedUser = JSON.parse(userData);
       setUser(parsedUser);
       setLoading(false);
-      fetchBatches(parsedUser.department_id);
+      fetchBatches(parsedUser.department_id, parsedUser);
       fetchConstraints(parsedUser.department_id);
     } catch (error) {
       console.error('Error parsing user data:', error);
@@ -112,10 +112,21 @@ export default function HybridSchedulerPage() {
     }
   }, [router]);
 
-  const fetchBatches = async (departmentId: string) => {
+  const fetchBatches = async (departmentId: string, userData?: any) => {
     try {
+      const currentUser = userData || user;
+      if (!currentUser) {
+        console.error('❌ No user data available');
+        return;
+      }
+      
       console.log('🔍 Fetching batches for department_id:', departmentId);
-      const response = await fetch(`/api/batches?department_id=${departmentId}`);
+      const authToken = Buffer.from(JSON.stringify(currentUser)).toString('base64');
+      const response = await fetch(`/api/batches?department_id=${departmentId}`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      });
       const data = await response.json();
       console.log('📦 API Response:', data);
       

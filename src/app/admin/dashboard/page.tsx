@@ -1088,7 +1088,7 @@ export default function AdminDashboard() {
         <div className="max-w-7xl mx-auto">
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-            <p className="mt-2 text-gray-600">Manage departments and faculty members. Creator Faculty can access NEP Curriculum Builder from their dashboard.</p>
+            <p className="mt-2 text-gray-600">Manage departments and faculty members. Creator Faculty can access NEP Bucket Builder from their dashboard.</p>
           </div>
 
           {error && (

@@ -7,7 +7,7 @@ export function Hero() {
   const stats = [
     { number: "500+", label: "Educational Institutions" },
     { number: "50,000+", label: "Students Managed" },
-    { number: "2,000+", label: "Smart Classrooms" },
+    { number: "2,000+", label: "Classrooms Managed" },
     { number: "99.9%", label: "System Uptime" }
   ];
 
@@ -18,7 +18,7 @@ export function Hero() {
         <div className="mx-auto max-w-5xl text-center">
           <div className="mb-6 inline-flex items-center rounded-full border border-border bg-card px-4 py-1.5 text-sm font-medium shadow-sm animate-pulse">
             <Sparkles className="mr-2 h-4 w-4 text-primary" />
-            Next-Generation Smart Timetable Management System
+            Next-Generation Smart Timetable Management System | NEP 2020 Compliant
           </div>
           <h1 className="mb-6 text-4xl font-bold tracking-tight sm:text-6xl lg:text-7xl">
             Transform Your{" "}
@@ -28,8 +28,8 @@ export function Hero() {
             {" "}With Us
           </h1>
           <p className="mb-8 text-xl text-muted-foreground sm:text-2xl max-w-3xl mx-auto">
-            The most advanced Smart Timetable Scheduling System. 
-            Powered by automation, designed for excellence, built for the future of education.
+            The most advanced Smart Timetable Scheduling System with full NEP 2020 Policy compliance. 
+            Powered by AI automation, designed for excellence, built for the future of education.
           </p>
           <div className="flex flex-col items-center justify-center gap-4 sm:flex-row mb-12">
             <Link 

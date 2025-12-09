@@ -16,11 +16,13 @@ export function About() {
             </h2>
             <p className="text-lg text-muted-foreground mb-6">
               At Academic Compass, we believe every student deserves personalized guidance on their educational journey. 
-              Our mission is to democratize access to quality academic counseling and career guidance through technology.
+              Our mission is to democratize access to quality academic counseling and career guidance through technology, 
+              fully aligned with the National Education Policy (NEP) 2020.
             </p>
             <p className="text-lg text-muted-foreground mb-8">
               Founded by educators and technologists, we combine deep academic expertise with cutting-edge AI to provide 
-              students with the tools and insights they need to make informed decisions about their future.
+              students with the tools and insights they need to make informed decisions about their future. Our platform 
+              implements NEP 2020's Choice-Based Credit System (CBCS) and supports multidisciplinary learning approaches.
             </p>
             
             <div className="grid grid-cols-2 gap-6">

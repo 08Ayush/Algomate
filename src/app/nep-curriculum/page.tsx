@@ -121,7 +121,7 @@ export default function NEPCurriculumPage() {
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">NEP 2020 Curriculum Builder</h1>
+              <h1 className="text-3xl font-bold text-gray-900">NEP 2020 Bucket Builder</h1>
               <p className="text-gray-600 mt-1">
                 Create elective buckets and assign subjects for Choice-Based Credit System
               </p>
@@ -202,7 +202,7 @@ export default function NEPCurriculumPage() {
       {/* Help Section */}
       <div className="max-w-7xl mx-auto px-6 py-6">
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-          <h3 className="font-bold text-blue-900 mb-3 text-lg">📚 How to use the NEP Curriculum Builder:</h3>
+          <h3 className="font-bold text-blue-900 mb-3 text-lg">📚 How to use the NEP Bucket Builder:</h3>
           <ol className="list-decimal list-inside space-y-2 text-blue-800">
             <li><strong>Select Course & Semester:</strong> Choose the program (ITEP/B.Ed/M.Ed) and semester from the dropdowns above</li>
             <li><strong>Create Elective Buckets:</strong> Enter a bucket name (e.g., "Major Pool", "Minor Pool") and click "Create Bucket"</li>

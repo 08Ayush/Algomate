@@ -153,5 +153,6 @@ ehthumbs.db
 migrations/
 
 # Local environment configurations
+.env
 .env.example
 .env.local.example

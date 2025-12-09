@@ -144,8 +144,8 @@ export async function GET(request: NextRequest) {
       return faculty?.college_id === user.college_id && subject?.college_id === user.college_id;
     });
 
-    // Filter by department for creator role
-    if (user.role === 'faculty' && user.faculty_type === 'creator' && user.department_id) {
+    // Filter by department for non-admin users
+    if (user.role !== 'admin' && user.role !== 'college_admin' && user.department_id) {
       filteredData = filteredData.filter(qual => {
         const faculty = Array.isArray(qual.faculty) ? qual.faculty[0] : qual.faculty;
         const subject = Array.isArray(qual.subject) ? qual.subject[0] : qual.subject;
@@ -174,8 +174,8 @@ export async function GET(request: NextRequest) {
 // POST: Add new faculty-subject qualification
 export async function POST(request: NextRequest) {
   try {
-    // Get authenticated user - require admin for write operations
-    const user = await getAuthenticatedUser(request, true);
+    // Get authenticated user - allow creator/publisher to write
+    const user = await getAuthenticatedUser(request, false);
     if (!user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized. Only admins can create qualifications.' },
@@ -327,11 +327,11 @@ export async function POST(request: NextRequest) {
 // DELETE: Remove faculty-subject qualification
 export async function DELETE(request: NextRequest) {
   try {
-    // Get authenticated user - require admin for delete operations
-    const user = await getAuthenticatedUser(request, true);
+    // Get authenticated user - allow creator/publisher to delete
+    const user = await getAuthenticatedUser(request, false);
     if (!user) {
       return NextResponse.json(
-        { success: false, error: 'Unauthorized. Only admins can delete qualifications.' },
+        { success: false, error: 'Unauthorized. Please log in.' },
         { status: 403 }
       );
     }

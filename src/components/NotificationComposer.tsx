@@ -55,7 +55,18 @@ export function NotificationComposer({
 
   const fetchBatches = async () => {
     try {
-      const response = await fetch(`/api/batches?department_id=${userDepartmentId}`);
+      // Get user from localStorage for auth token
+      const userData = localStorage.getItem('user');
+      if (!userData) return;
+      
+      const user = JSON.parse(userData);
+      const authToken = Buffer.from(JSON.stringify(user)).toString('base64');
+      
+      const response = await fetch(`/api/batches?department_id=${userDepartmentId}`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      });
       const data = await response.json();
       if (data.success) {
         setBatches(data.data || []);

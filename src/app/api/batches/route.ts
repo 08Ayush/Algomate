@@ -6,16 +6,60 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Helper function to get authenticated user
+async function getAuthenticatedUser(request: NextRequest) {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.substring(7);
+  try {
+    const userString = Buffer.from(token, 'base64').toString();
+    const user = JSON.parse(userString);
+    
+    // Verify user exists and is active - include department_id
+    const { data: dbUser, error } = await supabase
+      .from('users')
+      .select('id, department_id, role, is_active')
+      .eq('id', user.id)
+      .eq('is_active', true)
+      .single();
+
+    if (error || !dbUser) {
+      return null;
+    }
+
+    return dbUser;
+  } catch {
+    return null;
+  }
+}
+
 // GET - Fetch batches by department
 export async function GET(request: NextRequest) {
   try {
+    // Get authenticated user
+    const user = await getAuthenticatedUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized. Please log in.' },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const departmentCode = searchParams.get('department_code');
-    const departmentId = searchParams.get('department_id');
+    let departmentId = searchParams.get('department_id');
 
     console.log('Fetching batches with params:', { departmentCode, departmentId });
 
     let deptId = departmentId;
+
+    // For non-admin users, enforce department filtering
+    if (user.role !== 'admin' && !deptId) {
+      deptId = user.department_id;
+    }
 
     // Get department ID from code if needed
     if (!deptId && departmentCode) {

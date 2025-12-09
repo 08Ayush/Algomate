@@ -131,26 +131,40 @@ export default function FacultyQualificationsPage() {
         console.log(`✅ Loaded ${qualData.qualifications.length} qualifications`);
       }
 
-      // Load all faculty from the college (not just one course)
-      const { data: facultyData, error: facultyError } = await supabase
+      // Load all faculty from the college - filter by department for non-admin users
+      let facultyQuery = supabase
         .from('users')
         .select('id, first_name, last_name, email, department_id, course_id')
         .eq('role', 'faculty')
         .eq('college_id', userData.college_id)
-        .eq('is_active', true)
+        .eq('is_active', true);
+
+      // Filter by department for publishers/creators
+      if (userData.role === 'faculty' && userData.department_id) {
+        facultyQuery = facultyQuery.eq('department_id', userData.department_id);
+      }
+
+      const { data: facultyData, error: facultyError } = await facultyQuery
         .order('first_name');
 
       if (!facultyError && facultyData) {
         setFaculty(facultyData);
-        console.log(`✅ Loaded ${facultyData.length} faculty from college`);
+        console.log(`✅ Loaded ${facultyData.length} faculty from college (filtered by department if needed)`);
       }
 
-      // Load all subjects from the college (not just one course)
-      const { data: subjectsData, error: subjectsError } = await supabase
+      // Load all subjects from the college - filter by department for non-admin users
+      let subjectsQuery = supabase
         .from('subjects')
         .select('id, name, code, semester, subject_type, credits_per_week, department_id, course_id')
         .eq('college_id', userData.college_id)
-        .eq('is_active', true)
+        .eq('is_active', true);
+
+      // Filter by department for publishers/creators
+      if (userData.role === 'faculty' && userData.department_id) {
+        subjectsQuery = subjectsQuery.eq('department_id', userData.department_id);
+      }
+
+      const { data: subjectsData, error: subjectsError } = await subjectsQuery
         .order('semester', { ascending: true })
         .order('name');
 

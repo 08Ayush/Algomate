@@ -1,4 +1,4 @@
--- ============================================================================
+]-- ============================================================================
 -- PYGRAM 2025 - FINAL MULTI-COLLEGE PRODUCTION SCHEMA (Corrected)
 -- This version is corrected and ready to run on a new project.
 -- ============================================================================
@@ -1468,6 +1468,280 @@ BEGIN
     RAISE NOTICE '✓ NEP 2020 Architecture: INTEGRATED';
     RAISE NOTICE 'Ready for PyGram 2025 Algorithm Integration!';
     RAISE NOTICE '==============================================================';
+END $$;
+
+-- ============================================================================
+-- MAJOR SUBJECT LOCK CONSTRAINT SYSTEM (NEP 2020 Compliance)
+-- Ensures students cannot change their MAJOR discipline after Semester 3
+-- ============================================================================
+
+-- Step 1: Add columns to track major subject selections
+ALTER TABLE student_course_selections 
+ADD COLUMN IF NOT EXISTS selection_type VARCHAR(20) DEFAULT 'ELECTIVE' CHECK (selection_type IN ('MAJOR', 'MINOR', 'ELECTIVE', 'CORE')),
+ADD COLUMN IF NOT EXISTS is_locked BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS continuation_of UUID REFERENCES student_course_selections(id) ON DELETE SET NULL;
+
+COMMENT ON COLUMN student_course_selections.selection_type IS 'MAJOR (Major I/II), MINOR, CORE (Core Completely/Partial), ELECTIVE';
+COMMENT ON COLUMN student_course_selections.is_locked IS 'TRUE when MAJOR selection is locked from Semester 3 onwards (permanent)';
+COMMENT ON COLUMN student_course_selections.locked_at IS 'Timestamp when MAJOR selection was permanently locked';
+COMMENT ON COLUMN student_course_selections.continuation_of IS 'References the initial locked MAJOR selection for continuation tracking';
+
+-- Step 2: Add domain/track column to subjects table
+ALTER TABLE subjects 
+ADD COLUMN IF NOT EXISTS subject_domain VARCHAR(100),
+ADD COLUMN IF NOT EXISTS domain_sequence INTEGER,
+ADD COLUMN IF NOT EXISTS prerequisite_subject_id UUID REFERENCES subjects(id) ON DELETE SET NULL;
+
+COMMENT ON COLUMN subjects.subject_domain IS 'Academic domain/track (e.g., "Computer Science", "Mathematics", "Physics") for MAJOR subject grouping';
+COMMENT ON COLUMN subjects.domain_sequence IS 'Sequence number within domain for progressive learning (1, 2, 3...)';
+COMMENT ON COLUMN subjects.prerequisite_subject_id IS 'References prerequisite subject that must be completed before this subject';
+
+-- Step 3: Create indexes for performance optimization
+CREATE INDEX IF NOT EXISTS idx_student_selections_type_lock ON student_course_selections(student_id, selection_type, is_locked);
+CREATE INDEX IF NOT EXISTS idx_subjects_domain_sequence ON subjects(subject_domain, domain_sequence, semester);
+CREATE INDEX IF NOT EXISTS idx_student_selections_continuation ON student_course_selections(continuation_of);
+
+-- Step 4: Function to check if student can select/change a major
+CREATE OR REPLACE FUNCTION check_major_lock_constraint()
+RETURNS TRIGGER AS $$
+DECLARE
+    existing_major_lock RECORD;
+    student_current_sem INTEGER;
+BEGIN
+    -- Only apply this constraint for MAJOR selections
+    IF NEW.selection_type != 'MAJOR' THEN
+        RETURN NEW;
+    END IF;
+
+    -- Get student's current semester
+    SELECT current_semester INTO student_current_sem FROM users WHERE id = NEW.student_id;
+
+    -- Check if student already has a locked MAJOR from semester 3 or later
+    SELECT * INTO existing_major_lock
+    FROM student_course_selections
+    WHERE student_id = NEW.student_id
+      AND selection_type = 'MAJOR'
+      AND is_locked = TRUE
+      AND semester >= 3
+    LIMIT 1;
+
+    -- If there's an existing locked MAJOR
+    IF existing_major_lock.id IS NOT NULL THEN
+        DECLARE
+            new_subject_domain VARCHAR(100);
+            locked_subject_domain VARCHAR(100);
+        BEGIN
+            -- Get domain of new subject
+            SELECT subject_domain INTO new_subject_domain FROM subjects WHERE id = NEW.subject_id;
+
+            -- Get domain of locked major subject
+            SELECT s.subject_domain INTO locked_subject_domain
+            FROM subjects s
+            JOIN student_course_selections scs ON s.id = scs.subject_id
+            WHERE scs.id = existing_major_lock.id;
+
+            -- If domains don't match, reject the selection
+            IF new_subject_domain IS NULL OR locked_subject_domain IS NULL OR new_subject_domain != locked_subject_domain THEN
+                RAISE EXCEPTION 'Cannot change MAJOR subject. You selected a MAJOR in Semester % and must continue with subjects from the same domain (%)',
+                    existing_major_lock.semester, locked_subject_domain;
+            END IF;
+
+            -- If domains match, this is a valid continuation
+            NEW.is_locked := TRUE;
+            NEW.locked_at := existing_major_lock.locked_at;
+            NEW.continuation_of := existing_major_lock.id;
+        END;
+    ELSE
+        -- No existing locked major, lock if semester >= 3
+        IF NEW.semester >= 3 THEN
+            NEW.is_locked := TRUE;
+            NEW.locked_at := NOW();
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+COMMENT ON FUNCTION check_major_lock_constraint() IS 'Enforces NEP 2020 MAJOR discipline lock from Semester 3 onwards. Students must continue with same domain once locked.';
+
+-- Step 5: Trigger to enforce major lock
+DROP TRIGGER IF EXISTS enforce_major_lock ON student_course_selections;
+CREATE TRIGGER enforce_major_lock
+    BEFORE INSERT OR UPDATE ON student_course_selections
+    FOR EACH ROW
+    EXECUTE FUNCTION check_major_lock_constraint();
+
+-- Step 6: Function to prevent deletion of locked majors
+CREATE OR REPLACE FUNCTION prevent_locked_major_deletion()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.selection_type = 'MAJOR' AND OLD.is_locked = TRUE THEN
+        RAISE EXCEPTION 'Cannot delete a locked MAJOR subject. MAJOR selections are permanent from Semester 3 onwards.';
+    END IF;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+COMMENT ON FUNCTION prevent_locked_major_deletion() IS 'Prevents deletion of locked MAJOR subjects to maintain NEP 2020 compliance';
+
+-- Step 7: Trigger to prevent deletion
+DROP TRIGGER IF EXISTS prevent_major_deletion ON student_course_selections;
+CREATE TRIGGER prevent_major_deletion
+    BEFORE DELETE ON student_course_selections
+    FOR EACH ROW
+    EXECUTE FUNCTION prevent_locked_major_deletion();
+
+-- Step 8: View for student's major progression tracking
+CREATE OR REPLACE VIEW student_major_progression AS
+SELECT 
+    scs.student_id,
+    u.first_name || ' ' || u.last_name AS student_name,
+    u.current_semester,
+    s.subject_domain,
+    scs.semester AS major_selected_semester,
+    scs.locked_at,
+    s.id AS subject_id,
+    s.code AS subject_code,
+    s.name AS subject_name,
+    s.semester AS subject_semester,
+    scs.is_locked,
+    CASE 
+        WHEN scs.continuation_of IS NOT NULL THEN 'Continuation'
+        WHEN scs.is_locked THEN 'Initial Lock'
+        ELSE 'Not Locked'
+    END AS lock_status
+FROM student_course_selections scs
+JOIN users u ON scs.student_id = u.id
+JOIN subjects s ON scs.subject_id = s.id
+WHERE scs.selection_type = 'MAJOR'
+ORDER BY scs.student_id, scs.semester;
+
+COMMENT ON VIEW student_major_progression IS 'Tracks student MAJOR discipline progression and lock status across semesters';
+
+-- Step 9: Helper function to get available subjects for student selection
+CREATE OR REPLACE FUNCTION get_available_subjects_for_student(
+    p_student_id UUID,
+    p_semester INTEGER,
+    p_academic_year VARCHAR(10)
+)
+RETURNS TABLE (
+    subject_id UUID,
+    subject_code VARCHAR(20),
+    subject_name VARCHAR(255),
+    subject_domain VARCHAR(100),
+    nep_category nep_category,
+    is_selectable BOOLEAN,
+    selection_type VARCHAR(20),
+    reason TEXT
+) AS $$
+DECLARE
+    locked_major_domain VARCHAR(100);
+    has_locked_major BOOLEAN := FALSE;
+BEGIN
+    -- Check if student has a locked major
+    SELECT s.subject_domain INTO locked_major_domain
+    FROM student_course_selections scs
+    JOIN subjects s ON scs.subject_id = s.id
+    WHERE scs.student_id = p_student_id
+      AND scs.selection_type = 'MAJOR'
+      AND scs.is_locked = TRUE
+    LIMIT 1;
+
+    has_locked_major := (locked_major_domain IS NOT NULL);
+
+    RETURN QUERY
+    SELECT 
+        s.id AS subject_id,
+        s.code AS subject_code,
+        s.name AS subject_name,
+        s.subject_domain,
+        s.nep_category,
+        CASE
+            -- Locked Major Logic using 'Major I' and 'Major II'
+            WHEN has_locked_major AND s.nep_category IN ('Major I', 'Major II') THEN
+                (s.subject_domain = locked_major_domain)
+            WHEN s.nep_category IN ('MINOR', 'AEC', 'VAC') THEN
+                TRUE
+            WHEN s.nep_category IN ('CORE COMPLETELY', 'CORE PARTIAL') THEN
+                TRUE
+            ELSE
+                TRUE
+        END AS is_selectable,
+        CASE
+            WHEN has_locked_major AND s.nep_category IN ('Major I', 'Major II') AND s.subject_domain = locked_major_domain THEN
+                'MAJOR'
+            WHEN s.nep_category = 'MINOR' THEN
+                'MINOR'
+            WHEN s.nep_category IN ('CORE COMPLETELY', 'CORE PARTIAL') THEN
+                'CORE'
+            ELSE
+                'ELECTIVE'
+        END AS selection_type,
+        CASE
+            WHEN has_locked_major AND s.nep_category IN ('Major I', 'Major II') AND s.subject_domain != locked_major_domain THEN
+                'Locked to ' || locked_major_domain || ' domain.'
+            WHEN has_locked_major AND s.nep_category IN ('Major I', 'Major II') AND s.subject_domain = locked_major_domain THEN
+                'Continuation of locked MAJOR'
+            WHEN s.nep_category = 'MINOR' THEN
+                'MINOR (Changeable)'
+            WHEN s.nep_category IN ('CORE COMPLETELY', 'CORE PARTIAL') THEN
+                'Mandatory Core'
+            ELSE
+                'Elective'
+        END AS reason
+    FROM subjects s
+    WHERE s.semester = p_semester
+      AND s.is_active = TRUE
+    ORDER BY 
+        CASE 
+            WHEN has_locked_major AND s.subject_domain = locked_major_domain THEN 1
+            WHEN s.nep_category IN ('CORE COMPLETELY', 'CORE PARTIAL') THEN 2
+            ELSE 3
+        END, s.name;
+END;
+$$ LANGUAGE plpgsql;
+
+COMMENT ON FUNCTION get_available_subjects_for_student(UUID, INTEGER, VARCHAR) IS 'Returns available subjects for student based on their locked MAJOR domain and NEP 2020 rules';
+
+-- ============================================================================
+-- DATA MIGRATION: Update existing selections for MAJOR lock system
+-- ============================================================================
+
+DO $$
+BEGIN
+    RAISE NOTICE '==============================================================';
+    RAISE NOTICE 'Migrating existing student course selections to MAJOR lock system...';
+    RAISE NOTICE '==============================================================';
+
+    -- Update selection_type and lock status based on nep_category
+    UPDATE student_course_selections scs
+    SET 
+        selection_type = CASE 
+            WHEN s.nep_category IN ('Major I', 'Major II') THEN 'MAJOR'
+            WHEN s.nep_category = 'MINOR' THEN 'MINOR'
+            WHEN s.nep_category IN ('CORE COMPLETELY', 'CORE PARTIAL') THEN 'CORE'
+            ELSE 'ELECTIVE'
+        END,
+        is_locked = CASE 
+            WHEN s.nep_category IN ('Major I', 'Major II') AND scs.semester >= 3 THEN TRUE
+            ELSE FALSE
+        END,
+        locked_at = CASE 
+            WHEN s.nep_category IN ('Major I', 'Major II') AND scs.semester >= 3 THEN scs.enrolled_at
+            ELSE NULL
+        END
+    FROM subjects s
+    WHERE scs.subject_id = s.id;
+
+    RAISE NOTICE '✓ Student course selections migrated successfully';
+    RAISE NOTICE '✓ MAJOR lock system is now active';
+    RAISE NOTICE '==============================================================';
+
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE '⚠ Migration encountered an issue: %', SQLERRM;
 END $$;
 
 -- ============================================================================

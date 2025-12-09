@@ -289,7 +289,7 @@ export default function SubjectsPage() {
                   className="px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white min-w-[140px]"
                 >
                   <option value="all">All Semesters</option>
-                  {[1, 2, 3, 4].map(sem => (
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
                     <option key={sem} value={sem}>Semester {sem}</option>
                   ))}
                 </select>

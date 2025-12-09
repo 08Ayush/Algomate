@@ -208,11 +208,63 @@ The timetable is displayed in the grid below. Review it and choose an action!`
       const result = await response.json();
 
       if (result.success) {
-        alert(`✅ ${result.data.message}`);
-        setMessages(prev => [...prev, { 
-          role: 'ai', 
-          content: `✅ **Timetable ${status === 'draft' ? 'saved as draft' : status === 'pending_approval' ? 'submitted for approval' : 'published'} successfully!**\n\nTimetable ID: ${result.data.timetable_id}\nClasses Created: ${result.data.classes_created}\n\n${status === 'pending_approval' ? 'Your HOD/Publisher will review and approve it.' : status === 'published' ? 'The timetable is now live!' : 'You can edit it later from the drafts section.'}` 
-        }]);
+        const timetableId = result.data.timetable_id;
+        
+        // If published, send email notifications
+        if (status === 'published') {
+          try {
+            const notifyResponse = await fetch('/api/email/sendUpdate', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+              },
+              body: JSON.stringify({
+                timetableId,
+                publishedBy: `${user.first_name} ${user.last_name}`
+              })
+            });
+
+            const notifyData = await notifyResponse.json();
+            
+            if (notifyData.success) {
+              const stats = notifyData.stats;
+              alert(
+                `✅ ${result.data.message}\n\n` +
+                `📧 Email notifications sent to:\n` +
+                `• ${stats.students} students\n` +
+                `• ${stats.faculty} faculty members\n` +
+                `Total: ${stats.sent}/${stats.total} emails delivered`
+              );
+              
+              setMessages(prev => [...prev, { 
+                role: 'ai', 
+                content: `✅ **Timetable published successfully!**\n\nTimetable ID: ${timetableId}\nClasses Created: ${result.data.classes_created}\n\n📧 **Email Notifications Sent:**\n• ${stats.students} students notified\n• ${stats.faculty} faculty members notified\n• Total: ${stats.sent}/${stats.total} emails delivered\n\nThe timetable is now live and all users have been notified!` 
+              }]);
+            } else {
+              alert(`✅ ${result.data.message}\n\n⚠️ Warning: Failed to send email notifications.`);
+              
+              setMessages(prev => [...prev, { 
+                role: 'ai', 
+                content: `✅ **Timetable published successfully!**\n\nTimetable ID: ${timetableId}\nClasses Created: ${result.data.classes_created}\n\n⚠️ Email notifications could not be sent. Please inform students manually.` 
+              }]);
+            }
+          } catch (emailError) {
+            console.error('Error sending email notifications:', emailError);
+            alert(`✅ ${result.data.message}\n\n⚠️ Warning: Failed to send email notifications.`);
+            
+            setMessages(prev => [...prev, { 
+              role: 'ai', 
+              content: `✅ **Timetable published successfully!**\n\nTimetable ID: ${timetableId}\nClasses Created: ${result.data.classes_created}\n\n⚠️ Email notifications could not be sent.` 
+            }]);
+          }
+        } else {
+          alert(`✅ ${result.data.message}`);
+          setMessages(prev => [...prev, { 
+            role: 'ai', 
+            content: `✅ **Timetable ${status === 'draft' ? 'saved as draft' : 'submitted for approval'} successfully!**\n\nTimetable ID: ${timetableId}\nClasses Created: ${result.data.classes_created}\n\n${status === 'pending_approval' ? 'Your HOD/Publisher will review and approve it.' : 'You can edit it later from the drafts section.'}` 
+          }]);
+        }
       } else {
         alert(`❌ Error: ${result.error}`);
       }

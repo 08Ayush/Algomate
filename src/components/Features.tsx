@@ -13,8 +13,8 @@ export function Features() {
     },
     {
       icon: MonitorSpeaker,
-      title: "Smart Classroom Management",
-      description: "Integrated IoT equipment control with real-time monitoring of interactive boards, projectors, and audio systems.",
+      title: "Resource Management",
+      description: "Comprehensive classroom and resource management with real-time monitoring of facilities, equipment, and space utilization.",
       color: "text-green-600"
     },
     {
@@ -40,6 +40,12 @@ export function Features() {
       title: "Comprehensive Academic Management",
       description: "Complete student, faculty, subject, and batch management with automated conflict detection and resolution.",
       color: "text-pink-600"
+    },
+    {
+      icon: Shield,
+      title: "NEP 2020 Policy Compliance",
+      description: "Full compliance with National Education Policy 2020, featuring Choice-Based Credit System (CBCS), flexible curricula, multidisciplinary learning, and credit-based evaluation.",
+      color: "text-indigo-600"
     }
   ];
 
@@ -48,10 +54,10 @@ export function Features() {
       <div className="container">
         <div className="mx-auto max-w-3xl text-center mb-16">
           <h2 className="text-3xl font-bold tracking-tight sm:text-4xl mb-4">
-            Complete Smart Classroom Ecosystem
+            Complete Timetable Scheduling & Resource Management with NEP 2020 Compliance
           </h2>
           <p className="text-lg text-muted-foreground">
-            Everything you need to manage modern educational institutions with AI-powered automation and smart technology integration
+            Everything you need to manage modern educational institutions with AI-powered timetable automation, resource optimization, and full National Education Policy 2020 compliance
           </p>
         </div>
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">

@@ -77,8 +77,8 @@ export async function GET(request: NextRequest) {
       .select('*')
       .eq('college_id', user.college_id);
 
-    // Filter by department for creator role
-    if (user.role === 'faculty' && user.faculty_type === 'creator' && user.department_id) {
+    // Filter by department for non-admin users
+    if (user.role !== 'admin' && user.role !== 'college_admin' && user.department_id) {
       query = query.eq('department_id', user.department_id);
     }
 

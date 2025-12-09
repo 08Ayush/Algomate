@@ -725,7 +725,111 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// Helper function to get authenticated user
+async function getAuthenticatedUser(request: NextRequest) {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.substring(7);
+  try {
+    const userString = Buffer.from(token, 'base64').toString();
+    const user = JSON.parse(userString);
+    
+    // Verify user exists and is active - include department_id
+    const { data: dbUser, error } = await supabase
+      .from('users')
+      .select('id, department_id, role, is_active')
+      .eq('id', user.id)
+      .eq('is_active', true)
+      .single();
+
+    if (error || !dbUser) {
+      return null;
+    }
+
+    return dbUser;
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(request: NextRequest) {
+  try {
+    // Get authenticated user
+    const user = await getAuthenticatedUser(request);
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized. Please log in.' },
+        { status: 401 }
+      );
+    }
+
+    const { searchParams } = new URL(request.url);
+    const batchId = searchParams.get('batchId');
+    const semester = searchParams.get('semester');
+    const status = searchParams.get('status');
+    const academicYear = searchParams.get('academicYear');
+
+    let query = supabase
+      .from('generated_timetables')
+      .select(`
+        *,
+        batch:batches(id, name, semester, section, department_id),
+        created_by_user:users!created_by(first_name, last_name, email),
+        generation_task:timetable_generation_tasks(task_name, status, progress)
+      `)
+      .order('created_at', { ascending: false });
+
+    if (batchId) {
+      query = query.eq('batch_id', batchId);
+    }
+    if (semester) {
+      query = query.eq('semester', parseInt(semester));
+    }
+    if (status) {
+      query = query.eq('status', status);
+    }
+    if (academicYear) {
+      query = query.eq('academic_year', academicYear);
+    }
+
+    const { data: timetables, error } = await query;
+
+    if (error) {
+      console.error('Error fetching timetables:', error);
+      return NextResponse.json(
+        { error: 'Failed to fetch timetables', success: false },
+        { status: 500 }
+      );
+    }
+
+    // Filter by department for non-admin users
+    let filteredTimetables = timetables || [];
+    if (user.role !== 'admin' && user.department_id) {
+      filteredTimetables = filteredTimetables.filter(tt => {
+        const batch = Array.isArray(tt.batch) ? tt.batch[0] : tt.batch;
+        return batch?.department_id === user.department_id;
+      });
+    }
+
+    return NextResponse.json({
+      success: true,
+      timetables: filteredTimetables
+    });
+
+  } catch (error) {
+    console.error('Unexpected error fetching timetables:', error);
+    return NextResponse.json(
+      { error: 'Internal server error', success: false },
+      { status: 500 }
+    );
+  }
+}
+
+// Legacy GET handler - keep the previous data structure for compatibility
+export async function GET_OLD(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const batchId = searchParams.get('batchId');

@@ -81,8 +81,8 @@ export async function GET(request: NextRequest) {
       .eq('college_id', user.college_id)
       .eq('is_active', true);
 
-    // Filter by department for creator users
-    if (user.faculty_type === 'creator' && user.department_id) {
+    // Filter by department for non-admin users (creator AND publisher)
+    if (user.department_id) {
       batchesQuery = batchesQuery.eq('department_id', user.department_id);
       console.log('🔍 Filtering batches by department_id:', user.department_id);
     }

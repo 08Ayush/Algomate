@@ -313,7 +313,7 @@ export default function BatchesPage() {
                     <p className="text-sm text-blue-900 dark:text-blue-200 font-semibold mb-2">📝 How to create NEP batches:</p>
                     <ol className="text-sm text-blue-800 dark:text-blue-300 space-y-1 list-decimal list-inside">
                       <li>Go to <strong>Admin Dashboard</strong></li>
-                      <li>Navigate to <strong>NEP Curriculum Builder</strong></li>
+                      <li>Navigate to <strong>NEP Bucket Builder</strong></li>
                       <li>Select your course and semester</li>
                       <li>Create <strong>Elective Buckets</strong> and assign subjects</li>
                       <li>Click <strong>Save Curriculum</strong></li>
@@ -388,7 +388,7 @@ export default function BatchesPage() {
                                 No elective buckets for Semester {batch.semester}
                               </p>
                               <p className="text-sm text-gray-500 dark:text-gray-500">
-                                Admin needs to create buckets in <strong>NEP Curriculum Builder</strong> for<br/>
+                                Admin needs to create buckets in <strong>NEP Bucket Builder</strong> for<br/>
                                 <span className="text-blue-600 dark:text-blue-400">{batch.course?.title} - Semester {batch.semester}</span>
                               </p>
                             </div>
