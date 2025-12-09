@@ -286,9 +286,9 @@ export default function StudentDashboard() {
         batchInfo: batchInfo
       });
       
-      // Fetch elective buckets for student's semester using courseId from user
+      // Fetch elective buckets for student's semester using batchId
       const bucketsResponse = await fetch(
-        `/api/nep/buckets?courseId=${user.course_id}&semester=${semester}&studentId=${user.id}`
+        `/api/nep/buckets?batchId=${dashboardData.additionalData.batchId}&studentId=${user.id}`
       );
       
       console.log('📡 Buckets API response status:', bucketsResponse.status);

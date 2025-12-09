@@ -60,22 +60,37 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const { searchParams } = new URL(request.url);
-    const courseId = searchParams.get('courseId');
-    const semester = searchParams.get('semester');
-    const departmentId = searchParams.get('departmentId');
+  const { searchParams } = new URL(request.url);
+  const batchId = searchParams.get('batchId');
+  const courseId = searchParams.get('courseId');
+  const semester = searchParams.get('semester');
+  const departmentId = searchParams.get('departmentId');
 
-    if (!courseId || !semester) {
-      return NextResponse.json(
-        { error: 'Course ID and semester are required' },
-        { status: 400 }
-      );
-    }
+  const supabase = createClient();
 
-    const supabase = createClient();
+  let batchData;
+  let batchError;
 
+  // Prefer batchId if provided (most reliable)
+  if (batchId) {
+    console.log(`🔍 Looking up batch by batchId: ${batchId}`);
+    const { data, error } = await supabase
+      .from('batches')
+      .select('id, name, semester, college_id, course_id, department_id')
+      .eq('id', batchId)
+      .eq('college_id', user.college_id)
+      .eq('is_active', true)
+      .single();
+    
+    batchData = data;
+    batchError = error;
+  } else if (courseId && semester) {
+    // Fallback to course_id + semester lookup
+    console.log(`🔍 Looking up batch by courseId: ${courseId}, semester: ${semester}`);
+    
     // Security check: If user has department_id, verify it matches the requested departmentId
-    if (user.department_id && departmentId && user.department_id !== departmentId) {
+    const userDeptId = (user as any).department_id;
+    if (userDeptId && departmentId && userDeptId !== departmentId) {
       return NextResponse.json(
         { error: 'You can only access buckets for your own department' },
         { status: 403 }
@@ -83,7 +98,7 @@ export async function GET(request: NextRequest) {
     }
 
     // If user has department_id but none provided in request, use user's department
-    const targetDepartmentId = departmentId || user.department_id;
+    const targetDepartmentId = departmentId || userDeptId;
 
     // Build query for finding the batch
     let batchQuery = supabase
@@ -91,22 +106,34 @@ export async function GET(request: NextRequest) {
       .select('id, name, semester, college_id, course_id, department_id')
       .eq('college_id', user.college_id)
       .eq('semester', parseInt(semester))
-      .eq('course_id', courseId)
       .eq('is_active', true);
+
+    // Only filter by course_id if it's provided and not null
+    if (courseId) {
+      batchQuery = batchQuery.eq('course_id', courseId);
+    }
 
     // Add department filter (use validated targetDepartmentId)
     if (targetDepartmentId) {
       batchQuery = batchQuery.eq('department_id', targetDepartmentId);
     }
 
-    const { data: batchData, error: batchError } = await batchQuery.single();
+    const { data, error } = await batchQuery.maybeSingle();
+    batchData = data;
+    batchError = error;
+  } else {
+    return NextResponse.json(
+      { error: 'Either batchId or (courseId + semester) are required' },
+      { status: 400 }
+    );
+  }
 
-    if (batchError || !batchData) {
-      console.log(`No batch found for college ${user.college_id}, courseId ${courseId}, semester ${semester}`);
-      return NextResponse.json([]);
-    }
+  if (batchError || !batchData) {
+    console.log(`❌ No batch found. Error:`, batchError);
+    return NextResponse.json([]);
+  }
 
-    // Fetch buckets for this batch with batch information joined
+  console.log(`✅ Found batch: ${batchData.name} (ID: ${batchData.id})`);    // Fetch buckets for this batch with batch information joined
     const { data: bucketsData, error: bucketsError } = await supabase
       .from('elective_buckets')
       .select(`
@@ -213,7 +240,8 @@ export async function POST(request: NextRequest) {
     const supabase = createClient();
 
     // Security check: If user has department_id, verify it matches the provided departmentId
-    if (user.department_id && departmentId && user.department_id !== departmentId) {
+    const userDeptId = (user as any).department_id;
+    if (userDeptId && departmentId && userDeptId !== departmentId) {
       return NextResponse.json(
         { error: 'You can only create buckets for your own department' },
         { status: 403 }
@@ -221,7 +249,7 @@ export async function POST(request: NextRequest) {
     }
 
     // If user has department_id but none provided in request, use user's department
-    const targetDepartmentId = departmentId || user.department_id;
+    const targetDepartmentId = departmentId || userDeptId;
 
     // Build query for finding the batch
     let batchQuery = supabase
@@ -242,10 +270,11 @@ export async function POST(request: NextRequest) {
     if (batchError || !batchData) {
       // Create batch if it doesn't exist - use targetDepartmentId (validated above)
       let deptId = targetDepartmentId;
+      const userDeptId = (user as any).department_id;
       
       if (!deptId) {
         // Only fallback if user doesn't have department_id restriction
-        if (!user.department_id) {
+        if (!userDeptId) {
           const { data: deptData } = await supabase
             .from('departments')
             .select('id, name')
@@ -254,15 +283,15 @@ export async function POST(request: NextRequest) {
             .single();
           
           deptId = deptData?.id;
+          
+          if (!deptId) {
+            return NextResponse.json({ error: 'No department found or specified' }, { status: 500 });
+          }
         }
       }
 
       if (!deptId) {
         return NextResponse.json({ error: 'No department found or specified' }, { status: 500 });
-      }
-
-      if (!deptData) {
-        return NextResponse.json({ error: 'No department found' }, { status: 500 });
       }
 
       const { data: courseData } = await supabase
