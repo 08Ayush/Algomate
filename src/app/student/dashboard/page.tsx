@@ -120,6 +120,7 @@ export default function StudentDashboard() {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [publishedTimetables, setPublishedTimetables] = useState<PublishedTimetable[]>([]);
   const [availableBatches, setAvailableBatches] = useState<any[]>([]);
+  const hasFetchedData = React.useRef(false);
   const [selectedTimetable, setSelectedTimetable] = useState<PublishedTimetable | null>(null);
   const [timetableClasses, setTimetableClasses] = useState<TimetableClass[]>([]);
   const [timeSlots, setTimeSlots] = useState<string[]>([]);
@@ -137,6 +138,11 @@ export default function StudentDashboard() {
   const [showNepCurriculum, setShowNepCurriculum] = useState(false);
 
   useEffect(() => {
+    // Prevent duplicate fetches
+    if (hasFetchedData.current) {
+      return;
+    }
+
     const userData = localStorage.getItem('user');
     if (!userData) {
       router.push('/login');
@@ -159,14 +165,16 @@ export default function StudentDashboard() {
 
     setUser(parsedUser);
     fetchDashboardData(parsedUser);
+    hasFetchedData.current = true;
   }, [router]);
 
   // Fetch NEP curriculum data when dashboard data is loaded
   useEffect(() => {
-    if (user?.role === 'student' && dashboardData?.additionalData?.batch && !loadingBuckets && electiveBuckets.length === 0) {
+    if (user?.role === 'student' && dashboardData?.additionalData?.batch && !loadingBuckets && electiveBuckets.length === 0 && hasFetchedData.current) {
+      console.log('🎓 Fetching NEP curriculum data...');
       fetchNepCurriculumData(user);
     }
-  }, [user, dashboardData, loadingBuckets, electiveBuckets.length]);
+  }, [user?.id, dashboardData?.additionalData?.batchId, loadingBuckets, electiveBuckets.length]);
 
   const fetchDashboardData = async (user: any) => {
     try {
@@ -186,6 +194,7 @@ export default function StudentDashboard() {
       setDashboardData(data);
 
       // Update localStorage with complete user data including course info
+      let finalUser = user;
       if (data.user) {
         const updatedUser = {
           ...user,
@@ -194,22 +203,36 @@ export default function StudentDashboard() {
           course: data.user.course,
           course_id: data.user.course_id
         };
-        console.log('🔄 Updating user with course_id:', updatedUser.course_id);
+        console.log('🔄 User course_id from API:', data.user.course_id, 'vs localStorage:', user.course_id);
         localStorage.setItem('user', JSON.stringify(updatedUser));
+        finalUser = updatedUser;
         setUser(updatedUser);
       } else {
         console.warn('⚠️ No user data in API response, keeping original user');
       }
 
-      // Fetch published timetables for the course
+      // Fetch published timetables for the course - use finalUser to ensure we have the latest course_id
+      const courseIdToUse = finalUser.course_id || user.course_id;
+      console.log('🔍 Fetching timetables with courseId:', courseIdToUse);
       const timetablesResponse = await fetch(
-        `/api/student/published-timetables?courseId=${user.course_id}${user.role === 'student' && data.additionalData.batch ? `&semester=${data.additionalData.batch.semester}` : ''}`
+        `/api/student/published-timetables?courseId=${courseIdToUse}${user.role === 'student' && data.additionalData.batch ? `&semester=${data.additionalData.batch.semester}` : ''}`
       );
       
       if (timetablesResponse.ok) {
         const timetablesData = await timetablesResponse.json();
-        setPublishedTimetables(timetablesData.timetables || []);
-        setAvailableBatches(timetablesData.batches || []);
+        console.log('📚 Published timetables received:', {
+          count: timetablesData.timetables?.length || 0,
+          timetables: timetablesData.timetables,
+          batches: timetablesData.batches?.length || 0
+        });
+        
+        // Only update if we actually got data
+        if (timetablesData.timetables) {
+          setPublishedTimetables(timetablesData.timetables);
+        }
+        if (timetablesData.batches) {
+          setAvailableBatches(timetablesData.batches);
+        }
         
         // Auto-select student's own timetable or first available
         if (user.role === 'student' && data.additionalData.batchId) {
@@ -217,13 +240,21 @@ export default function StudentDashboard() {
             (tt: PublishedTimetable) => tt.batches?.id === data.additionalData.batchId
           );
           if (studentTimetable) {
+            console.log('✅ Auto-selecting student timetable:', studentTimetable.id);
             setSelectedTimetable(studentTimetable);
             fetchTimetableClasses(studentTimetable.id);
+          } else {
+            console.warn('⚠️ No timetable found for student batch:', data.additionalData.batchId);
           }
         } else if (timetablesData.timetables.length > 0) {
+          console.log('✅ Auto-selecting first timetable:', timetablesData.timetables[0].id);
           setSelectedTimetable(timetablesData.timetables[0]);
           fetchTimetableClasses(timetablesData.timetables[0].id);
+        } else {
+          console.warn('⚠️ No published timetables available');
         }
+      } else {
+        console.error('❌ Failed to fetch published timetables:', timetablesResponse.status);
       }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -235,19 +266,25 @@ export default function StudentDashboard() {
   const fetchTimetableClasses = async (timetableId: string) => {
     try {
       setLoadingTimetable(true);
+      console.log('📅 Fetching timetable classes for timetableId:', timetableId);
       const response = await fetch(
         `/api/student/timetable-classes?timetableId=${timetableId}`
       );
       
       if (!response.ok) {
+        console.error('❌ Failed to fetch timetable classes:', response.status, response.statusText);
         throw new Error('Failed to fetch timetable classes');
       }
       
       const data = await response.json();
+      console.log('✅ Timetable classes received:', {
+        classesCount: data.classes?.length || 0,
+        timeSlotsCount: data.timeSlots?.length || 0
+      });
       setTimetableClasses(data.classes || []);
       setTimeSlots(data.timeSlots || []);
     } catch (error) {
-      console.error('Error fetching timetable classes:', error);
+      console.error('❌ Error fetching timetable classes:', error);
     } finally {
       setLoadingTimetable(false);
     }
@@ -939,90 +976,6 @@ export default function StudentDashboard() {
         </CardContent>
       </Card>
 
-      {/* Assignment Information Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BookOpen className="h-5 w-5" />
-            Assignment Deadlines
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Upcoming assignments and submission deadlines
-          </p>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h4 className="font-semibold text-blue-900">Database Design and Implementation</h4>
-                  <p className="text-sm text-blue-700">Database Management Systems</p>
-                </div>
-                <Badge className="bg-red-100 text-red-800 border-red-300">Due Soon</Badge>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                <div>
-                  <span className="font-medium text-blue-800">Due Date:</span>
-                  <p className="text-blue-700">October 15, 2025</p>
-                </div>
-                <div>
-                  <span className="font-medium text-blue-800">Due Time:</span>
-                  <p className="text-blue-700">11:59 PM</p>
-                </div>
-                <div>
-                  <span className="font-medium text-blue-800">Maximum Marks:</span>
-                  <p className="text-blue-700">100 points</p>
-                </div>
-              </div>
-              <div className="mt-3">
-                <p className="text-sm text-blue-700">
-                  <span className="font-medium">Description:</span> Describe the assignment requirements, objectives, and guidelines. Include what students need to accomplish, learning outcomes, and any specific requirements.
-                </p>
-              </div>
-              <div className="mt-3">
-                <p className="text-sm text-blue-700">
-                  <span className="font-medium">Submission Format:</span> PDF document with code snippets, ZIP file containing source code and report
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h4 className="font-semibold text-green-900">Data Structures Implementation</h4>
-                  <p className="text-sm text-green-700">Data Structures and Algorithms</p>
-                </div>
-                <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300">Upcoming</Badge>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                <div>
-                  <span className="font-medium text-green-800">Due Date:</span>
-                  <p className="text-green-700">October 22, 2025</p>
-                </div>
-                <div>
-                  <span className="font-medium text-green-800">Due Time:</span>
-                  <p className="text-green-700">5:00 PM</p>
-                </div>
-                <div>
-                  <span className="font-medium text-green-800">Maximum Marks:</span>
-                  <p className="text-green-700">80 points</p>
-                </div>
-              </div>
-              <div className="mt-3">
-                <p className="text-sm text-green-700">
-                  <span className="font-medium">Description:</span> Implement various data structures including linked lists, stacks, queues, trees, and graphs with proper documentation.
-                </p>
-              </div>
-              <div className="mt-3">
-                <p className="text-sm text-green-700">
-                  <span className="font-medium">Submission Format:</span> Source code with documentation, test cases, and performance analysis report
-                </p>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* NEP Curriculum Selection Section - Only for Students */}
       {user?.role === 'student' && (
         <Card>
@@ -1213,6 +1166,90 @@ export default function StudentDashboard() {
           </CardContent>
         </Card>
       )}
+
+      {/* Assignment Information Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <BookOpen className="h-5 w-5" />
+            Assignment Deadlines
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Upcoming assignments and submission deadlines
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h4 className="font-semibold text-blue-900">Database Design and Implementation</h4>
+                  <p className="text-sm text-blue-700">Database Management Systems</p>
+                </div>
+                <Badge className="bg-red-100 text-red-800 border-red-300">Due Soon</Badge>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                <div>
+                  <span className="font-medium text-blue-800">Due Date:</span>
+                  <p className="text-blue-700">October 15, 2025</p>
+                </div>
+                <div>
+                  <span className="font-medium text-blue-800">Due Time:</span>
+                  <p className="text-blue-700">11:59 PM</p>
+                </div>
+                <div>
+                  <span className="font-medium text-blue-800">Maximum Marks:</span>
+                  <p className="text-blue-700">100 points</p>
+                </div>
+              </div>
+              <div className="mt-3">
+                <p className="text-sm text-blue-700">
+                  <span className="font-medium">Description:</span> Describe the assignment requirements, objectives, and guidelines. Include what students need to accomplish, learning outcomes, and any specific requirements.
+                </p>
+              </div>
+              <div className="mt-3">
+                <p className="text-sm text-blue-700">
+                  <span className="font-medium">Submission Format:</span> PDF document with code snippets, ZIP file containing source code and report
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h4 className="font-semibold text-green-900">Data Structures Implementation</h4>
+                  <p className="text-sm text-green-700">Data Structures and Algorithms</p>
+                </div>
+                <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300">Upcoming</Badge>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                <div>
+                  <span className="font-medium text-green-800">Due Date:</span>
+                  <p className="text-green-700">October 22, 2025</p>
+                </div>
+                <div>
+                  <span className="font-medium text-green-800">Due Time:</span>
+                  <p className="text-green-700">5:00 PM</p>
+                </div>
+                <div>
+                  <span className="font-medium text-green-800">Maximum Marks:</span>
+                  <p className="text-green-700">80 points</p>
+                </div>
+              </div>
+              <div className="mt-3">
+                <p className="text-sm text-green-700">
+                  <span className="font-medium">Description:</span> Implement various data structures including linked lists, stacks, queues, trees, and graphs with proper documentation.
+                </p>
+              </div>
+              <div className="mt-3">
+                <p className="text-sm text-green-700">
+                  <span className="font-medium">Submission Format:</span> Source code with documentation, test cases, and performance analysis report
+                </p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Examination Information Section */}
       <Card>

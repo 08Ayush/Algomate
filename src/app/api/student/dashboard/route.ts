@@ -170,7 +170,13 @@ export async function GET(request: NextRequest) {
         .order('event_date', { ascending: false })
         .limit(10);
       
-      eventsData = data || [];
+      // Map event_date to start_date, event_time to start_time, location to venue for frontend compatibility
+      eventsData = (data || []).map(event => ({
+        ...event,
+        start_date: event.event_date,
+        start_time: event.event_time,
+        venue: event.location
+      }));
       eventsError = error;
     }
 
@@ -184,7 +190,11 @@ export async function GET(request: NextRequest) {
     console.log('  Course:', userData.course);
     console.log('  College:', userData.college);
     console.log('  Additional Data:', JSON.stringify(additionalData, null, 2));
-    console.log('  Approved Events for Course:', eventsData?.length || 0);
+    console.log('  Department IDs:', departmentIds);
+    console.log('  Events fetched:', eventsData?.length || 0);
+    if (eventsData && eventsData.length > 0) {
+      console.log('  First event:', JSON.stringify(eventsData[0], null, 2));
+    }
 
     return NextResponse.json({
       success: true,

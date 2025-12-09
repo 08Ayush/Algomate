@@ -11,6 +11,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const timetableId = searchParams.get('timetableId');
 
+    console.log('🕐 Fetching timetable classes for timetableId:', timetableId);
+
     if (!timetableId) {
       return NextResponse.json(
         { error: 'Timetable ID is required' },
@@ -61,12 +63,14 @@ export async function GET(request: NextRequest) {
       .eq('timetable_id', timetableId);
 
     if (classesError) {
-      console.error('Error fetching scheduled classes:', classesError);
+      console.error('❌ Error fetching scheduled classes:', classesError);
       return NextResponse.json(
         { error: 'Failed to fetch scheduled classes' },
         { status: 500 }
       );
     }
+
+    console.log(`✅ Found ${classes?.length || 0} scheduled classes`);
 
     // Transform data to a more usable format
     const formattedClasses = classes?.map((cls: any) => ({
@@ -95,24 +99,28 @@ export async function GET(request: NextRequest) {
       sessionDuration: cls.session_duration || 60,
     })) || [];
 
-    // Get time slots structure
-    const { data: timeSlots, error: timeSlotsError } = await supabase
-      .from('time_slots')
-      .select('id, day, start_time, end_time, is_break_time, is_lunch_time')
-      .order('day', { ascending: true })
-      .order('start_time', { ascending: true });
-
-    if (timeSlotsError) {
-      console.error('Error fetching time slots:', timeSlotsError);
-    }
-
-    // Get unique days and time ranges
+    // Get unique days
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const uniqueTimeSlots = Array.from(
-      new Set(
-        timeSlots?.map((ts: any) => `${ts.start_time.substring(0, 5)}-${ts.end_time.substring(0, 5)}`)
-      )
-    ).sort();
+    
+    // Extract unique time slots from the actual scheduled classes
+    // This ensures we only show time slots that have classes scheduled
+    const usedTimeSlots = new Set<string>();
+    
+    classes?.forEach((cls: any) => {
+      if (cls.time_slots?.start_time && cls.time_slots?.end_time) {
+        const timeSlot = `${cls.time_slots.start_time.substring(0, 5)}-${cls.time_slots.end_time.substring(0, 5)}`;
+        usedTimeSlots.add(timeSlot);
+      }
+    });
+    
+    // Convert Set to sorted array
+    const uniqueTimeSlots = Array.from(usedTimeSlots).sort();
+
+    console.log('📊 Returning:', {
+      classesCount: formattedClasses.length,
+      timeSlotsCount: uniqueTimeSlots.length,
+      timeSlots: uniqueTimeSlots
+    });
 
     return NextResponse.json({
       success: true,

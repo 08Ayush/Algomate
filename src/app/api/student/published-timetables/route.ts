@@ -13,12 +13,23 @@ export async function GET(request: NextRequest) {
     const semester = searchParams.get('semester');
     const batchId = searchParams.get('batchId');
 
+    console.log('📚 Fetching published timetables with params:', { courseId, semester, batchId });
+
     if (!courseId) {
       return NextResponse.json(
         { error: 'Course ID is required' },
         { status: 400 }
       );
     }
+
+    // First, let's check what timetables exist (for debugging)
+    const { data: allTimetables, error: debugError } = await supabase
+      .from('generated_timetables')
+      .select('id, title, status, batch_id, batches(id, name, course_id)')
+      .limit(5);
+    
+    console.log('🔍 Debug: Sample timetables in DB:', allTimetables);
+    console.log('🔍 Debug: Any errors?', debugError);
 
     // Build query for published timetables
     let query = supabase
@@ -58,17 +69,22 @@ export async function GET(request: NextRequest) {
     const { data: timetables, error: timetableError } = await query;
 
     if (timetableError) {
-      console.error('Error fetching timetables:', timetableError);
+      console.error('❌ Error fetching timetables:', timetableError);
       return NextResponse.json(
         { error: 'Failed to fetch timetables' },
         { status: 500 }
       );
     }
 
+    console.log(`📊 Found ${timetables?.length || 0} published timetables (before filtering)`);
+    console.log('📊 Timetables:', timetables?.map(t => ({ id: t.id, title: t.title, batch_id: t.batch_id, course_id: t.batches?.course_id })));
+
     // Filter timetables by course (through batch)
     const filteredTimetables = timetables?.filter(
       (tt: any) => tt.batches?.course_id === courseId
     ) || [];
+
+    console.log(`✅ ${filteredTimetables.length} timetables match courseId: ${courseId}`);
 
     // Get all batches for the course
     const { data: batchesData, error: batchesError } = await supabase
@@ -80,7 +96,9 @@ export async function GET(request: NextRequest) {
       .order('section', { ascending: true });
 
     if (batchesError) {
-      console.error('Error fetching batches:', batchesError);
+      console.error('❌ Error fetching batches:', batchesError);
+    } else {
+      console.log(`📦 Found ${batchesData?.length || 0} active batches for courseId: ${courseId}`);
     }
 
     return NextResponse.json({
