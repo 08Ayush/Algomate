@@ -199,25 +199,33 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
     try {
       console.log('🔍 Loading batches for semester:', selectedSemester);
       
-      // Load batches for the selected semester
-      const { data: batchData, error: batchError } = await supabase
-        .from('batches')
-        .select('id, name, semester, academic_year, department_id, college_id')
-        .eq('semester', selectedSemester)
-        .eq('is_active', true);
+      // Use API route instead of direct Supabase query
+      const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
+      
+      const response = await fetch(`/api/batches?department_id=${user.department_id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
 
-      if (batchError) {
-        console.error('❌ Error loading batches:', batchError);
+      if (!response.ok) {
+        console.error('❌ Error loading batches:', response.statusText);
         return;
       }
 
-      console.log('✅ Loaded batches:', batchData);
-      setBatches(batchData || []);
+      const result = await response.json();
+      const batchData = result.data || [];
+      
+      // Filter by semester
+      const semesterBatches = batchData.filter((batch: any) => batch.semester === selectedSemester);
+
+      console.log('✅ Loaded batches:', semesterBatches);
+      setBatches(semesterBatches);
       
       // Auto-select first batch if available
-      if (batchData && batchData.length > 0) {
-        setSelectedBatch(batchData[0]);
-        console.log('✅ Auto-selected batch:', batchData[0]);
+      if (semesterBatches.length > 0) {
+        setSelectedBatch(semesterBatches[0]);
+        console.log('✅ Auto-selected batch:', semesterBatches[0]);
       } else {
         setSelectedBatch(null);
       }
@@ -234,80 +242,70 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
       // Check if user has department_id
       if (!user?.department_id) {
         console.error('❌ User missing department_id:', user);
-        
-        // Try to load a default department (CSE)
-        console.log('🔄 Attempting to load default CSE department...');
-        const { data: defaultDept, error: deptError } = await supabase
-          .from('departments')
-          .select('id')
-          .eq('code', 'CSE')
-          .eq('is_active', true)
-          .single();
-          
-        if (deptError || !defaultDept) {
-          alert('Error: User profile missing department information and no CSE department found. Please contact administrator.');
-          setLoading(false);
-          return;
-        }
-        
-        // Use default department temporarily
-        console.log('⚠ Using default CSE department:', defaultDept.id);
-        user.department_id = defaultDept.id;
+        alert('Error: User profile missing department information. Please contact administrator.');
+        setLoading(false);
+        return;
       }
 
       console.log('📍 Loading data for department_id:', user.department_id);
 
-      // Load faculty from the same department as the user
-      const { data: facultyData, error: facultyError } = await supabase
-        .from('users')
-        .select('id, first_name, last_name, email, department_id')
-        .eq('role', 'faculty')
-        .eq('department_id', user.department_id)
-        .eq('is_active', true);
+      const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
 
-      if (facultyError) {
-        console.error('❌ Error loading faculty:', facultyError);
-        alert(`Error loading faculty: ${facultyError.message}`);
+      // Load faculty using API
+      const facultyResponse = await fetch(`/api/faculty?department_id=${user.department_id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!facultyResponse.ok) {
+        console.error('❌ Error loading faculty:', facultyResponse.statusText);
+        alert(`Error loading faculty: ${facultyResponse.statusText}`);
         return;
       }
 
-      console.log('👥 Faculty data loaded:', facultyData?.length || 0, 'records');
-      if (facultyData && facultyData.length > 0) {
+      const facultyResult = await facultyResponse.json();
+      const facultyData = facultyResult.data || [];
+
+      console.log('👥 Faculty data loaded:', facultyData.length, 'records');
+      if (facultyData.length > 0) {
         console.log('Sample faculty:', facultyData.slice(0, 2));
       }
 
-      // Transform faculty data with mock qualified subjects for now
-      const transformedFaculty: Faculty[] = facultyData?.map((f: any) => ({
+      // Transform faculty data
+      const transformedFaculty: Faculty[] = facultyData.map((f: any) => ({
         id: f.id,
-        firstName: f.first_name,
-        lastName: f.last_name,
+        firstName: f.first_name || f.firstName,
+        lastName: f.last_name || f.lastName,
         email: f.email,
-        departmentId: f.department_id,
+        departmentId: f.department_id || f.departmentId,
         qualifiedSubjects: [] // Will be populated separately
-      })) || [];
+      }));
 
       setFaculty(transformedFaculty);
 
-      // Load subjects from the same department
+      // Load subjects using API
       console.log('📚 Loading subjects for department:', user.department_id);
-      const { data: subjectsData, error: subjectsError } = await supabase
-        .from('subjects')
-        .select('id, name, code, subject_type, credits_per_week, requires_lab, semester')
-        .eq('department_id', user.department_id)
-        .eq('is_active', true)
-        .order('semester', { ascending: true });
+      const subjectsResponse = await fetch(`/api/subjects?department_id=${user.department_id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
 
-      if (subjectsError) {
-        console.error('❌ Error loading subjects:', subjectsError);
-        alert(`Error loading subjects: ${subjectsError.message}`);
+      if (!subjectsResponse.ok) {
+        console.error('❌ Error loading subjects:', subjectsResponse.statusText);
+        alert(`Error loading subjects: ${subjectsResponse.statusText}`);
         return;
       }
 
-      console.log('📖 Subjects data loaded:', subjectsData?.length || 0, 'records');
-      if (subjectsData && subjectsData.length > 0) {
+      const subjectsResult = await subjectsResponse.json();
+      const subjectsData = subjectsResult.data || [];
+
+      console.log('📖 Subjects data loaded:', subjectsData.length, 'records');
+      if (subjectsData.length > 0) {
         console.log('Sample subjects:', subjectsData.slice(0, 3));
         const subjectsBySemester: { [key: string]: number } = {};
-        subjectsData.forEach(s => {
+        subjectsData.forEach((s: any) => {
           const sem = s.semester?.toString() || 'Unknown';
           if (!subjectsBySemester[sem]) subjectsBySemester[sem] = 0;
           subjectsBySemester[sem]++;
@@ -315,60 +313,20 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
         console.log('Subjects by semester:', subjectsBySemester);
       }
 
-      const transformedSubjects: Subject[] = subjectsData?.map((s: any) => ({
+      const transformedSubjects: Subject[] = subjectsData.map((s: any) => ({
         id: s.id,
         name: s.name,
         code: s.code,
-        subjectType: s.subject_type,
-        credits: s.credits_per_week,
-        requiresLab: s.requires_lab,
+        subjectType: s.subject_type || s.subjectType,
+        credits: s.credits_per_week || s.credits,
+        requiresLab: s.requires_lab || s.requiresLab,
         semester: s.semester || 1
-      })) || [];
+      }));
 
       setSubjects(transformedSubjects);
 
-      // Now load faculty qualifications separately
-      if (transformedFaculty.length > 0) {
-        console.log('🎓 Loading faculty qualifications...');
-        const facultyIds = transformedFaculty.map(f => f.id);
-        const { data: qualificationsData, error: qualError } = await supabase
-          .from('faculty_qualified_subjects')
-          .select(`
-            faculty_id,
-            subject_id,
-            subjects!inner(id, name, code, subject_type, credits_per_week, requires_lab, semester)
-          `)
-          .in('faculty_id', facultyIds);
-
-        if (qualError) {
-          console.error('❌ Error loading qualifications:', qualError);
-        } else {
-          console.log('🎯 Qualifications loaded:', qualificationsData?.length || 0, 'records');
-        }
-
-        // Update faculty with their qualifications
-        const updatedFaculty = transformedFaculty.map(f => ({
-          ...f,
-          qualifiedSubjects: qualificationsData
-            ?.filter((q: any) => q.faculty_id === f.id)
-            .map((q: any) => ({
-              id: q.subjects.id,
-              name: q.subjects.name,
-              code: q.subjects.code,
-              subjectType: q.subjects.subject_type,
-              credits: q.subjects.credits_per_week,
-              requiresLab: q.subjects.requires_lab,
-              semester: q.subjects.semester || 1
-            })) || []
-        }));
-
-        setFaculty(updatedFaculty);
-        console.log('✅ Faculty updated with qualifications');
-      } else {
-        console.log('⚠  No faculty found, skipping qualifications');
-      }
-      
-      console.log('🎉 Data loading completed successfully!');
+      // Load faculty qualifications if needed (can be added later)
+      console.log('✅ Data loading completed successfully!');
       console.log(`Final counts - Faculty: ${transformedFaculty.length}, Subjects: ${transformedSubjects.length}`);
     } catch (error) {
       console.error('❌ Unexpected error loading data:', error);
@@ -400,106 +358,231 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
         requiresLab: selectedSubject.requiresLab
       });
 
-      // Load classrooms from API
-      const response = await fetch(`/api/classrooms?department_id=${user.department_id}`);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch classrooms: ${response.statusText}`);
-      }
+      const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
 
-      const data = await response.json();
-      console.log('🏫 Classrooms API response:', data);
-
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to fetch classrooms');
-      }
-
-      const allClassrooms: Classroom[] = data.data?.map((c: any) => ({
-        id: c.id,
-        name: c.name,
-        building: c.building || 'Unknown',
-        capacity: c.capacity || 0,
-        type: c.type || 'Classroom',
-        hasProjector: c.has_projector || false,
-        hasAc: c.has_ac || false,
-        hasComputers: c.has_computers || false,
-        hasLabEquipment: c.has_lab_equipment || false,
-        isSmartClassroom: c.is_smart_classroom || false,
-        departmentId: c.department_id
-      })) || [];
-
-      setClassrooms(allClassrooms);
-
-      // Filter classrooms based on subject requirements
-      let suitable = allClassrooms;
-
-      if (isLabSubject) {
-        // For lab subjects, prefer classrooms with lab equipment or computers
-        const labClassrooms = suitable.filter(c => 
-          c.hasLabEquipment || 
-          c.hasComputers || 
-          c.type.toLowerCase().includes('lab')
-        );
-        
-        // If we have specific lab classrooms, use them; otherwise, use all
-        if (labClassrooms.length > 0) {
-          suitable = labClassrooms;
-        }
-      } else {
-        // For theory subjects, prefer lecture halls and regular classrooms
-        suitable = suitable.filter(c => 
-          !c.type.toLowerCase().includes('lab') || 
-          c.type.toLowerCase().includes('lecture') ||
-          c.type === 'Classroom'
-        );
-      }
-
-      // Sort by suitability score
-      suitable.sort((a, b) => {
-        let scoreA = 0;
-        let scoreB = 0;
-
-        // Prefer same department classrooms
-        if (a.departmentId === user.department_id) scoreA += 10;
-        if (b.departmentId === user.department_id) scoreB += 10;
-
-        // For lab subjects, prioritize lab features
-        if (isLabSubject) {
-          if (a.hasLabEquipment) scoreA += 5;
-          if (b.hasLabEquipment) scoreB += 5;
-          if (a.hasComputers) scoreA += 3;
-          if (b.hasComputers) scoreB += 3;
-        } else {
-          // For theory subjects, prioritize presentation features
-          if (a.hasProjector) scoreA += 3;
-          if (b.hasProjector) scoreB += 3;
-          if (a.isSmartClassroom) scoreA += 2;
-          if (b.isSmartClassroom) scoreB += 2;
-        }
-
-        // Consider capacity (moderate preference for larger rooms)
-        scoreA += Math.min(a.capacity / 20, 2);
-        scoreB += Math.min(b.capacity / 20, 2);
-
-        return scoreB - scoreA;
+      // Load classrooms using API
+      const response = await fetch(`/api/classrooms?department_id=${user.department_id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
       });
 
-      setFilteredClassrooms(suitable);
-      console.log(`✅ Filtered ${suitable.length} suitable classrooms out of ${allClassrooms.length} total`);
-
-      // Auto-select first suitable classroom if available
-      if (suitable.length > 0) {
-        setSelectedClassroom(suitable[0]);
-        console.log('🎯 Auto-selected classroom:', suitable[0].name);
+      if (!response.ok) {
+        console.error('❌ Error loading classrooms:', response.statusText);
+        return;
       }
 
+      const result = await response.json();
+      const classroomsData = result.data || [];
+
+      console.log('🏢 All classrooms loaded:', classroomsData.length);
+
+      // Transform and filter classrooms based on subject requirements
+      const transformedClassrooms: Classroom[] = classroomsData
+        .map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          building: c.building || 'Main Building',
+          capacity: c.capacity || 60,
+          type: c.type || 'classroom',
+          hasProjector: c.has_projector || false,
+          hasAc: c.has_ac || false,
+          hasComputers: c.has_computers || false,
+          hasLabEquipment: c.has_lab_equipment || false,
+          isSmartClassroom: c.is_smart_classroom || false,
+          departmentId: c.department_id
+        }))
+        .filter((classroom: Classroom) => {
+          // For lab subjects, only show labs
+          if (isLabSubject) {
+            return classroom.type === 'lab' || 
+                   classroom.hasComputers || 
+                   classroom.hasLabEquipment;
+          }
+          // For theory subjects, show regular classrooms
+          return classroom.type === 'classroom' || 
+                 classroom.type === 'lecture_hall' ||
+                 classroom.isSmartClassroom;
+        });
+
+      console.log('✅ Filtered classrooms:', transformedClassrooms.length);
+      setClassrooms(transformedClassrooms);
+      setFilteredClassrooms(transformedClassrooms);
+
+      // Auto-select first classroom if available
+      if (transformedClassrooms.length > 0) {
+        setSelectedClassroom(transformedClassrooms[0]);
+        console.log('✅ Auto-selected classroom:', transformedClassrooms[0]);
+      }
     } catch (error) {
       console.error('❌ Error loading classrooms:', error);
-      setClassrooms([]);
-      setFilteredClassrooms([]);
-      setSelectedClassroom(null);
     } finally {
       setLoadingClassrooms(false);
+    }
+  };
+
+  const handleDragStart = (type: 'faculty' | 'subject', item: any) => {
+    setDraggedItem({ type, item });
+  };
+
+  const handleDragEnd = () => {
+    setDraggedItem(null);
+    setDragOverSlot(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent, slotId: string) => {
+    e.preventDefault();
+    setDragOverSlot(slotId);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverSlot(null);
+  };
+
+  const handleDrop = async (e: React.DragEvent, timeSlot: TimeSlot) => {
+    e.preventDefault();
+    setDragOverSlot(null);
+
+    if (!draggedItem) return;
+    if (timeSlot.isBreak || timeSlot.isLunch) return;
+
+    // For lab subjects, check if we can allocate consecutive slots
+    const isLab = draggedItem.type === 'subject' && 
+                  (draggedItem.item.requiresLab || 
+                   draggedItem.item.subjectType.toLowerCase().includes('lab'));
+
+    if (draggedItem.type === 'faculty') {
+      // If faculty is dragged, we need a selected subject
+      if (!selectedSubject) {
+        alert('Please select a subject first');
+        return;
+      }
+
+      // Check if classroom is selected
+      if (!selectedClassroom) {
+        alert('Please select a classroom first');
+        return;
+      }
+
+      // Check if faculty-subject-time slot combination already exists
+      const existingAssignment = assignments.find(a => 
+        a.faculty.id === draggedItem.item.id &&
+        a.subject.id === selectedSubject.id &&
+        a.timeSlot.id === timeSlot.id
+      );
+
+      if (existingAssignment) {
+        alert('This faculty-subject-time combination already exists');
+        return;
+      }
+
+      // For lab, allocate 2 consecutive slots
+      const duration = isLab ? 2 : 1;
+      const endSlotIndex = isLab ? timeSlot.slotIndex + 1 : timeSlot.slotIndex;
+
+      // Check if next slot is available for labs
+      if (isLab) {
+        const nextSlot = timeSlots.find(s => 
+          s.day === timeSlot.day && 
+          s.slotIndex === timeSlot.slotIndex + 1
+        );
+        
+        if (!nextSlot || nextSlot.isBreak || nextSlot.isLunch) {
+          alert('Lab requires 2 consecutive slots. Next slot is not available.');
+          return;
+        }
+
+        // Check if next slot is occupied
+        const nextSlotOccupied = assignments.some(a => 
+          a.timeSlot.day === nextSlot.day &&
+          a.timeSlot.slotIndex === nextSlot.slotIndex
+        );
+
+        if (nextSlotOccupied) {
+          alert('Next time slot is already occupied');
+          return;
+        }
+      }
+
+      const newAssignment: Assignment = {
+        id: `${draggedItem.item.id}-${selectedSubject.id}-${timeSlot.id}`,
+        faculty: draggedItem.item,
+        subject: selectedSubject,
+        timeSlot: timeSlot,
+        classroom: selectedClassroom,
+        isLab: isLab,
+        duration: duration,
+        endSlotIndex: endSlotIndex
+      };
+
+      setAssignments([...assignments, newAssignment]);
+      setSelectedFaculty(null);
+    } else if (draggedItem.type === 'subject') {
+      // If subject is dragged, we need a selected faculty
+      if (!selectedFaculty) {
+        alert('Please select a faculty first');
+        return;
+      }
+
+      // Check if classroom is selected
+      if (!selectedClassroom) {
+        alert('Please select a classroom first');
+        return;
+      }
+
+      // Check for existing assignment
+      const existingAssignment = assignments.find(a => 
+        a.faculty.id === selectedFaculty.id &&
+        a.subject.id === draggedItem.item.id &&
+        a.timeSlot.id === timeSlot.id
+      );
+
+      if (existingAssignment) {
+        alert('This faculty-subject-time combination already exists');
+        return;
+      }
+
+      // For lab, allocate 2 consecutive slots
+      const duration = isLab ? 2 : 1;
+      const endSlotIndex = isLab ? timeSlot.slotIndex + 1 : timeSlot.slotIndex;
+
+      // Check if next slot is available for labs
+      if (isLab) {
+        const nextSlot = timeSlots.find(s => 
+          s.day === timeSlot.day && 
+          s.slotIndex === timeSlot.slotIndex + 1
+        );
+        
+        if (!nextSlot || nextSlot.isBreak || nextSlot.isLunch) {
+          alert('Lab requires 2 consecutive slots. Next slot is not available.');
+          return;
+        }
+
+        // Check if next slot is occupied
+        const nextSlotOccupied = assignments.some(a => 
+          a.timeSlot.day === nextSlot.day &&
+          a.timeSlot.slotIndex === nextSlot.slotIndex
+        );
+
+        if (nextSlotOccupied) {
+          alert('Next time slot is already occupied');
+          return;
+        }
+      }
+
+      const newAssignment: Assignment = {
+        id: `${selectedFaculty.id}-${draggedItem.item.id}-${timeSlot.id}`,
+        faculty: selectedFaculty,
+        subject: draggedItem.item,
+        timeSlot: timeSlot,
+        classroom: selectedClassroom,
+        isLab: isLab,
+        duration: duration,
+        endSlotIndex: endSlotIndex
+      };
+
+      setAssignments([...assignments, newAssignment]);
+      setSelectedSubject(null);
     }
   };
 
@@ -626,44 +709,6 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
     setAssignments(prev => prev.filter(a => a.id !== assignmentId));
   }, []);
 
-  const handleDragStart = (type: 'faculty' | 'subject', item: any) => {
-    setDraggedItem({ type, item });
-  };
-
-  const handleDragOver = (e: React.DragEvent, timeSlot?: TimeSlot) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (timeSlot) {
-      setDragOverSlot(`${timeSlot.day}-${timeSlot.slotIndex}`);
-    }
-  };
-
-  const handleDragLeave = () => {
-    setDragOverSlot(null);
-  };
-
-  const handleDrop = (e: React.DragEvent, timeSlot: TimeSlot) => {
-    e.preventDefault();
-    setDragOverSlot(null);
-    
-    if (!draggedItem) {
-      return;
-    }
-    
-    // Check if the time slot is a break or lunch
-    if (timeSlot.isBreak || timeSlot.isLunch) {
-      setDraggedItem(null);
-      return;
-    }
-    
-    if (draggedItem.type === 'faculty' && selectedSubject) {
-      handleAssignClass(draggedItem.item, selectedSubject, timeSlot);
-    } else if (draggedItem.type === 'subject' && selectedFaculty) {
-      handleAssignClass(selectedFaculty, draggedItem.item, timeSlot);
-    }
-    
-    setDraggedItem(null);
-  };
   const getAssignmentForSlot = (day: string, slotIndex: number) => {
     // Check for direct assignment
     const directAssignment = assignments.find(a => a.timeSlot.day === day && a.timeSlot.slotIndex === slotIndex);
@@ -1208,7 +1253,7 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
                                   ? (timeSlot?.isBreak ? 'bg-orange-50' : 'bg-yellow-50')
                                   : 'bg-gray-50'
                               } ${isDragOver ? 'bg-blue-100 border-blue-300' : ''}`}
-                              onDragOver={(e) => currentTimeSlot && handleDragOver(e, currentTimeSlot)}
+                              onDragOver={(e) => currentTimeSlot && handleDragOver(e, `${day}-${slotIndex}`)}
                               onDragLeave={handleDragLeave}
                               onDrop={(e) => currentTimeSlot && handleDrop(e, currentTimeSlot)}
                             >

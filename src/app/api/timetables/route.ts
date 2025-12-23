@@ -221,6 +221,7 @@ export async function POST(request: NextRequest) {
       generation_task_id: task.id, // REQUIRED by schema
       title: title || `Semester ${semester} Timetable - ${academicYear}`,
       batch_id: finalBatchId, // REQUIRED by schema
+      college_id: finalCollegeId, // REQUIRED by schema
       academic_year: academicYear,
       semester: semester,
       fitness_score: 100.0, // Manual timetables get perfect score
@@ -805,7 +806,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Filter by department for non-admin users
+    // Filter by department for non-admin users and get class counts
     let filteredTimetables = timetables || [];
     if (user.role !== 'admin' && user.department_id) {
       filteredTimetables = filteredTimetables.filter(tt => {
@@ -814,9 +815,24 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Add class count to each timetable
+    const timetablesWithCount = await Promise.all(
+      filteredTimetables.map(async (tt) => {
+        const { count } = await supabase
+          .from('scheduled_classes')
+          .select('id', { count: 'exact', head: true })
+          .eq('timetable_id', tt.id);
+        
+        return {
+          ...tt,
+          class_count: count || 0
+        };
+      })
+    );
+
     return NextResponse.json({
       success: true,
-      timetables: filteredTimetables
+      timetables: timetablesWithCount
     });
 
   } catch (error) {

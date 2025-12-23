@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
 import LeftSidebar from '@/components/LeftSidebar';
-import { Eye, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react';
+import { Eye, CheckCircle, XCircle, Clock, AlertCircle, Mail } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface PendingTimetable {
@@ -27,6 +27,7 @@ export default function ReviewQueuePage() {
   const [loading, setLoading] = useState(true);
   const [pendingTimetables, setPendingTimetables] = useState<PendingTimetable[]>([]);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
+  const [isSendingEmail, setIsSendingEmail] = useState<string | null>(null);
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -44,7 +45,6 @@ export default function ReviewQueuePage() {
       }
       
       setUser(parsedUser);
-      fetchPendingTimetables(parsedUser.department_id);
     } catch (error) {
       console.error('Error parsing user data:', error);
       localStorage.removeItem('user');
@@ -52,122 +52,48 @@ export default function ReviewQueuePage() {
     }
   }, [router]);
 
-  const fetchPendingTimetables = async (departmentId?: string) => {
+  // Separate useEffect to fetch timetables when user is set
+  useEffect(() => {
+    if (user?.id) {
+      fetchPendingTimetables();
+    }
+  }, [user]);
+
+  const fetchPendingTimetables = async () => {
     try {
-      // Get department ID from parameter or fetch from user
-      let userDepartmentId = departmentId;
-      
-      if (!userDepartmentId && user?.id) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('department_id')
-          .eq('id', user.id)
-          .single();
-        userDepartmentId = userData?.department_id;
-      }
-
-      if (!userDepartmentId) {
-        console.error('❌ No department ID found');
+      if (!user?.id) {
+        console.error('❌ No user found');
         setLoading(false);
         return;
       }
 
-      console.log('🔍 Fetching pending timetables for review from department:', userDepartmentId);
-      
-      // First, get all batches for this department
-      const { data: departmentBatches, error: batchError } = await supabase
-        .from('batches')
-        .select('id')
-        .eq('department_id', userDepartmentId);
+      console.log('🔍 Fetching pending timetables for review');
 
-      if (batchError) {
-        console.error('❌ Error fetching department batches:', batchError);
+      const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
+
+      const response = await fetch('/api/timetables/review-queue', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('❌ Error fetching pending timetables:', errorData.error);
         setLoading(false);
         return;
       }
 
-      const batchIds = departmentBatches?.map(b => b.id) || [];
-      
-      if (batchIds.length === 0) {
-        console.log('⚠️ No batches found for this department');
-        setPendingTimetables([]);
+      const result = await response.json();
+
+      if (!result.success) {
+        console.error('❌ Failed to fetch pending timetables:', result.error);
         setLoading(false);
         return;
       }
 
-      console.log('📦 Found', batchIds.length, 'batches for department:', userDepartmentId);
-
-      // Now fetch timetables only for those batches
-      const { data, error } = await supabase
-        .from('generated_timetables')
-        .select(`
-          *,
-          batch:batches(id, name, department_id)
-        `)
-        .eq('status', 'pending_approval')
-        .in('batch_id', batchIds)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('❌ Error fetching pending timetables:', error);
-        setLoading(false);
-        return;
-      }
-
-      console.log('✅ Fetched', data?.length || 0, 'pending timetables for this department');
-      const filteredData = data;
-
-      // Get additional details for each timetable
-      const timetablesWithCounts = await Promise.all(
-        (filteredData || []).map(async (tt: any) => {
-          // Get batch name
-          const { data: batchData } = await supabase
-            .from('batches')
-            .select('name')
-            .eq('id', tt.batch_id)
-            .single();
-
-          // Get creator info
-          const { data: userData } = await supabase
-            .from('users')
-            .select('first_name, last_name, email')
-            .eq('id', tt.created_by)
-            .single();
-
-          // Get class count
-          const { count } = await supabase
-            .from('scheduled_classes')
-            .select('id', { count: 'exact', head: true })
-            .eq('timetable_id', tt.id);
-
-          // Get workflow submission time
-          const { data: workflowData } = await supabase
-            .from('workflow_approvals')
-            .select('performed_at')
-            .eq('timetable_id', tt.id)
-            .eq('workflow_step', 'submitted_for_review')
-            .order('performed_at', { ascending: false })
-            .limit(1)
-            .single();
-
-          return {
-            id: tt.id,
-            title: tt.title,
-            status: tt.status,
-            academic_year: tt.academic_year,
-            semester: tt.semester,
-            submitted_at: workflowData?.performed_at || tt.created_at,
-            batch_name: batchData?.name || 'Unknown Batch',
-            creator_name: userData ? `${userData.first_name} ${userData.last_name}`.trim() : 'Unknown',
-            creator_email: userData?.email || '',
-            class_count: count || 0,
-            workflow_status: 'pending_review'
-          };
-        })
-      );
-
-      console.log('✅ Fetched pending timetables:', timetablesWithCounts.length);
-      setPendingTimetables(timetablesWithCounts);
+      console.log('✅ Fetched', result.timetables?.length || 0, 'pending timetables for this department');
+      setPendingTimetables(result.timetables || []);
       setLoading(false);
     } catch (error) {
       console.error('❌ Error in fetchPendingTimetables:', error);
@@ -184,81 +110,28 @@ export default function ReviewQueuePage() {
     console.log('✅ Approving timetable:', timetableId);
 
     try {
-      // Update timetable status to published
-      const { error: updateError } = await supabase
-        .from('generated_timetables')
-        .update({ status: 'published' })
-        .eq('id', timetableId);
+      const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
+      
+      const response = await fetch(`/api/timetables/${timetableId}/approve`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
 
-      if (updateError) {
-        console.error('❌ Error publishing timetable:', updateError);
-        alert(`Failed to publish: ${updateError.message}`);
-        setIsProcessing(null);
-        return;
-      }
+      const result = await response.json();
 
-      // Add workflow approval record
-      const { error: workflowError } = await supabase
-        .from('workflow_approvals')
-        .insert({
-          timetable_id: timetableId,
-          workflow_step: 'approved',
-          performed_by: user.id,
-          comments: 'Approved and published by publisher'
-        });
-
-      if (workflowError) {
-        console.error('❌ Error updating workflow:', workflowError);
-        alert(`Failed to update workflow: ${workflowError.message}`);
+      if (!response.ok || !result.success) {
+        alert(`Failed to approve: ${result.error || 'Unknown error'}`);
         setIsProcessing(null);
         return;
       }
 
       console.log('✅ Timetable approved and published successfully');
-      
-      // Send email notifications to all students and faculty
-      try {
-        const notifyResponse = await fetch('/api/email/sendUpdate', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-          },
-          body: JSON.stringify({
-            timetableId,
-            publishedBy: `${user.first_name} ${user.last_name}`
-          })
-        });
-
-        const notifyData = await notifyResponse.json();
-        
-        if (notifyData.success) {
-          const stats = notifyData.stats;
-          alert(
-            `✅ Timetable approved and published successfully!\n\n` +
-            `📧 Email notifications sent to:\n` +
-            `• ${stats.students} students\n` +
-            `• ${stats.faculty} faculty members\n` +
-            `Total: ${stats.sent}/${stats.total} emails sent`
-          );
-        } else {
-          alert(
-            `✅ Timetable approved and published successfully!\n\n` +
-            `⚠️ Warning: Failed to send email notifications.\n` +
-            `Please inform students manually.`
-          );
-        }
-      } catch (emailError) {
-        console.error('❌ Error sending email notifications:', emailError);
-        alert(
-          `✅ Timetable approved and published successfully!\n\n` +
-          `⚠️ Warning: Failed to send email notifications.\n` +
-          `Please inform students manually.`
-        );
-      }
+      alert('✅ Timetable approved and published successfully!');
       
       // Refresh the list
-      fetchPendingTimetables(user?.department_id);
+      fetchPendingTimetables();
     } catch (error: any) {
       console.error('❌ Error in handleApprove:', error);
       alert(`Error: ${error.message}`);
@@ -277,33 +150,21 @@ export default function ReviewQueuePage() {
     console.log('❌ Rejecting timetable:', timetableId);
 
     try {
-      // Update timetable status to rejected
-      const { error: updateError } = await supabase
-        .from('generated_timetables')
-        .update({ status: 'rejected' })
-        .eq('id', timetableId);
+      const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
+      
+      const response = await fetch(`/api/timetables/${timetableId}/reject`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ reason })
+      });
 
-      if (updateError) {
-        console.error('❌ Error rejecting timetable:', updateError);
-        alert(`Failed to reject: ${updateError.message}`);
-        setIsProcessing(null);
-        return;
-      }
+      const result = await response.json();
 
-      // Add workflow rejection record
-      const { error: workflowError } = await supabase
-        .from('workflow_approvals')
-        .insert({
-          timetable_id: timetableId,
-          workflow_step: 'rejected',
-          performed_by: user.id,
-          comments: reason,
-          rejection_reason: reason
-        });
-
-      if (workflowError) {
-        console.error('❌ Error updating workflow:', workflowError);
-        alert(`Failed to update workflow: ${workflowError.message}`);
+      if (!response.ok || !result.success) {
+        alert(`Failed to reject: ${result.error || 'Unknown error'}`);
         setIsProcessing(null);
         return;
       }
@@ -312,12 +173,73 @@ export default function ReviewQueuePage() {
       alert('Timetable rejected. Creator will be notified.');
       
       // Refresh the list
-      fetchPendingTimetables(user?.department_id);
+      fetchPendingTimetables();
     } catch (error: any) {
       console.error('❌ Error in handleReject:', error);
       alert(`Error: ${error.message}`);
     } finally {
       setIsProcessing(null);
+    }
+  };
+
+  const handleSendEmailNotification = async (timetableId: string, title: string) => {
+    if (!confirm(`Send email notifications for "${title}" to all students and faculty?`)) {
+      return;
+    }
+
+    setIsSendingEmail(timetableId);
+    console.log('📧 Sending email notifications for timetable:', timetableId);
+
+    try {
+      // Note: Email service needs to be implemented
+      // For now, this is a placeholder showing future implementation
+      alert(
+        '📧 Email Notification Feature\n\n' +
+        'This feature is under development and will send notifications to:\n' +
+        '• All students enrolled in the batch\n' +
+        '• Faculty members assigned to courses\n' +
+        '• Department administrators\n\n' +
+        'Coming soon!'
+      );
+
+      /* Future implementation:
+      const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
+      
+      const response = await fetch('/api/email/sendUpdate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          timetableId,
+          publishedBy: `${user.first_name} ${user.last_name}`
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        alert(`Failed to send emails: ${result.error || 'Unknown error'}`);
+        setIsSendingEmail(null);
+        return;
+      }
+
+      const stats = result.stats;
+      alert(
+        `✅ Email notifications sent successfully!\n\n` +
+        `📧 Sent to:\n` +
+        `• ${stats.students} students\n` +
+        `• ${stats.faculty} faculty members\n` +
+        `Total: ${stats.sent}/${stats.total} emails sent`
+      );
+      */
+
+    } catch (error: any) {
+      console.error('❌ Error sending email notifications:', error);
+      alert(`Error: ${error.message}`);
+    } finally {
+      setIsSendingEmail(null);
     }
   };
 
@@ -483,6 +405,23 @@ export default function ReviewQueuePage() {
                       >
                         <XCircle className="w-4 h-4 mr-2" />
                         Reject
+                      </button>
+                      <button
+                        onClick={() => handleSendEmailNotification(timetable.id, timetable.title)}
+                        disabled={isSendingEmail === timetable.id}
+                        className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {isSendingEmail === timetable.id ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            Sending...
+                          </>
+                        ) : (
+                          <>
+                            <Mail className="w-4 h-4 mr-2" />
+                            Send Email
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>

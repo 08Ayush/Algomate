@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
@@ -74,103 +73,34 @@ export default function ViewTimetablePage() {
       setLoading(true);
       setError(null);
 
-      // Fetch timetable details
-      const { data: timetableData, error: timetableError } = await supabase
-        .from('generated_timetables')
-        .select('*')
-        .eq('id', timetableId)
-        .single();
-
-      if (timetableError) throw timetableError;
-      if (!timetableData) throw new Error('Timetable not found');
-
-      // Fetch batch name
-      let batchName = 'Unknown Batch';
-      if (timetableData.batch_id) {
-        const { data: batchData } = await supabase
-          .from('batches')
-          .select('name')
-          .eq('id', timetableData.batch_id)
-          .single();
-        if (batchData) batchName = batchData.name;
+      // Get user for authentication
+      const userStr = localStorage.getItem('user');
+      if (!userStr) {
+        throw new Error('Please log in to view timetables');
       }
+      const user = JSON.parse(userStr);
+      const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
 
-      // Fetch creator name
-      let creatorName = 'Unknown';
-      if (timetableData.created_by) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('first_name, last_name')
-          .eq('id', timetableData.created_by)
-          .single();
-        if (userData) creatorName = `${userData.first_name} ${userData.last_name}`;
-      }
-
-      setTimetable({
-        ...timetableData,
-        batch_name: batchName,
-        creator_name: creatorName
+      // Fetch timetable details from API
+      const response = await fetch(`/api/timetables/${timetableId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
 
-      // Fetch scheduled classes with time slot info
-      const { data: classesData, error: classesError } = await supabase
-        .from('scheduled_classes')
-        .select('id, timetable_id, subject_id, faculty_id, classroom_id, time_slot_id, notes, session_duration, class_type, is_continuation, is_lab, session_number')
-        .eq('timetable_id', timetableId);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch timetable');
+      }
 
-      if (classesError) throw classesError;
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch timetable');
+      }
 
-      // Fetch additional details for each class
-      const enrichedClasses = await Promise.all(
-        (classesData || []).map(async (cls) => {
-          // Get time slot
-          const { data: timeSlot } = await supabase
-            .from('time_slots')
-            .select('day, start_time, end_time')
-            .eq('id', cls.time_slot_id)
-            .single();
-
-          // Get subject
-          const { data: subject } = await supabase
-            .from('subjects')
-            .select('name, code')
-            .eq('id', cls.subject_id)
-            .single();
-
-          // Get faculty
-          const { data: faculty } = await supabase
-            .from('users')
-            .select('first_name, last_name')
-            .eq('id', cls.faculty_id)
-            .single();
-
-          // Get classroom
-          const { data: classroom } = await supabase
-            .from('classrooms')
-            .select('name')
-            .eq('id', cls.classroom_id)
-            .single();
-
-          return {
-            ...cls,
-            day: timeSlot?.day || '',
-            start_time: timeSlot?.start_time || '',
-            end_time: timeSlot?.end_time || '',
-            subject_name: subject?.name || 'Unknown',
-            subject_code: subject?.code || '',
-            faculty_name: faculty ? `${faculty.first_name} ${faculty.last_name}` : 'Unknown',
-            classroom_name: classroom?.name || 'Unknown',
-            notes: cls.notes || '',
-            session_duration: cls.session_duration || 60,
-            class_type: cls.class_type || 'THEORY',
-            is_continuation: cls.is_continuation || false,
-            is_lab: cls.is_lab || false,
-            session_number: cls.session_number || 1
-          };
-        })
-      );
-
-      setClasses(enrichedClasses);
+      setTimetable(result.timetable);
+      setClasses(result.scheduledClasses || []);
 
       // Define all possible time slots (matching the schedule structure)
       const allTimeSlots = [

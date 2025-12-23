@@ -98,95 +98,23 @@ export default function FacultyDashboard() {
 
   const fetchStats = async (userData: User) => {
     try {
-      // Fetch timetables based on user type
-      let query = supabase
-        .from('generated_timetables')
-        .select('*, batch:batches!inner(department_id)');
+      const token = btoa(JSON.stringify({ id: userData.id, role: userData.role, department_id: userData.department_id }));
+      
+      const response = await fetch('/api/dashboard/stats', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
 
-      if (userData.faculty_type === 'creator') {
-        query = query.eq('created_by', userData.id);
-      } else if (userData.faculty_type === 'publisher' && userData.department_id) {
-        query = query.eq('batch.department_id', userData.department_id);
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        console.error('Failed to fetch stats:', result.error);
+        return;
       }
 
-      const { data: timetables, error: timetablesError } = await query;
-
-      if (timetablesError) throw timetablesError;
-
-      // Calculate active timetables
-      const activeTimetables = timetables?.filter(t => t.status === 'published')?.length || 0;
-
-      // Calculate average fitness score
-      const validFitnessScores = timetables?.filter(t => t.fitness_score > 0).map(t => t.fitness_score) || [];
-      const avgFitnessScore = validFitnessScores.length > 0
-        ? validFitnessScores.reduce((a, b) => a + b, 0) / validFitnessScores.length
-        : 0;
-
-      // Fetch faculty count in department
-      const { count: facultyCount } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true })
-        .eq('department_id', userData.department_id)
-        .eq('role', 'faculty')
-        .eq('is_active', true);
-
-      // Fetch generation tasks for average time
-      const { data: tasks } = await supabase
-        .from('timetable_generation_tasks')
-        .select('execution_time_seconds')
-        .eq('created_by', userData.id)
-        .eq('status', 'COMPLETED')
-        .limit(10);
-
-      const avgTime = tasks && tasks.length > 0
-        ? tasks.reduce((sum, t) => sum + (t.execution_time_seconds || 0), 0) / tasks.length
-        : 0;
-      const avgGenerationTime = avgTime > 0 ? `${avgTime.toFixed(1)}s` : '0s';
-
-      // Fetch total scheduled classes
-      const timetableIds = timetables?.map(t => t.id) || [];
-      const { count: totalClasses } = await supabase
-        .from('scheduled_classes')
-        .select('*', { count: 'exact', head: true })
-        .in('timetable_id', timetableIds.length > 0 ? timetableIds : ['dummy']);
-
-      // Calculate conflict resolution rate
-      const timetablesWithViolations = timetables?.filter(t => 
-        t.constraint_violations && Array.isArray(t.constraint_violations) && t.constraint_violations.length > 0
-      ).length || 0;
-      const totalTimetables = timetables?.length || 0;
-      const conflictResolutionRate = totalTimetables > 0
-        ? ((totalTimetables - timetablesWithViolations) / totalTimetables) * 100
-        : 0;
-
-      // Fetch classroom utilization
-      const { data: classrooms } = await supabase
-        .from('classrooms')
-        .select('id')
-        .eq('department_id', userData.department_id)
-        .eq('is_available', true);
-
-      const classroomIds = classrooms?.map(c => c.id) || [];
-      const { count: usedClassrooms } = await supabase
-        .from('scheduled_classes')
-        .select('classroom_id', { count: 'exact', head: true })
-        .in('timetable_id', timetableIds.length > 0 ? timetableIds : ['dummy'])
-        .in('classroom_id', classroomIds.length > 0 ? classroomIds : ['dummy']);
-
-      const roomUtilization = classroomIds.length > 0 && usedClassrooms
-        ? (usedClassrooms / classroomIds.length) * 100
-        : 0;
-
-      setStats({
-        activeTimetables,
-        avgFitnessScore: Math.round(avgFitnessScore),
-        facultyCount: facultyCount || 0,
-        avgGenerationTime,
-        totalClassesScheduled: totalClasses || 0,
-        conflictResolutionRate: Math.round(conflictResolutionRate * 10) / 10,
-        roomUtilization: Math.round(roomUtilization),
-        facultySatisfaction: avgFitnessScore > 0 ? Math.round((avgFitnessScore / 100) * 50) / 10 : 0
-      });
+      setStats(result.stats);
     } catch (error) {
       console.error('Error fetching stats:', error);
     }
@@ -194,84 +122,36 @@ export default function FacultyDashboard() {
 
   const fetchRecentTimetables = async (userData: User) => {
     try {
-      let query = supabase
-        .from('generated_timetables')
-        .select(`
-          id,
-          title,
-          status,
-          created_at,
-          batch:batches!inner(name, department_id)
-        `)
-        .order('created_at', { ascending: false })
-        .limit(3);
+      const token = btoa(JSON.stringify({ id: userData.id, role: userData.role, department_id: userData.department_id }));
+      
+      const response = await fetch('/api/dashboard/recent', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
 
-      if (userData.faculty_type === 'creator') {
-        query = query.eq('created_by', userData.id);
-      } else if (userData.faculty_type === 'publisher' && userData.department_id) {
-        query = query.eq('batch.department_id', userData.department_id);
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        console.error('Failed to fetch recent data:', result.error);
+        return;
       }
 
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      const formatted = data?.map(t => ({
-        id: t.id,
-        title: t.title,
-        status: t.status,
-        created_at: t.created_at,
-        batch_name: (t.batch as any)?.name || 'Unknown Batch'
-      })) || [];
-
-      setRecentTimetables(formatted);
+      setRecentTimetables(result.recentTimetables || []);
+      setRecentActivities(result.recentActivities || []);
+      setPendingReviewCount(result.pendingReviewCount || 0);
     } catch (error) {
       console.error('Error fetching recent timetables:', error);
     }
   };
 
   const fetchRecentActivities = async (userData: User) => {
-    try {
-      // Fetch recent notifications and workflow approvals
-      const { data: notifications } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('recipient_id', userData.id)
-        .order('created_at', { ascending: false })
-        .limit(3);
-
-      const activities: RecentActivity[] = notifications?.map(n => ({
-        id: n.id,
-        type: n.type === 'timetable_published' ? 'timetable_published' : 
-              n.type === 'approval_request' ? 'modification_request' : 'optimization_completed',
-        title: n.title,
-        description: n.message,
-        created_at: n.created_at
-      })) || [];
-
-      setRecentActivities(activities);
-    } catch (error) {
-      console.error('Error fetching recent activities:', error);
-    }
+    // Now handled by fetchRecentTimetables API call
   };
 
   const fetchPendingReviewCount = async (userData: User) => {
-    try {
-      if (userData.faculty_type !== 'publisher' || !userData.department_id) {
-        setPendingReviewCount(0);
-        return;
-      }
-
-      const { count } = await supabase
-        .from('generated_timetables')
-        .select('*, batch:batches!inner(department_id)', { count: 'exact', head: true })
-        .eq('status', 'pending_approval')
-        .eq('batch.department_id', userData.department_id);
-
-      setPendingReviewCount(count || 0);
-    } catch (error) {
-      console.error('Error fetching pending review count:', error);
-    }
+    // Now handled by fetchRecentTimetables API call
   };
 
   const formatTimeAgo = (dateString: string) => {

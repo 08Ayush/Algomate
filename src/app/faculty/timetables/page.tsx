@@ -69,83 +69,45 @@ export default function TimetablesPage() {
     try {
       console.log('🔍 Fetching timetables for user:', userId, 'Faculty Type:', facultyType, 'Department:', departmentId);
       
-      // Get user's department if not provided
-      let userDepartmentId = departmentId;
-      if (!userDepartmentId) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('department_id')
-          .eq('id', userId)
-          .single();
-        userDepartmentId = userData?.department_id;
-      }
+      // Use API route instead of direct Supabase query
+      const token = btoa(JSON.stringify({ id: userId, role: 'faculty', department_id: departmentId }));
+      
+      const response = await fetch('/api/timetables', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
 
-      if (!userDepartmentId) {
-        console.error('❌ No department ID found for user');
+      if (!response.ok) {
+        console.error('❌ Failed to fetch timetables:', response.statusText);
         setLoading(false);
         return;
       }
+
+      const result = await response.json();
+      
+      if (!result.success || !result.timetables) {
+        console.error('❌ No timetables returned from API');
+        setLoading(false);
+        return;
+      }
+
+      let timetablesData = result.timetables;
+      
+      console.log('📦 Raw timetables data from API:', timetablesData);
       
       // Check if user is a publisher
       const isPublisher = facultyType === 'publisher';
       
-      let timetablesData;
-      
-      if (isPublisher) {
-        // Publishers see ALL timetables from their department only
-        console.log('📊 Publisher mode: Fetching all timetables from department:', userDepartmentId);
-        const { data, error } = await supabase
-          .from('generated_timetables')
-          .select(`
-            *,
-            batch:batches(id, name, department_id)
-          `)
-          .order('created_at', { ascending: false });
-        
-        if (error) {
-          console.error('❌ Error fetching timetables:', error);
-          setLoading(false);
-          return;
-        }
-        // Log fetched data before filtering
-        console.log('📦 Raw timetables data (publisher):', data);
-        console.log('🔍 Filtering by department:', userDepartmentId);
-        
-        // Filter by department after fetching
-        timetablesData = data?.filter((tt: any) => {
-          console.log('Checking timetable:', tt.id, 'batch:', tt.batch, 'dept:', tt.batch?.department_id);
-          return tt.batch?.department_id === userDepartmentId;
-        });
-        
-        console.log('✅ Filtered timetables:', timetablesData?.length);
+      // Filter based on role
+      if (!isPublisher) {
+        // Creators see only their own timetables
+        console.log('✏️ Creator mode: Filtering by created_by:', userId);
+        timetablesData = timetablesData.filter((tt: any) => tt.created_by === userId);
       } else {
-        // Creators see only their own timetables from their department
-        console.log('✏️ Creator mode: Fetching own timetables from department:', userDepartmentId);
-        const { data, error } = await supabase
-          .from('generated_timetables')
-          .select(`
-            *,
-            batch:batches(id, name, department_id)
-          `)
-          .eq('created_by', userId)
-          .order('created_at', { ascending: false });
-        
-        if (error) {
-          console.error('❌ Error fetching timetables:', error);
-          setLoading(false);
-          return;
-        }
-        // Log fetched data before filtering
-        console.log('📦 Raw timetables data:', data);
-        console.log('🔍 Filtering by department:', userDepartmentId);
-        
-        // Filter by department after fetching
-        timetablesData = data?.filter((tt: any) => {
-          console.log('Checking timetable:', tt.id, 'batch:', tt.batch, 'dept:', tt.batch?.department_id);
-          return tt.batch?.department_id === userDepartmentId;
-        });
-        
-        console.log('✅ Filtered timetables:', timetablesData?.length);
+        console.log('📊 Publisher mode: Showing all timetables from department');
       }
 
       if (!timetablesData || timetablesData.length === 0) {
@@ -156,46 +118,27 @@ export default function TimetablesPage() {
 
       console.log('✅ Found', timetablesData.length, 'timetables');
 
-      // Get additional data for each timetable
-      const timetablesWithDetails = await Promise.all(
-        timetablesData.map(async (tt: any) => {
-          // Get batch name
-          const { data: batchData } = await supabase
-            .from('batches')
-            .select('name')
-            .eq('id', tt.batch_id)
-            .single();
+      // Transform data
+      const timetablesWithDetails = timetablesData.map((tt: any) => {
+        const batch = Array.isArray(tt.batch) ? tt.batch[0] : tt.batch;
+        const creator = Array.isArray(tt.created_by_user) ? tt.created_by_user[0] : tt.created_by_user;
 
-          // Get creator name
-          const { data: userData } = await supabase
-            .from('users')
-            .select('first_name, last_name')
-            .eq('id', tt.created_by)
-            .single();
-
-          // Get class count
-          const { count } = await supabase
-            .from('scheduled_classes')
-            .select('id', { count: 'exact', head: true })
-            .eq('timetable_id', tt.id);
-
-          return {
-            id: tt.id,
-            title: tt.title,
-            status: tt.status,
-            academic_year: tt.academic_year,
-            semester: tt.semester,
-            created_at: tt.created_at,
-            fitness_score: tt.fitness_score || 0,
-            batch_name: batchData?.name || 'Unknown Batch',
-            batch_id: tt.batch_id,
-            created_by_name: userData 
-              ? `${userData.first_name || ''} ${userData.last_name || ''}`.trim() 
-              : 'Unknown',
-            class_count: count || 0
-          };
-        })
-      );
+        return {
+          id: tt.id,
+          title: tt.title || `Timetable - ${batch?.name || 'Unknown'}`,
+          status: tt.status || 'draft',
+          academic_year: tt.academic_year || 'Unknown',
+          semester: tt.semester || 1,
+          created_at: tt.created_at,
+          fitness_score: tt.fitness_score || 0,
+          batch_name: batch?.name || 'Unknown Batch',
+          batch_id: tt.batch_id,
+          created_by_name: creator 
+            ? `${creator.first_name || ''} ${creator.last_name || ''}`.trim() 
+            : 'Unknown',
+          class_count: tt.class_count || 0
+        };
+      });
 
       console.log('✅ Processed timetables:', timetablesWithDetails);
       setTimetables(timetablesWithDetails);
@@ -237,39 +180,20 @@ export default function TimetablesPage() {
     console.log('🗑️ Deleting timetable:', timetableId);
 
     try {
-      // Step 1: Delete workflow approvals first (foreign key constraint)
-      const { error: approvalError } = await supabase
-        .from('workflow_approvals')
-        .delete()
-        .eq('timetable_id', timetableId);
+      const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
+      
+      const response = await fetch(`/api/timetables/${timetableId}/delete`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
 
-      if (approvalError) {
-        console.error('❌ Error deleting workflow approvals:', approvalError);
-        alert(`Failed to delete workflow approvals: ${approvalError.message}`);
-        setIsDeleting(null);
-        return;
-      }
+      const result = await response.json();
 
-      // Step 2: Delete scheduled classes (if not cascade)
-      const { error: classesError } = await supabase
-        .from('scheduled_classes')
-        .delete()
-        .eq('timetable_id', timetableId);
-
-      if (classesError) {
-        console.error('❌ Error deleting scheduled classes:', classesError);
-        // Continue anyway, might cascade
-      }
-
-      // Step 3: Delete the timetable
-      const { error: timetableError } = await supabase
-        .from('generated_timetables')
-        .delete()
-        .eq('id', timetableId);
-
-      if (timetableError) {
-        console.error('❌ Error deleting timetable:', timetableError);
-        alert(`Failed to delete timetable: ${timetableError.message}`);
+      if (!response.ok || !result.success) {
+        alert(`Failed to delete: ${result.error || 'Unknown error'}`);
         setIsDeleting(null);
         return;
       }
@@ -298,38 +222,25 @@ export default function TimetablesPage() {
     console.log('📤 Submitting timetable for review:', timetableId);
 
     try {
-      // Update timetable status to pending_approval
-      const { error: updateError } = await supabase
-        .from('generated_timetables')
-        .update({ status: 'pending_approval' })
-        .eq('id', timetableId);
+      const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
+      
+      const response = await fetch(`/api/timetables/${timetableId}/submit`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
 
-      if (updateError) {
-        console.error('❌ Error updating timetable status:', updateError);
-        alert(`Failed to update status: ${updateError.message}`);
-        setIsSubmitting(null);
-        return;
-      }
+      const result = await response.json();
 
-      // Update workflow approval record
-      const { error: workflowError } = await supabase
-        .from('workflow_approvals')
-        .insert({ 
-          timetable_id: timetableId,
-          workflow_step: 'submitted_for_review',
-          performed_by: user.id,
-          comments: 'Submitted for review by creator'
-        });
-
-      if (workflowError) {
-        console.error('❌ Error updating workflow:', workflowError);
-        alert(`Failed to update workflow: ${workflowError.message}`);
+      if (!response.ok || !result.success) {
+        alert(`Failed to submit: ${result.error || 'Unknown error'}`);
         setIsSubmitting(null);
         return;
       }
 
       console.log('✅ Timetable submitted for review successfully');
-      alert('Timetable submitted for review! Publishers will be notified.');
+      alert(result.message || 'Timetable submitted for review! Publishers will be notified.');
       
       // Refresh the list
       if (user) {
@@ -353,36 +264,23 @@ export default function TimetablesPage() {
     console.log('🔙 Unpublishing timetable:', timetableId);
 
     try {
-      // Update timetable status to draft
-      const { error: updateError } = await supabase
-        .from('generated_timetables')
-        .update({ 
-          status: 'draft',
-          unpublished_reason: reason,
-          unpublished_at: new Date().toISOString(),
-          unpublished_by: user.id
-        })
-        .eq('id', timetableId);
+      const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
+      
+      const response = await fetch(`/api/timetables/${timetableId}/unpublish`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ reason })
+      });
 
-      if (updateError) {
-        console.error('❌ Error unpublishing timetable:', updateError);
-        alert(`Failed to unpublish: ${updateError.message}`);
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        alert(`Failed to unpublish: ${result.error || 'Unknown error'}`);
         setIsSubmitting(null);
         return;
-      }
-
-      // Add workflow record
-      const { error: workflowError } = await supabase
-        .from('workflow_approvals')
-        .insert({ 
-          timetable_id: timetableId,
-          workflow_step: 'unpublished',
-          performed_by: user.id,
-          comments: reason
-        });
-
-      if (workflowError) {
-        console.error('❌ Error updating workflow:', workflowError);
       }
 
       console.log('✅ Timetable unpublished successfully');

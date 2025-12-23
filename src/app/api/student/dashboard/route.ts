@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
 export async function GET(request: NextRequest) {
@@ -140,10 +140,29 @@ export async function GET(request: NextRequest) {
       .eq('course_id', userData.course_id)
       .eq('is_active', true);
     
-    const departmentIds = [...new Set(courseBatches?.map(b => b.department_id).filter(Boolean))] || [];
+    const departmentIds = [...new Set((courseBatches ?? []).map(b => b.department_id).filter(Boolean))];
     
-    let eventsData = [];
-    let eventsError = null;
+    let eventsData: Array<{
+      id: string;
+      title: string;
+      description: string;
+      event_type: string;
+      event_date: string;
+      event_time: string;
+      end_time: string;
+      location: string;
+      status: string;
+      created_by: string;
+      creator: {
+        first_name: string;
+        last_name: string;
+        faculty_type: string;
+      } | null;
+      start_date?: string;
+      start_time?: string;
+      venue?: string;
+    }> = [];
+    let eventsError: Error | null = null;
     
     if (departmentIds.length > 0) {
       const { data, error } = await supabase
@@ -173,6 +192,7 @@ export async function GET(request: NextRequest) {
       // Map event_date to start_date, event_time to start_time, location to venue for frontend compatibility
       eventsData = (data || []).map(event => ({
         ...event,
+        creator: Array.isArray(event.creator) ? event.creator[0] || null : event.creator,
         start_date: event.event_date,
         start_time: event.event_time,
         venue: event.location

@@ -1471,6 +1471,270 @@ BEGIN
 END $$;
 
 -- ============================================================================
+-- 11. ROW LEVEL SECURITY (RLS) PATCH
+-- ============================================================================
+
+-- Helper function to get the current user's college ID from the session
+CREATE OR REPLACE FUNCTION current_app_college_id() RETURNS UUID AS $$
+BEGIN
+    RETURN NULLIF(current_setting('app.current_college_id', TRUE), '')::UUID;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Helper function to get the current user's role
+CREATE OR REPLACE FUNCTION current_app_role() RETURNS VARCHAR AS $$
+BEGIN
+    RETURN NULLIF(current_setting('app.current_role', TRUE), '');
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Enable RLS on Sensitive Tables
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE departments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE batches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE subjects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE generated_timetables ENABLE ROW LEVEL SECURITY;
+ALTER TABLE scheduled_classes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE student_batch_enrollment ENABLE ROW LEVEL SECURITY;
+
+-- ============================================================================
+-- POLICY: USERS TABLE
+-- Rules: 
+-- 1. Super Admins see everyone.
+-- 2. Users can see their own profile.
+-- 3. College Admins/Faculty can see other users ONLY in their own college.
+-- ============================================================================
+
+CREATE POLICY "users_isolation_policy" ON users
+FOR ALL
+USING (
+    -- Rule 1: Super Admin bypass
+    current_app_role() = 'super_admin'
+    OR
+    -- Rule 2: Own Profile
+    id = NULLIF(current_setting('app.current_user_id', TRUE), '')::UUID
+    OR
+    -- Rule 3: Same College Isolation
+    college_id = current_app_college_id()
+);
+
+-- ============================================================================
+-- POLICY: DEPARTMENTS, BATCHES, SUBJECTS (Shared College Resources)
+-- Rules: Users can view these resources if they belong to the same college.
+-- ============================================================================
+
+-- Departments
+CREATE POLICY "departments_college_isolation" ON departments
+FOR ALL USING (college_id = current_app_college_id());
+
+-- Batches
+CREATE POLICY "batches_college_isolation" ON batches
+FOR ALL USING (college_id = current_app_college_id());
+
+-- Subjects
+CREATE POLICY "subjects_college_isolation" ON subjects
+FOR ALL USING (college_id = current_app_college_id());
+
+-- ============================================================================
+-- ADD COLLEGE_ID TO GENERATED_TIMETABLES (Missing Column Fix)
+-- ============================================================================
+
+-- 1. Add the missing column
+ALTER TABLE generated_timetables 
+ADD COLUMN IF NOT EXISTS college_id UUID REFERENCES colleges(id) ON DELETE CASCADE;
+
+-- 2. Backfill the data (copy college_id from the related batch)
+UPDATE generated_timetables gt
+SET college_id = b.college_id
+FROM batches b
+WHERE gt.batch_id = b.id AND gt.college_id IS NULL;
+
+-- 3. Make it mandatory (so it never happens again)
+DO $$ 
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'generated_timetables' 
+        AND column_name = 'college_id' 
+        AND is_nullable = 'YES'
+    ) THEN
+        ALTER TABLE generated_timetables 
+        ALTER COLUMN college_id SET NOT NULL;
+    END IF;
+END $$;
+
+-- ============================================================================
+-- POLICY: GENERATED TIMETABLES (Corrected)
+-- ============================================================================
+
+DROP POLICY IF EXISTS "timetables_access_policy" ON generated_timetables;
+DROP POLICY IF EXISTS "timetables_write_policy" ON generated_timetables;
+DROP POLICY IF EXISTS "timetables_modify_policy" ON generated_timetables;
+
+CREATE POLICY "timetables_access_policy" ON generated_timetables
+FOR SELECT
+USING (
+    college_id = current_app_college_id()
+    AND (
+        -- If published, everyone in college sees it
+        status = 'published'
+        OR
+        -- If draft, only Admins or Faculty with specific rights see it
+        (status != 'published' AND current_app_role() IN ('college_admin', 'admin', 'hod', 'faculty'))
+    )
+);
+
+CREATE POLICY "timetables_write_policy" ON generated_timetables
+FOR INSERT WITH CHECK (
+    college_id = current_app_college_id()
+    AND current_app_role() IN ('college_admin', 'admin', 'hod')
+);
+
+CREATE POLICY "timetables_modify_policy" ON generated_timetables
+FOR UPDATE USING (
+    college_id = current_app_college_id()
+    AND current_app_role() IN ('college_admin', 'admin', 'hod')
+);
+
+-- ============================================================================
+-- POLICY: SCHEDULED CLASSES
+-- ============================================================================
+
+CREATE POLICY "scheduled_classes_college_isolation" ON scheduled_classes
+FOR ALL
+USING (
+    batch_id IN (
+        SELECT id FROM batches WHERE college_id = current_app_college_id()
+    )
+);
+
+-- ============================================================================
+-- POLICY: STUDENT BATCH ENROLLMENT
+-- ============================================================================
+
+CREATE POLICY "enrollment_college_isolation" ON student_batch_enrollment
+FOR ALL
+USING (
+    batch_id IN (
+        SELECT id FROM batches WHERE college_id = current_app_college_id()
+    )
+);
+
+-- ============================================================================
+-- 12. COMPLETE SECURITY LOCKDOWN (RLS FOR REMAINING TABLES)
+-- ============================================================================
+
+-- A. ENABLE RLS ON ALL REMAINING TABLES
+-- ----------------------------------------------------------------------------
+ALTER TABLE classrooms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE courses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE time_slots ENABLE ROW LEVEL SECURITY;
+ALTER TABLE faculty_qualified_subjects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE faculty_availability ENABLE ROW LEVEL SECURITY;
+ALTER TABLE batch_subjects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE timetable_generation_tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE elective_buckets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE student_course_selections ENABLE ROW LEVEL SECURITY;
+
+-- B. STANDARD "COLLEGE ISOLATION" POLICIES
+-- These tables have a direct 'college_id' column, so policies are simple.
+-- ----------------------------------------------------------------------------
+
+-- Classrooms
+CREATE POLICY "classrooms_isolation" ON classrooms
+FOR ALL USING (college_id = current_app_college_id());
+
+-- Courses (B.Ed, ITEP, etc.)
+CREATE POLICY "courses_isolation" ON courses
+FOR ALL USING (college_id = current_app_college_id());
+
+-- Time Slots
+CREATE POLICY "time_slots_isolation" ON time_slots
+FOR ALL USING (college_id = current_app_college_id());
+
+-- C. COMPLEX ISOLATION (Tables without direct 'college_id')
+-- These tables depend on other tables (Users/Batches) for their security context.
+-- ----------------------------------------------------------------------------
+
+-- Faculty Availability (Link via Faculty ID -> Users Table)
+CREATE POLICY "faculty_avail_isolation" ON faculty_availability
+FOR ALL USING (
+    faculty_id IN (SELECT id FROM users WHERE college_id = current_app_college_id())
+);
+
+-- Faculty Qualified Subjects (Link via Faculty ID -> Users Table)
+CREATE POLICY "faculty_qual_isolation" ON faculty_qualified_subjects
+FOR ALL USING (
+    faculty_id IN (SELECT id FROM users WHERE college_id = current_app_college_id())
+);
+
+-- Batch Subjects (Link via Batch ID)
+CREATE POLICY "batch_subjects_isolation" ON batch_subjects
+FOR ALL USING (
+    batch_id IN (SELECT id FROM batches WHERE college_id = current_app_college_id())
+);
+
+-- Elective Buckets (Link via Batch ID)
+CREATE POLICY "elective_buckets_isolation" ON elective_buckets
+FOR ALL USING (
+    batch_id IN (SELECT id FROM batches WHERE college_id = current_app_college_id())
+);
+
+-- Timetable Generation Tasks (Link via Batch ID)
+CREATE POLICY "gen_tasks_isolation" ON timetable_generation_tasks
+FOR ALL USING (
+    batch_id IN (SELECT id FROM batches WHERE college_id = current_app_college_id())
+);
+
+-- Student Course Selections (Link via Student ID)
+CREATE POLICY "student_selections_isolation" ON student_course_selections
+FOR ALL USING (
+    student_id IN (SELECT id FROM users WHERE college_id = current_app_college_id())
+);
+
+-- D. SPECIAL TABLES (Events & Notifications)
+-- ----------------------------------------------------------------------------
+
+-- Events: Linked via Department. 
+-- PERFORMANCE TIP: It is better to add 'college_id' to events later, but this works for now.
+CREATE POLICY "events_isolation" ON events
+FOR ALL USING (
+    department_id IN (SELECT id FROM departments WHERE college_id = current_app_college_id())
+);
+
+-- Notifications: Strictly Personal (User can only see their OWN notifications)
+CREATE POLICY "notifications_personal" ON notifications
+FOR ALL USING (
+    recipient_id = NULLIF(current_setting('app.current_user_id', TRUE), '')::UUID
+);
+
+-- Audit Logs: Admins only, for their own college
+CREATE POLICY "audit_logs_isolation" ON audit_logs
+FOR SELECT USING (
+    -- User must be an Admin AND the log entry must belong to a user in their college
+    current_app_role() IN ('super_admin', 'admin', 'college_admin')
+    AND
+    user_id IN (SELECT id FROM users WHERE college_id = current_app_college_id())
+);
+
+-- E. COLLEGES TABLE - PUBLIC VIEWING WITH RESTRICTED MANAGEMENT
+-- ----------------------------------------------------------------------------
+
+-- Enable RLS on colleges table
+ALTER TABLE colleges ENABLE ROW LEVEL SECURITY;
+
+-- Allow EVERYONE (even unauthenticated) to see the list of colleges
+CREATE POLICY "public_view_colleges" ON colleges
+FOR SELECT USING (true);
+
+-- Allow ONLY Super Admins to edit/delete colleges
+CREATE POLICY "super_admin_manage_colleges" ON colleges
+FOR ALL USING (current_app_role() = 'super_admin');
+
+-- ============================================================================
 -- MAJOR SUBJECT LOCK CONSTRAINT SYSTEM (NEP 2020 Compliance)
 -- Ensures students cannot change their MAJOR discipline after Semester 3
 -- ============================================================================
