@@ -19,6 +19,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'College ID not found' }, { status: 400 });
     }
 
+    // Get college_id from query parameter (for super_admin) or use user's college_id
+    const { searchParams } = new URL(request.url);
+    const queryCollegeId = searchParams.get('college_id');
+    
+    let targetCollegeId = decodedUser.college_id;
+    
+    // Super admin can view any college's students
+    if (decodedUser.role === 'super_admin' && queryCollegeId) {
+      targetCollegeId = queryCollegeId;
+    }
+
     const supabase = createClient();
 
     // Fetch students with their course information
@@ -33,6 +44,7 @@ export async function GET(request: NextRequest) {
         phone,
         student_id,
         course_id,
+        department_id,
         current_semester,
         admission_year,
         is_active,
@@ -41,9 +53,14 @@ export async function GET(request: NextRequest) {
           id,
           title,
           code
+        ),
+        departments (
+          id,
+          name,
+          code
         )
       `)
-      .eq('college_id', decodedUser.college_id)
+      .eq('college_id', targetCollegeId)
       .eq('role', 'student')
       .order('created_at', { ascending: false });
 
@@ -77,10 +94,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { first_name, last_name, email, student_id, phone, current_semester, admission_year, course_id, is_active } = body;
+    const { first_name, last_name, email, student_id, phone, password, current_semester, admission_year, course_id, department_id, is_active } = body;
 
-    if (!first_name || !last_name || !email || !course_id) {
-      return NextResponse.json({ error: 'Missing required fields (first_name, last_name, email, course_id)' }, { status: 400 });
+    if (!first_name || !last_name || !email || !course_id || !department_id || !password) {
+      return NextResponse.json({ error: 'Missing required fields (first_name, last_name, email, course_id, department_id, password)' }, { status: 400 });
     }
 
     const supabase = createClient();
@@ -105,8 +122,8 @@ export async function POST(request: NextRequest) {
 
     const college_uid = `STUDENT${admission_year}${String(nextNumber).padStart(3, '0')}`;
 
-    // Generate a default password hash (students don't use login, but schema requires it)
-    const defaultPasswordHash = await bcrypt.hash('student123', 10);
+    // Hash the provided password
+    const password_hash = await bcrypt.hash(password, 10);
 
     // Insert new student
     const { data: newStudent, error } = await supabase
@@ -115,13 +132,14 @@ export async function POST(request: NextRequest) {
         first_name,
         last_name,
         email,
-        password_hash: defaultPasswordHash,
+        password_hash,
         college_uid,
         student_id: student_id || null,
         phone: phone || null,
         current_semester: current_semester || 1,
         admission_year: admission_year || new Date().getFullYear(),
         course_id: course_id || null,
+        department_id: department_id || null,
         role: 'student',
         college_id: decodedUser.college_id,
         is_active: is_active !== undefined ? is_active : true
@@ -134,6 +152,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message || 'Failed to create student' }, { status: 500 });
     }
 
+    console.log(`Successfully created student with ID: ${newStudent.id}`);
     return NextResponse.json({ student: newStudent }, { status: 201 });
   } catch (error) {
     console.error('Error in POST /api/admin/students:', error);

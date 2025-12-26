@@ -38,14 +38,14 @@ async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) 
       return null;
     }
 
-    // For write operations, only allow admin/college_admin
-    if (requireAdmin && !['admin', 'college_admin'].includes(dbUser.role)) {
+    // For write operations, only allow admin/college_admin/super_admin
+    if (requireAdmin && !['admin', 'college_admin', 'super_admin'].includes(dbUser.role)) {
       return null;
     }
 
-    // For read operations, allow admin, college_admin, and faculty with creator/publisher types
+    // For read operations, allow admin, college_admin, super_admin, and faculty with creator/publisher types
     if (!requireAdmin) {
-      const allowedRoles = ['admin', 'college_admin'];
+      const allowedRoles = ['admin', 'college_admin', 'super_admin'];
       const allowedFacultyTypes = ['creator', 'publisher'];
       
       if (!allowedRoles.includes(dbUser.role) && 
@@ -72,11 +72,22 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Fetch courses only for user's college
+    // Get college_id from query parameter (for super_admin) or use user's college_id
+    const { searchParams } = new URL(request.url);
+    const queryCollegeId = searchParams.get('college_id');
+    
+    let targetCollegeId = user.college_id;
+    
+    // Super admin can view any college's courses
+    if (user.role === 'super_admin' && queryCollegeId) {
+      targetCollegeId = queryCollegeId;
+    }
+
+    // Fetch courses for target college
     const { data: courses, error } = await supabaseAdmin
       .from('courses')
       .select('*')
-      .eq('college_id', user.college_id)
+      .eq('college_id', targetCollegeId)
       .order('title');
 
     if (error) {

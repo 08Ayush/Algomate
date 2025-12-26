@@ -57,6 +57,24 @@ export async function PUT(
   try {
     const id = params.id;
     const body = await request.json();
+    const {
+      first_name,
+      last_name,
+      email,
+      phone,
+      college_id,
+      college_uid,
+      password,
+      is_active
+    } = body;
+
+    // Validate required fields
+    if (!first_name || !last_name || !email || !college_id || !college_uid) {
+      return NextResponse.json(
+        { error: 'All required fields must be provided' },
+        { status: 400 }
+      );
+    }
 
     // Check if admin exists
     const { data: existingAdmin } = await supabaseAdmin
@@ -73,12 +91,28 @@ export async function PUT(
       );
     }
 
+    // Check if new college exists (if being changed)
+    if (college_id !== existingAdmin.college_id) {
+      const { data: college } = await supabaseAdmin
+        .from('colleges')
+        .select('id')
+        .eq('id', college_id)
+        .single();
+
+      if (!college) {
+        return NextResponse.json(
+          { error: 'Target college not found' },
+          { status: 404 }
+        );
+      }
+    }
+
     // Check for duplicate email if it's being changed
-    if (body.email && body.email !== existingAdmin.email) {
+    if (email !== existingAdmin.email) {
       const { data: duplicate } = await supabaseAdmin
         .from('users')
         .select('id')
-        .eq('email', body.email)
+        .eq('email', email)
         .neq('id', id)
         .single();
 
@@ -90,20 +124,40 @@ export async function PUT(
       }
     }
 
+    // Check for duplicate college_uid in target college if being changed
+    if (college_uid !== existingAdmin.college_uid || college_id !== existingAdmin.college_id) {
+      const { data: uidDuplicate } = await supabaseAdmin
+        .from('users')
+        .select('id')
+        .eq('college_id', college_id)
+        .eq('college_uid', college_uid)
+        .neq('id', id)
+        .single();
+
+      if (uidDuplicate) {
+        return NextResponse.json(
+          { error: 'College UID already exists for this college' },
+          { status: 400 }
+        );
+      }
+    }
+
     // Prepare update data
     const updateData: any = {
-      first_name: body.first_name,
-      last_name: body.last_name,
-      email: body.email,
-      phone: body.phone,
-      college_uid: body.college_uid,
-      is_active: body.is_active,
+      first_name,
+      last_name,
+      email,
+      phone,
+      college_id,
+      college_uid,
+      is_active,
       updated_at: new Date().toISOString()
     };
 
     // Hash new password if provided
-    if (body.password) {
-      updateData.password_hash = await bcrypt.hash(body.password, 10);
+    if (password && password.trim() !== '') {
+      console.log(`Updating password for admin ${id}`);
+      updateData.password_hash = await bcrypt.hash(password, 10);
     }
 
     // Update admin
@@ -111,7 +165,22 @@ export async function PUT(
       .from('users')
       .update(updateData)
       .eq('id', id)
-      .select()
+      .eq('role', 'college_admin')
+      .select(`
+        id,
+        first_name,
+        last_name,
+        email,
+        college_uid,
+        college_id,
+        phone,
+        is_active,
+        college:colleges!users_college_id_fkey(
+          id,
+          name,
+          code
+        )
+      `)
       .single();
 
     if (error) {
@@ -121,6 +190,8 @@ export async function PUT(
         { status: 500 }
       );
     }
+
+    console.log(`Successfully updated college admin ${id}. Password changed: ${!!password}`);
 
     return NextResponse.json({
       message: 'College admin updated successfully',

@@ -21,6 +21,8 @@ interface AdminWithCollege {
 // GET - List all college admins
 export async function GET(request: NextRequest) {
   try {
+    console.log('Fetching college admins from database...');
+    
     const { data: admins, error } = await supabaseAdmin
       .from('users')
       .select(`
@@ -29,6 +31,7 @@ export async function GET(request: NextRequest) {
         last_name,
         email,
         college_uid,
+        college_id,
         phone,
         is_active,
         created_at,
@@ -44,10 +47,12 @@ export async function GET(request: NextRequest) {
     if (error) {
       console.error('College admins fetch error:', error);
       return NextResponse.json(
-        { error: 'Failed to fetch college admins' },
+        { error: 'Failed to fetch college admins', details: error.message },
         { status: 500 }
       );
     }
+
+    console.log(`Found ${admins?.length || 0} college admins`);
 
     // Flatten the college object
     const transformedAdmins = admins?.map(admin => ({

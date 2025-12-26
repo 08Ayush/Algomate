@@ -16,29 +16,10 @@ export async function POST(request: NextRequest) {
 
     const supabaseAdmin = createClient();
 
-    // Find user by college_uid with department info and college_id
+    // First, quickly fetch just the user credentials (no joins for speed)
     const { data: userData, error: userError } = await supabaseAdmin
       .from('users')
-      .select(`
-        id,
-        first_name,
-        last_name,
-        college_uid,
-        college_id,
-        email,
-        password_hash,
-        phone,
-        profile_image_url,
-        department_id,
-        role,
-        faculty_type,
-        is_active,
-        email_verified,
-        last_login,
-        created_at,
-        departments!users_department_id_fkey(id, name, code),
-        colleges!users_college_id_fkey(id, name, code)
-      `)
+      .select('id, first_name, last_name, college_uid, college_id, email, password_hash, department_id, role, faculty_type, is_active')
       .eq('college_uid', collegeUid)
       .eq('is_active', true)
       .maybeSingle();
@@ -60,18 +41,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update last login
-    await supabaseAdmin
+    // Update last login asynchronously (don't wait for it)
+    supabaseAdmin
       .from('users')
       .update({ last_login: new Date().toISOString() })
-      .eq('id', userData.id);
+      .eq('id', userData.id)
+      .then(() => console.log('Last login updated'))
+      .catch((err) => console.error('Failed to update last login:', err));
 
-    // Remove password from response
+    // Fetch department and college data in parallel (only after auth succeeds)
+    const [deptResult, collegeResult] = await Promise.all([
+      userData.department_id 
+        ? supabaseAdmin.from('departments').select('id, name, code').eq('id', userData.department_id).single()
+        : Promise.resolve({ data: null, error: null }),
+      userData.college_id
+        ? supabaseAdmin.from('colleges').select('id, name, code').eq('id', userData.college_id).single()
+        : Promise.resolve({ data: null, error: null })
+    ]);
+
+    // Remove password from response and add department/college data
     const { password_hash: _, ...userWithoutPassword } = userData;
+    
+    const enrichedUserData = {
+      ...userWithoutPassword,
+      departments: deptResult.data,
+      colleges: collegeResult.data
+    };
 
     return NextResponse.json({
       message: 'Login successful',
-      userData: userWithoutPassword
+      userData: enrichedUserData
     });
 
   } catch (error: any) {
