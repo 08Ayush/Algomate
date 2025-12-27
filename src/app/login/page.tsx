@@ -85,8 +85,24 @@ export default function LoginPage() {
         throw new Error(data.error || 'Login failed');
       }
       
-      // Store user data in localStorage for now (in production, use proper session management)
-      localStorage.setItem('user', JSON.stringify(data.userData));
+      // ✅ Store user data in localStorage with timestamp for cache management
+      const userProfile = {
+        ...data.userData,
+        cachedAt: Date.now()
+      };
+      localStorage.setItem('user', JSON.stringify(userProfile));
+      
+      // ✅ Store college info separately for quick access
+      if (data.userData.colleges) {
+        localStorage.setItem('college', JSON.stringify(data.userData.colleges));
+      }
+      
+      // ✅ Store department info separately for quick access
+      if (data.userData.departments) {
+        localStorage.setItem('department', JSON.stringify(data.userData.departments));
+      }
+      
+      console.log('✅ Login successful, session cached');
       
       // Redirect based on user role and faculty type
       const role = data.userData.role;

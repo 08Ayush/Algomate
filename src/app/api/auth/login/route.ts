@@ -15,8 +15,11 @@ export async function POST(request: NextRequest) {
     }
 
     const supabaseAdmin = createClient();
+    const startTime = Date.now();
 
-    // Find user by college_uid with department info and college_id
+    console.log(`🔍 Looking up user with college_uid: ${collegeUid}`);
+
+    // ⚡ OPTIMIZED: Single query with JOINs to get user, department, and college in ONE round-trip
     const { data: userData, error: userError } = await supabaseAdmin
       .from('users')
       .select(`
@@ -36,23 +39,46 @@ export async function POST(request: NextRequest) {
         email_verified,
         last_login,
         created_at,
-        departments!users_department_id_fkey(id, name, code),
-        colleges!users_college_id_fkey(id, name, code)
+        departments:department_id (
+          id,
+          name,
+          code
+        ),
+        colleges:college_id (
+          id,
+          name,
+          code
+        )
       `)
       .eq('college_uid', collegeUid)
       .eq('is_active', true)
       .maybeSingle();
 
-    if (userError || !userData) {
-      console.error('User lookup error:', userError);
+    console.log(`⏱️  Query took: ${Date.now() - startTime}ms`);
+
+    if (userError) {
+      console.error('❌ Database error:', userError.message);
       return NextResponse.json(
         { error: 'Invalid College UID or password' },
         { status: 401 }
       );
     }
 
+    if (!userData || !userData.password_hash) {
+      console.error('❌ User not found or inactive');
+      return NextResponse.json(
+        { error: 'Invalid College UID or password' },
+        { status: 401 }
+      );
+    }
+
+    console.log(`✅ User found: ${userData.id}`);
+
     // Check password
+    const passwordStartTime = Date.now();
     const isValidPassword = await bcrypt.compare(password, userData.password_hash);
+    console.log(`⏱️  Password check took: ${Date.now() - passwordStartTime}ms`);
+    
     if (!isValidPassword) {
       return NextResponse.json(
         { error: 'Invalid College UID or password' },
@@ -60,14 +86,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update last login
-    await supabaseAdmin
+    // ⚡ OPTIMIZED: Update last login without waiting (fire and forget)
+    supabaseAdmin
       .from('users')
       .update({ last_login: new Date().toISOString() })
-      .eq('id', userData.id);
+      .eq('id', userData.id)
+      .then(({ error }) => {
+        if (error) {
+          console.warn('⚠️  Failed to update last login:', error.message);
+        } else {
+          console.log('✅ Last login updated');
+        }
+      });
+
+    // ✅ Set session context for subsequent queries (improves RLS policy performance)
+    const contextStartTime = Date.now();
+    try {
+      const { error: contextError } = await supabaseAdmin.rpc('set_user_context', {
+        p_user_id: userData.id,
+        p_college_id: userData.college_id,
+        p_role: userData.role,
+        p_department_id: userData.department_id || null
+      });
+
+      console.log(`⏱️  Session context took: ${Date.now() - contextStartTime}ms`);
+
+      if (contextError) {
+        console.warn('⚠️  Failed to set session context:', contextError.message);
+      }
+    } catch (sessionError) {
+      console.warn('⚠️  Session context error:', sessionError);
+    }
 
     // Remove password from response
     const { password_hash: _, ...userWithoutPassword } = userData;
+
+    console.log(`⚡ Total login time: ${Date.now() - startTime}ms`);
 
     return NextResponse.json({
       message: 'Login successful',

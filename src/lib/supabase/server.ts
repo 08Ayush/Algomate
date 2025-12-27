@@ -15,6 +15,10 @@ export function createClient() {
 
   // Use service role key if available (production), otherwise use anon key (development)
   const key = supabaseServiceRoleKey || supabaseAnonKey;
+  const isServiceRole = !!supabaseServiceRoleKey;
+  
+  // Log which key type is being used (only log first few characters for security)
+  console.log(`🔑 Supabase client using: ${isServiceRole ? 'SERVICE ROLE' : 'ANON'} key (${key.substring(0, 20)}...)`);
   
   if (!key) {
     throw new Error('Missing Supabase key - need either SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY');

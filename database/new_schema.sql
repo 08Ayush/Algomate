@@ -770,6 +770,71 @@ GROUP BY ts.id;
 -- 8. FUNCTIONS AND TRIGGERS
 -- ============================================================================
 
+-- ============================================================================
+-- SESSION CONTEXT OPTIMIZATION FUNCTIONS
+-- These functions dramatically improve RLS policy performance by caching user context
+-- ============================================================================
+
+-- Function to set session context variables (called after login)
+CREATE OR REPLACE FUNCTION set_user_context(
+  p_user_id UUID,
+  p_college_id UUID,
+  p_role VARCHAR,
+  p_department_id UUID DEFAULT NULL
+) RETURNS VOID AS $$
+BEGIN
+  -- Store user context in session variables for RLS policy optimization
+  PERFORM set_config('app.current_user_id', p_user_id::TEXT, TRUE);
+  PERFORM set_config('app.current_college_id', p_college_id::TEXT, TRUE);
+  PERFORM set_config('app.current_role', p_role, TRUE);
+  
+  IF p_department_id IS NOT NULL THEN
+    PERFORM set_config('app.current_department_id', p_department_id::TEXT, TRUE);
+  ELSE
+    PERFORM set_config('app.current_department_id', '', TRUE);
+  END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Helper function to get current user ID from session
+CREATE OR REPLACE FUNCTION current_app_user_id() RETURNS UUID AS $$
+BEGIN
+    RETURN NULLIF(current_setting('app.current_user_id', TRUE), '')::UUID;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+-- Helper function to get current college ID from session
+CREATE OR REPLACE FUNCTION current_app_college_id() RETURNS UUID AS $$
+BEGIN
+    RETURN NULLIF(current_setting('app.current_college_id', TRUE), '')::UUID;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+-- Helper function to get current role from session
+CREATE OR REPLACE FUNCTION current_app_role() RETURNS VARCHAR AS $$
+BEGIN
+    RETURN NULLIF(current_setting('app.current_role', TRUE), '');
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+-- Helper function to get current department ID from session
+CREATE OR REPLACE FUNCTION current_app_department_id() RETURNS UUID AS $$
+BEGIN
+    RETURN NULLIF(current_setting('app.current_department_id', TRUE), '')::UUID;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+-- Grant execute permissions
+GRANT EXECUTE ON FUNCTION set_user_context(UUID, UUID, VARCHAR, UUID) TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION current_app_user_id() TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION current_app_college_id() TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION current_app_role() TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION current_app_department_id() TO authenticated, anon;
+
+-- ============================================================================
+-- STANDARD TRIGGER FUNCTIONS
+-- ============================================================================
+
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN

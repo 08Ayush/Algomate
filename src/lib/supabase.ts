@@ -198,6 +198,36 @@ export const authHelpers = {
       console.error('Get user profile error:', error)
       throw error
     }
+  },
+
+  // ✅ Set session context (PERFORMANCE OPTIMIZATION)
+  // Call this after login to dramatically improve RLS policy performance
+  async setUserContext(userData: {
+    id: string
+    college_id: string
+    role: string
+    department_id?: string | null
+  }) {
+    try {
+      const { error } = await supabase.rpc('set_user_context', {
+        p_user_id: userData.id,
+        p_college_id: userData.college_id,
+        p_role: userData.role,
+        p_department_id: userData.department_id || null
+      });
+
+      if (error) {
+        console.error('Failed to set session context:', error);
+        throw error;
+      }
+
+      console.log(`✅ Session context set: user=${userData.id}, college=${userData.college_id}, role=${userData.role}`);
+      return true;
+    } catch (error) {
+      console.error('Set user context error:', error);
+      // Don't throw - allow app to continue even if session context fails
+      return false;
+    }
   }
 }
 
