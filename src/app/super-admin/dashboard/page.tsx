@@ -327,20 +327,7 @@ export default function SuperAdminDashboard() {
           </div>
 
           {/* Quick Navigation Cards */}
-          <div className="mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <button
-              onClick={() => router.push('/super-admin/manage')}
-              className="bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white p-6 rounded-lg shadow-lg transition-all transform hover:scale-105"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold">Manage All Data</h3>
-                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                </svg>
-              </div>
-              <p className="text-blue-100 text-sm">Departments, Faculty, Classrooms, Batches, Subjects & More</p>
-            </button>
-            
+          <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-6 rounded-lg shadow-lg">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-xl font-bold">Colleges</h3>
