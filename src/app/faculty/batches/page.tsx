@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
 import LeftSidebar from '@/components/LeftSidebar';
-import { Users, Search, Calendar, BookOpen, Package, ChevronDown, ChevronUp } from 'lucide-react';
+import { Users, Search, Calendar, BookOpen, Package, ChevronDown, ChevronUp, ArrowUpCircle } from 'lucide-react';
 
 interface Subject {
   id: string;
@@ -83,6 +83,7 @@ export default function BatchesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedBatches, setExpandedBatches] = useState<Set<string>>(new Set());
   const [expandedBuckets, setExpandedBuckets] = useState<Set<string>>(new Set());
+  const [promotingBatch, setPromotingBatch] = useState<string | null>(null);
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -196,6 +197,54 @@ export default function BatchesPage() {
       }
       return newSet;
     });
+  };
+
+  const handlePromoteBatch = async (batchId: string, batchName: string, currentSem: number) => {
+    if (currentSem >= 8) {
+      alert('This batch has completed all semesters (Semester 8).');
+      return;
+    }
+
+    if (!confirm(`Promote "${batchName}" from Semester ${currentSem} to Semester ${currentSem + 1}?\\n\\nThis will update the academic year if moving to a new year.`)) {
+      return;
+    }
+
+    setPromotingBatch(batchId);
+    console.log('📈 Promoting batch:', batchId);
+
+    try {
+      const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
+      
+      const response = await fetch(`/api/batches/${batchId}/promote`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        alert(`Failed to promote batch: ${result.error || 'Unknown error'}`);
+        setPromotingBatch(null);
+        return;
+      }
+
+      console.log('✅ Batch promoted successfully');
+      alert(
+        `✅ Batch Promoted Successfully!\\n\\n` +
+        `From: Semester ${result.data.previousSemester} (${result.data.previousYear})\\n` +
+        `To: Semester ${result.data.newSemester} (${result.data.newYear})`
+      );
+      
+      // Refresh the batches list
+      fetchBatches();
+    } catch (error: any) {
+      console.error('❌ Error promoting batch:', error);
+      alert(`Error: ${error.message}`);
+    } finally {
+      setPromotingBatch(null);
+    }
   };
 
   if (loading) {
@@ -338,7 +387,7 @@ export default function BatchesPage() {
                           <div className="flex-1">
                             <div className="flex items-center gap-3 mb-2">
                               <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                                {batch.course?.code || batch.name} - Section {batch.section}
+                                {batch.name}
                               </h3>
                               <span className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-sm font-medium rounded-full">
                                 Semester {batch.semester}
@@ -368,13 +417,41 @@ export default function BatchesPage() {
                               </div>
                             </div>
                           </div>
-                          <button className="p-2 hover:bg-gray-100 dark:hover:bg-slate-600 rounded-lg transition-colors">
-                            {isExpanded ? (
-                              <ChevronUp className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                            ) : (
-                              <ChevronDown className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                          <div className="flex items-center gap-2">
+                            {/* Promote Button - Only for College Admin */}
+                            {user.role === 'college_admin' && batch.semester < 8 && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePromoteBatch(batch.id, batch.name, batch.semester);
+                                }}
+                                disabled={promotingBatch === batch.id}
+                                className="px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 text-sm font-medium shadow-md"
+                              >
+                                {promotingBatch === batch.id ? (
+                                  <>
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                    Promoting...
+                                  </>
+                                ) : (
+                                  <>
+                                    <ArrowUpCircle className="w-4 h-4" />
+                                    Promote to Sem {batch.semester + 1}
+                                  </>
+                                )}
+                              </button>
                             )}
-                          </button>
+                            <button 
+                              className="p-2 hover:bg-gray-100 dark:hover:bg-slate-600 rounded-lg transition-colors"
+                              onClick={() => toggleBatchExpansion(batch.id)}
+                            >
+                              {isExpanded ? (
+                                <ChevronUp className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                              ) : (
+                                <ChevronDown className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                              )}
+                            </button>
+                          </div>
                         </div>
                       </div>
 

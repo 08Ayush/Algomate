@@ -303,6 +303,17 @@ export default function AdminDashboard() {
 
   // Bucket form state
   const [showBucketForm, setShowBucketForm] = useState(false);
+  const [showBatchForm, setShowBatchForm] = useState(false);
+  const [batchForm, setBatchForm] = useState({
+    department_id: '',
+    course_id: '',
+    semester: 1,
+    academic_year: '2025-26',
+    admission_year: 2025,
+    section: 'A',
+    expected_strength: 60,
+    actual_strength: 0
+  });
   const [editingBucket, setEditingBucket] = useState<ElectiveBucket | null>(null);
   const [bucketForm, setBucketForm] = useState({
     batch_id: '',
@@ -349,6 +360,12 @@ export default function AdminDashboard() {
     }
 
     setUserRole(user.role);
+    
+    // Set default tab for super_admin to faculty
+    if (user.role === 'super_admin') {
+      setActiveTab('faculty');
+    }
+    
     fetchColleges(user);
   }, [router]);
 
@@ -862,6 +879,54 @@ export default function AdminDashboard() {
   };
 
   // Batch handlers
+  const handleBatchCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      const userData = localStorage.getItem('user');
+      if (!userData) {
+        router.push('/login');
+        return;
+      }
+      
+      const parsedUser = JSON.parse(userData);
+      const token = btoa(JSON.stringify({ id: parsedUser.id, role: parsedUser.role, department_id: parsedUser.department_id }));
+      
+      const response = await fetch('/api/batches/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(batchForm)
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        alert(`Failed to create batch: ${result.error || 'Unknown error'}`);
+        return;
+      }
+
+      alert(result.message || 'Batch created successfully!');
+      setShowBatchForm(false);
+      setBatchForm({
+        department_id: '',
+        course_id: '',
+        semester: 1,
+        academic_year: '2025-26',
+        admission_year: 2025,
+        section: 'A',
+        expected_strength: 60,
+        actual_strength: 0
+      });
+      fetchData();
+    } catch (error: any) {
+      console.error('Error creating batch:', error);
+      alert(`Error: ${error.message}`);
+    }
+  };
+
   const handleBatchDelete = async (id: string, batchName: string) => {
     if (!confirm(`Are you sure you want to delete batch "${batchName}"?\n\nThis will also delete:\n- All elective buckets associated with this batch\n- All subject assignments linked to this batch\n- Student enrollments\n\nThis action cannot be undone.`)) return;
 
@@ -873,11 +938,13 @@ export default function AdminDashboard() {
         return;
       }
       
-      const authToken = Buffer.from(userData).toString('base64');
+      const parsedUser = JSON.parse(userData);
+      const token = btoa(JSON.stringify({ id: parsedUser.id, role: parsedUser.role, department_id: parsedUser.department_id }));
+      
       const response = await fetch(`/api/admin/batches?id=${id}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${authToken}`
+          'Authorization': `Bearer ${token}`
         }
       });
 
@@ -1637,16 +1704,18 @@ export default function AdminDashboard() {
           <div className="mb-6">
             <div className="border-b border-gray-200">
               <nav className="-mb-px flex space-x-8">
-                <button
-                  onClick={() => setActiveTab('departments')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === 'departments'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  Departments ({departments.length})
-                </button>
+                {userRole !== 'super_admin' && (
+                  <button
+                    onClick={() => setActiveTab('departments')}
+                    className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                      activeTab === 'departments'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    Departments ({departments.length})
+                  </button>
+                )}
                 <button
                   onClick={() => setActiveTab('faculty')}
                   className={`py-2 px-1 border-b-2 font-medium text-sm ${
@@ -1655,88 +1724,94 @@ export default function AdminDashboard() {
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
                 >
-                  Faculty ({faculty.length})
+                  {userRole === 'super_admin' ? 'College Admins' : 'Faculty'} ({faculty.length})
                 </button>
-                <button
-                  onClick={() => setActiveTab('classrooms')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === 'classrooms'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  Classrooms ({classrooms.length})
-                </button>
-                <button
-                  onClick={() => setActiveTab('batches')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === 'batches'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  Batches ({batches.length})
-                </button>
-                <button
-                  onClick={() => setActiveTab('buckets')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === 'buckets'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  Buckets ({buckets.length})
-                </button>
-                <button
-                  onClick={() => setActiveTab('subjects')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === 'subjects'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  Subjects ({subjects.length})
-                </button>
-                <button
-                  onClick={() => setActiveTab('courses')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === 'courses'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  Courses ({courses.length})
-                </button>
-                <button
-                  onClick={() => setActiveTab('students')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === 'students'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  Students ({students.length})
-                </button>
+                {userRole !== 'super_admin' && (
+                  <>
+                    <button
+                      onClick={() => setActiveTab('classrooms')}
+                      className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                        activeTab === 'classrooms'
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`}
+                    >
+                      Classrooms ({classrooms.length})
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('batches')}
+                      className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                        activeTab === 'batches'
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`}
+                    >
+                      Batches ({batches.length})
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('buckets')}
+                      className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                        activeTab === 'buckets'
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`}
+                    >
+                      Buckets ({buckets.length})
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('subjects')}
+                      className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                        activeTab === 'subjects'
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`}
+                    >
+                      Subjects ({subjects.length})
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('courses')}
+                      className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                        activeTab === 'courses'
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`}
+                    >
+                      Courses ({courses.length})
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('students')}
+                      className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                        activeTab === 'students'
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`}
+                    >
+                      Students ({students.length})
+                    </button>
+                  </>
+                )}
               </nav>
             </div>
           </div>
 
           {/* Search Bar */}
-          <div className="mb-6">
-            <div className="relative max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder={`Search ${activeTab}...`}
-                value={searchQuery}
+          {userRole !== 'super_admin' || activeTab === 'faculty' ? (
+            <div className="mb-6">
+              <div className="relative max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder={`Search ${activeTab}...`}
+                  value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
           </div>
+          ) : null}
 
           {/* Departments Tab */}
-          {activeTab === 'departments' && (
+          {activeTab === 'departments' && userRole !== 'super_admin' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h2 className="text-xl font-semibold text-gray-900">Departments</h2>
@@ -2146,7 +2221,7 @@ export default function AdminDashboard() {
           )}
 
           {/* Classrooms Tab */}
-          {activeTab === 'classrooms' && (
+          {activeTab === 'classrooms' && userRole !== 'super_admin' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-4">
@@ -2503,7 +2578,7 @@ export default function AdminDashboard() {
           )}
 
           {/* Batches Tab */}
-          {activeTab === 'batches' && (
+          {activeTab === 'batches' && userRole !== 'super_admin' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-4">
@@ -2522,10 +2597,176 @@ export default function AdminDashboard() {
                     ))}
                   </select>
                 </div>
-                <div className="text-sm text-gray-600">
-                  <p>Batches are created automatically when you create NEP curriculum buckets</p>
-                </div>
+                <button
+                  onClick={() => setShowBatchForm(true)}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  Create Batch
+                </button>
               </div>
+
+              {/* Create Batch Modal */}
+              {showBatchForm && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                  <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Create New Batch</h3>
+                    <form onSubmit={handleBatchCreate} className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Department *
+                          </label>
+                          <select
+                            required
+                            value={batchForm.department_id}
+                            onChange={(e) => setBatchForm({ ...batchForm, department_id: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="">Select Department</option>
+                            {departments.map(dept => (
+                              <option key={dept.id} value={dept.id}>
+                                {dept.code} - {dept.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Course *
+                          </label>
+                          <select
+                            required
+                            value={batchForm.course_id}
+                            onChange={(e) => setBatchForm({ ...batchForm, course_id: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="">Select Course</option>
+                            {courses.map(course => (
+                              <option key={course.id} value={course.id}>
+                                {course.code} - {course.title}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Current Semester *
+                          </label>
+                          <select
+                            required
+                            value={batchForm.semester}
+                            onChange={(e) => setBatchForm({ ...batchForm, semester: parseInt(e.target.value) })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
+                              <option key={sem} value={sem}>Semester {sem}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Academic Year *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="2025-26"
+                            value={batchForm.academic_year}
+                            onChange={(e) => setBatchForm({ ...batchForm, academic_year: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Admission Year *
+                          </label>
+                          <input
+                            type="number"
+                            required
+                            min="2020"
+                            max="2030"
+                            value={batchForm.admission_year}
+                            onChange={(e) => setBatchForm({ ...batchForm, admission_year: parseInt(e.target.value) })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">Year when students were admitted</p>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Section *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="A"
+                            value={batchForm.section}
+                            onChange={(e) => setBatchForm({ ...batchForm, section: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Expected Strength *
+                          </label>
+                          <input
+                            type="number"
+                            required
+                            min="1"
+                            max="200"
+                            value={batchForm.expected_strength}
+                            onChange={(e) => setBatchForm({ ...batchForm, expected_strength: parseInt(e.target.value) })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Actual Strength
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="200"
+                            value={batchForm.actual_strength}
+                            onChange={(e) => setBatchForm({ ...batchForm, actual_strength: parseInt(e.target.value) })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="bg-blue-50 p-3 rounded-lg">
+                        <p className="text-sm text-blue-900">
+                          <strong>Batch Name Preview:</strong> {batchForm.department_id && batchForm.semester ? 
+                            `${departments.find(d => d.id === batchForm.department_id)?.code || 'DEPT'} Batch ${batchForm.admission_year} - Sem ${batchForm.semester} (${batchForm.academic_year})` 
+                            : 'Select department and semester to preview name'}
+                        </p>
+                      </div>
+
+                      <div className="flex justify-end gap-2 pt-4">
+                        <button
+                          type="button"
+                          onClick={() => setShowBatchForm(false)}
+                          className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                        >
+                          Create Batch
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
 
               {/* Batches List */}
               <div className="bg-white shadow overflow-hidden sm:rounded-md">
@@ -2617,7 +2858,7 @@ export default function AdminDashboard() {
           )}
 
           {/* Buckets Tab */}
-          {activeTab === 'buckets' && (
+          {activeTab === 'buckets' && userRole !== 'super_admin' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-4">
@@ -3004,7 +3245,7 @@ export default function AdminDashboard() {
           )}
 
           {/* Subjects Tab */}
-          {activeTab === 'subjects' && (
+          {activeTab === 'subjects' && userRole !== 'super_admin' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-4">
@@ -3381,7 +3622,7 @@ export default function AdminDashboard() {
           )}
 
           {/* Courses Tab */}
-          {activeTab === 'courses' && (
+          {activeTab === 'courses' && userRole !== 'super_admin' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h2 className="text-xl font-semibold text-gray-900">Courses</h2>
@@ -3615,7 +3856,7 @@ export default function AdminDashboard() {
           )}
 
           {/* Students Tab */}
-          {activeTab === 'students' && (
+          {activeTab === 'students' && userRole !== 'super_admin' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-4">

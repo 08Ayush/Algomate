@@ -36,7 +36,7 @@ async function authenticateUser(request: NextRequest, requireAdmin = false) {
     }
 
     // For write operations, only allow admin/college_admin/super_admin
-    if (requireAdmin && !['admin', 'college_admin', 'super_admin'].includes(dbUser.role)) {
+    if (requireAdmin && !['admin', 'college_admin', 'super_admin'].includes(user.role)) {
       return null;
     }
 
