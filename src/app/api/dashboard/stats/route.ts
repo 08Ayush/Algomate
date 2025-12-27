@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
 
     console.log('📊 Fetching dashboard stats for user:', user.id, 'Type:', user.faculty_type);
 
-    // Fetch timetables based on user type
+    // Build timetables query based on user type
     let timetablesQuery = supabase
       .from('generated_timetables')
       .select('id, status, fitness_score, constraint_violations, batch_id, batches!inner(department_id)');
@@ -55,7 +55,33 @@ export async function GET(request: NextRequest) {
       timetablesQuery = timetablesQuery.eq('batches.department_id', user.department_id);
     }
 
-    const { data: timetables, error: timetablesError } = await timetablesQuery;
+    // Parallelize all database queries for much faster response
+    const [
+      { data: timetables, error: timetablesError },
+      { count: facultyCount },
+      { data: tasks },
+      { data: classrooms }
+    ] = await Promise.all([
+      timetablesQuery,
+      supabase
+        .from('users')
+        .select('*', { count: 'exact', head: true })
+        .eq('department_id', user.department_id)
+        .eq('role', 'faculty')
+        .eq('is_active', true),
+      supabase
+        .from('timetable_generation_tasks')
+        .select('execution_time_seconds')
+        .eq('created_by', user.id)
+        .eq('status', 'COMPLETED')
+        .order('created_at', { ascending: false })
+        .limit(10),
+      supabase
+        .from('classrooms')
+        .select('id')
+        .eq('department_id', user.department_id)
+        .eq('is_available', true)
+    ]);
 
     if (timetablesError) {
       console.error('❌ Error fetching timetables:', timetablesError);
@@ -64,63 +90,18 @@ export async function GET(request: NextRequest) {
 
     console.log('📋 Found', timetables?.length || 0, 'timetables');
 
-    // Calculate active timetables
+    // Calculate stats from timetables data
     const activeTimetables = timetables?.filter(t => t.status === 'published')?.length || 0;
-
-    // Calculate average fitness score
     const validFitnessScores = timetables?.filter(t => t.fitness_score && t.fitness_score > 0).map(t => t.fitness_score) || [];
     const avgFitnessScore = validFitnessScores.length > 0
       ? validFitnessScores.reduce((a, b) => a + b, 0) / validFitnessScores.length
       : 0;
-
-    // Fetch faculty count in department
-    const { count: facultyCount, error: facultyError } = await supabase
-      .from('users')
-      .select('*', { count: 'exact', head: true })
-      .eq('department_id', user.department_id)
-      .eq('role', 'faculty')
-      .eq('is_active', true);
-
-    if (facultyError) {
-      console.error('❌ Error fetching faculty count:', facultyError);
-    }
-
-    // Fetch generation tasks for average time
-    const { data: tasks, error: tasksError } = await supabase
-      .from('timetable_generation_tasks')
-      .select('execution_time_seconds')
-      .eq('created_by', user.id)
-      .eq('status', 'COMPLETED')
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    if (tasksError) {
-      console.error('❌ Error fetching tasks:', tasksError);
-    }
-
+    
     const avgTime = tasks && tasks.length > 0
       ? tasks.reduce((sum, t) => sum + (t.execution_time_seconds || 0), 0) / tasks.length
       : 0;
     const avgGenerationTime = avgTime > 0 ? `${avgTime.toFixed(1)}s` : '0s';
 
-    // Fetch total scheduled classes
-    const timetableIds = timetables?.map(t => t.id) || [];
-    let totalClasses = 0;
-    
-    if (timetableIds.length > 0) {
-      const { count: classCount, error: classError } = await supabase
-        .from('scheduled_classes')
-        .select('*', { count: 'exact', head: true })
-        .in('timetable_id', timetableIds);
-
-      if (classError) {
-        console.error('❌ Error fetching scheduled classes:', classError);
-      } else {
-        totalClasses = classCount || 0;
-      }
-    }
-
-    // Calculate conflict resolution rate
     const timetablesWithViolations = timetables?.filter(t => 
       t.constraint_violations && Array.isArray(t.constraint_violations) && t.constraint_violations.length > 0
     ).length || 0;
@@ -129,33 +110,33 @@ export async function GET(request: NextRequest) {
       ? ((totalTimetables - timetablesWithViolations) / totalTimetables) * 100
       : 0;
 
-    // Fetch classroom utilization
-    const { data: classrooms, error: classroomsError } = await supabase
-      .from('classrooms')
-      .select('id')
-      .eq('department_id', user.department_id)
-      .eq('is_available', true);
-
-    if (classroomsError) {
-      console.error('❌ Error fetching classrooms:', classroomsError);
-    }
-
+    // Fetch scheduled classes and classroom usage in parallel if needed
+    const timetableIds = timetables?.map(t => t.id) || [];
     const classroomIds = classrooms?.map(c => c.id) || [];
+    let totalClasses = 0;
     let usedClassrooms = 0;
 
-    if (classroomIds.length > 0 && timetableIds.length > 0) {
-      const { data: usedRooms, error: usedRoomsError } = await supabase
-        .from('scheduled_classes')
-        .select('classroom_id')
-        .in('timetable_id', timetableIds)
-        .in('classroom_id', classroomIds);
+    if (timetableIds.length > 0) {
+      const [
+        { count: classCount },
+        { data: usedRooms }
+      ] = await Promise.all([
+        supabase
+          .from('scheduled_classes')
+          .select('*', { count: 'exact', head: true })
+          .in('timetable_id', timetableIds),
+        classroomIds.length > 0
+          ? supabase
+              .from('scheduled_classes')
+              .select('classroom_id')
+              .in('timetable_id', timetableIds)
+              .in('classroom_id', classroomIds)
+          : Promise.resolve({ data: [] })
+      ]);
 
-      if (usedRoomsError) {
-        console.error('❌ Error fetching used classrooms:', usedRoomsError);
-      } else {
-        const uniqueRooms = new Set(usedRooms?.map(r => r.classroom_id) || []);
-        usedClassrooms = uniqueRooms.size;
-      }
+      totalClasses = classCount || 0;
+      const uniqueRooms = new Set(usedRooms?.map(r => r.classroom_id) || []);
+      usedClassrooms = uniqueRooms.size;
     }
 
     const roomUtilization = classroomIds.length > 0 && usedClassrooms

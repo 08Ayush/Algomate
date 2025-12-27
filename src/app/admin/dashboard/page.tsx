@@ -475,85 +475,47 @@ export default function AdminDashboard() {
       const targetCollegeId = collegeId || userDataObj.college_id;
       const queryParam = targetCollegeId ? `?college_id=${targetCollegeId}` : '';
       
-      // Fetch departments
-      const deptResponse = await fetch(`/api/admin/departments${queryParam}`, { headers });
-      if (deptResponse.ok) {
-        const deptData = await deptResponse.json();
-        setDepartments(deptData.departments || []);
-      } else if (deptResponse.status === 401) {
+      // Fetch all data in parallel for faster loading
+      const [deptResponse, facultyResponse, classroomResponse, batchResponse, bucketResponse, subjectResponse, courseResponse, studentResponse] = await Promise.all([
+        fetch(`/api/admin/departments${queryParam}`, { headers }),
+        fetch(`/api/admin/faculty${queryParam}`, { headers }),
+        fetch(`/api/admin/classrooms${queryParam}`, { headers }),
+        fetch(`/api/admin/batches${queryParam}`, { headers }),
+        fetch(`/api/admin/buckets${queryParam}`, { headers }),
+        fetch(`/api/admin/subjects${queryParam}`, { headers }),
+        fetch(`/api/admin/courses${queryParam}`, { headers }),
+        fetch(`/api/admin/students${queryParam}`, { headers })
+      ]);
+
+      // Check for auth errors
+      if (deptResponse.status === 401 || facultyResponse.status === 401 || classroomResponse.status === 401 || 
+          batchResponse.status === 401 || bucketResponse.status === 401 || subjectResponse.status === 401 || 
+          courseResponse.status === 401 || studentResponse.status === 401) {
         router.push('/login?message=Session expired');
         return;
       }
 
-      // Fetch faculty
-      const facultyResponse = await fetch(`/api/admin/faculty${queryParam}`, { headers });
-      if (facultyResponse.ok) {
-        const facultyData = await facultyResponse.json();
-        setFaculty(facultyData.faculty || []);
-      } else if (facultyResponse.status === 401) {
-        router.push('/login?message=Session expired');
-        return;
-      }
+      // Process all responses in parallel
+      const [deptData, facultyData, classroomData, batchData, bucketData, subjectData, courseData, studentData] = await Promise.all([
+        deptResponse.ok ? deptResponse.json() : Promise.resolve({ departments: [] }),
+        facultyResponse.ok ? facultyResponse.json() : Promise.resolve({ faculty: [] }),
+        classroomResponse.ok ? classroomResponse.json() : Promise.resolve({ classrooms: [] }),
+        batchResponse.ok ? batchResponse.json() : Promise.resolve({ batches: [] }),
+        bucketResponse.ok ? bucketResponse.json() : Promise.resolve({ buckets: [] }),
+        subjectResponse.ok ? subjectResponse.json() : Promise.resolve({ subjects: [] }),
+        courseResponse.ok ? courseResponse.json() : Promise.resolve({ courses: [] }),
+        studentResponse.ok ? studentResponse.json() : Promise.resolve({ students: [] })
+      ]);
 
-      // Fetch classrooms
-      const classroomResponse = await fetch(`/api/admin/classrooms${queryParam}`, { headers });
-      if (classroomResponse.ok) {
-        const classroomData = await classroomResponse.json();
-        setClassrooms(classroomData.classrooms || []);
-      } else if (classroomResponse.status === 401) {
-        router.push('/login?message=Session expired');
-        return;
-      }
-
-      // Fetch batches
-      const batchResponse = await fetch(`/api/admin/batches${queryParam}`, { headers });
-      if (batchResponse.ok) {
-        const batchData = await batchResponse.json();
-        setBatches(batchData.batches || []);
-      } else if (batchResponse.status === 401) {
-        router.push('/login?message=Session expired');
-        return;
-      }
-
-      // Fetch buckets
-      const bucketResponse = await fetch(`/api/admin/buckets${queryParam}`, { headers });
-      if (bucketResponse.ok) {
-        const bucketData = await bucketResponse.json();
-        setBuckets(bucketData.buckets || []);
-      } else if (bucketResponse.status === 401) {
-        router.push('/login?message=Session expired');
-        return;
-      }
-
-      // Fetch subjects
-      const subjectResponse = await fetch(`/api/admin/subjects${queryParam}`, { headers });
-      if (subjectResponse.ok) {
-        const subjectData = await subjectResponse.json();
-        setSubjects(subjectData.subjects || []);
-      } else if (subjectResponse.status === 401) {
-        router.push('/login?message=Session expired');
-        return;
-      }
-
-      // Fetch courses
-      const courseResponse = await fetch(`/api/admin/courses${queryParam}`, { headers });
-      if (courseResponse.ok) {
-        const courseData = await courseResponse.json();
-        setCourses(courseData.courses || []);
-      } else if (courseResponse.status === 401) {
-        router.push('/login?message=Session expired');
-        return;
-      }
-
-      // Fetch students
-      const studentResponse = await fetch(`/api/admin/students${queryParam}`, { headers });
-      if (studentResponse.ok) {
-        const studentData = await studentResponse.json();
-        setStudents(studentData.students || []);
-      } else if (studentResponse.status === 401) {
-        router.push('/login?message=Session expired');
-        return;
-      }
+      // Update all state at once
+      setDepartments(deptData.departments || []);
+      setFaculty(facultyData.faculty || []);
+      setClassrooms(classroomData.classrooms || []);
+      setBatches(batchData.batches || []);
+      setBuckets(bucketData.buckets || []);
+      setSubjects(subjectData.subjects || []);
+      setCourses(courseData.courses || []);
+      setStudents(studentData.students || []);
 
     } catch (error: any) {
       setError('Failed to fetch data');
@@ -1807,6 +1769,7 @@ export default function AdminDashboard() {
                             value={deptForm.name}
                             onChange={(e) => setDeptForm({...deptForm, name: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Department Name"
                           />
                         </div>
                         <div>
@@ -1817,6 +1780,7 @@ export default function AdminDashboard() {
                             value={deptForm.code}
                             onChange={(e) => setDeptForm({...deptForm, code: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Department Code"
                           />
                         </div>
                         <div>
@@ -1826,6 +1790,7 @@ export default function AdminDashboard() {
                             onChange={(e) => setDeptForm({...deptForm, description: e.target.value})}
                             rows={3}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Department Description"
                           />
                         </div>
                       </div>
@@ -1921,6 +1886,7 @@ export default function AdminDashboard() {
                     value={departmentFilter}
                     onChange={(e) => setDepartmentFilter(e.target.value)}
                     className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    aria-label="Filter Faculty by Department"
                   >
                     <option value="all">All Departments</option>
                     {departments.map(dept => (
@@ -1969,6 +1935,7 @@ export default function AdminDashboard() {
                             value={facultyForm.first_name}
                             onChange={(e) => setFacultyForm({...facultyForm, first_name: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Faculty First Name"
                           />
                         </div>
                         <div>
@@ -1979,6 +1946,7 @@ export default function AdminDashboard() {
                             value={facultyForm.last_name}
                             onChange={(e) => setFacultyForm({...facultyForm, last_name: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Faculty Last Name"
                           />
                         </div>
                         <div>
@@ -1989,6 +1957,7 @@ export default function AdminDashboard() {
                             value={facultyForm.email}
                             onChange={(e) => setFacultyForm({...facultyForm, email: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Faculty Email"
                           />
                         </div>
                         <div>
@@ -1998,6 +1967,7 @@ export default function AdminDashboard() {
                             value={facultyForm.phone}
                             onChange={(e) => setFacultyForm({...facultyForm, phone: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Faculty Phone Number"
                           />
                         </div>
                         <div>
@@ -2006,6 +1976,7 @@ export default function AdminDashboard() {
                             value={facultyForm.department_id}
                             onChange={(e) => setFacultyForm({...facultyForm, department_id: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Faculty Department"
                           >
                             <option value="">No Department</option>
                             {departments.map((dept) => (
@@ -2021,6 +1992,7 @@ export default function AdminDashboard() {
                             value={facultyForm.role}
                             onChange={(e) => setFacultyForm({...facultyForm, role: e.target.value as 'admin' | 'college_admin' | 'faculty'})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Faculty Role"
                           >
                             <option value="faculty">Faculty</option>
                             <option value="college_admin">College Admin</option>
@@ -2033,6 +2005,7 @@ export default function AdminDashboard() {
                             value={facultyForm.faculty_type}
                             onChange={(e) => setFacultyForm({...facultyForm, faculty_type: e.target.value as 'creator' | 'publisher' | 'general' | 'guest'})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Faculty Type"
                           >
                             <option value="general">General</option>
                             <option value="creator">Creator</option>
@@ -2048,6 +2021,7 @@ export default function AdminDashboard() {
                               onChange={(e) => setFacultyForm({...facultyForm, college_id: e.target.value})}
                               required={facultyForm.role === 'college_admin'}
                               className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                              aria-label="Faculty College"
                             >
                               <option value="">Select College</option>
                               {colleges.map((college) => (
@@ -2181,6 +2155,7 @@ export default function AdminDashboard() {
                     value={departmentFilter}
                     onChange={(e) => setDepartmentFilter(e.target.value)}
                     className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    aria-label="Filter Classrooms by Department"
                   >
                     <option value="all">All Departments</option>
                     {departments.map(dept => (
@@ -2236,6 +2211,7 @@ export default function AdminDashboard() {
                             onChange={(e) => setClassroomForm({...classroomForm, name: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             placeholder="e.g., Room A101, Lab C301"
+                            aria-label="Classroom Name"
                           />
                         </div>
                         <div>
@@ -2246,6 +2222,7 @@ export default function AdminDashboard() {
                             onChange={(e) => setClassroomForm({...classroomForm, building: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             placeholder="e.g., Academic Block A"
+                            aria-label="Classroom Building"
                           />
                         </div>
                         <div>
@@ -2257,6 +2234,7 @@ export default function AdminDashboard() {
                             value={classroomForm.floor_number}
                             onChange={(e) => setClassroomForm({...classroomForm, floor_number: parseInt(e.target.value) || 1})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Classroom Floor Number"
                           />
                         </div>
                         <div>
@@ -2269,6 +2247,7 @@ export default function AdminDashboard() {
                             value={classroomForm.capacity}
                             onChange={(e) => setClassroomForm({...classroomForm, capacity: parseInt(e.target.value) || 30})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Classroom Capacity"
                           />
                         </div>
                         <div>
@@ -2278,6 +2257,7 @@ export default function AdminDashboard() {
                             value={classroomForm.type}
                             onChange={(e) => setClassroomForm({...classroomForm, type: e.target.value as any})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Classroom Type"
                           >
                             <option value="Lecture Hall">Lecture Hall</option>
                             <option value="Lab">Lab</option>
@@ -2295,6 +2275,7 @@ export default function AdminDashboard() {
                             value={classroomForm.classroom_priority}
                             onChange={(e) => setClassroomForm({...classroomForm, classroom_priority: parseInt(e.target.value) || 5})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Classroom Priority"
                           />
                         </div>
                       </div>
@@ -2531,6 +2512,7 @@ export default function AdminDashboard() {
                     value={departmentFilter}
                     onChange={(e) => setDepartmentFilter(e.target.value)}
                     className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    aria-label="Filter Batches by Department"
                   >
                     <option value="all">All Departments</option>
                     {departments.map(dept => (
@@ -2644,6 +2626,7 @@ export default function AdminDashboard() {
                     value={bucketCourseFilter}
                     onChange={(e) => setBucketCourseFilter(e.target.value)}
                     className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    aria-label="Filter Buckets by Course"
                   >
                     <option value="all">All Courses</option>
                     {courses.map(course => (
@@ -2656,6 +2639,7 @@ export default function AdminDashboard() {
                     value={departmentFilter}
                     onChange={(e) => setDepartmentFilter(e.target.value)}
                     className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    aria-label="Filter Buckets by Department"
                   >
                     <option value="all">All Departments</option>
                     {departments.map(dept => (
@@ -2668,6 +2652,7 @@ export default function AdminDashboard() {
                     value={bucketSemesterFilter}
                     onChange={(e) => setBucketSemesterFilter(e.target.value)}
                     className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    aria-label="Filter Buckets by Semester"
                   >
                     <option value="all">All Semesters</option>
                     {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
@@ -2714,6 +2699,7 @@ export default function AdminDashboard() {
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             required
                             disabled={!!editingBucket}
+                            aria-label="Bucket Batch"
                           >
                             <option value="">Select Batch</option>
                             {batches.map(batch => (
@@ -2740,6 +2726,7 @@ export default function AdminDashboard() {
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             placeholder="e.g., Open Elective 1"
                             required
+                            aria-label="Bucket Name"
                           />
                         </div>
 
@@ -2752,6 +2739,7 @@ export default function AdminDashboard() {
                               value={bucketForm.min_selection}
                               onChange={(e) => setBucketForm({...bucketForm, min_selection: parseInt(e.target.value)})}
                               className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                              aria-label="Minimum Subject Selection"
                             />
                           </div>
 
@@ -2763,6 +2751,7 @@ export default function AdminDashboard() {
                               value={bucketForm.max_selection}
                               onChange={(e) => setBucketForm({...bucketForm, max_selection: parseInt(e.target.value)})}
                               className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                              aria-label="Maximum Subject Selection"
                             />
                           </div>
                         </div>
@@ -2791,6 +2780,7 @@ export default function AdminDashboard() {
                               value={bucketSubjectFilter.course_id}
                               onChange={(e) => setBucketSubjectFilter({...bucketSubjectFilter, course_id: e.target.value})}
                               className="text-xs px-2 py-1.5 border border-gray-300 rounded bg-white text-gray-900"
+                              aria-label="Filter Bucket Subjects by Course"
                             >
                               <option value="">All Courses</option>
                               {courses.map(course => (
@@ -2801,6 +2791,7 @@ export default function AdminDashboard() {
                               value={bucketSubjectFilter.department_id}
                               onChange={(e) => setBucketSubjectFilter({...bucketSubjectFilter, department_id: e.target.value})}
                               className="text-xs px-2 py-1.5 border border-gray-300 rounded bg-white text-gray-900"
+                              aria-label="Filter Bucket Subjects by Department"
                             >
                               <option value="">All Depts</option>
                               {departments.map(dept => (
@@ -2811,6 +2802,7 @@ export default function AdminDashboard() {
                               value={bucketSubjectFilter.semester}
                               onChange={(e) => setBucketSubjectFilter({...bucketSubjectFilter, semester: e.target.value})}
                               className="text-xs px-2 py-1.5 border border-gray-300 rounded bg-white text-gray-900"
+                              aria-label="Filter Bucket Subjects by Semester"
                             >
                               <option value="">All Sems</option>
                               {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
@@ -3021,6 +3013,7 @@ export default function AdminDashboard() {
                     value={departmentFilter}
                     onChange={(e) => setDepartmentFilter(e.target.value)}
                     className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    aria-label="Filter Subjects by Department"
                   >
                     <option value="all">All Departments</option>
                     {departments.map(dept => (
@@ -3033,6 +3026,7 @@ export default function AdminDashboard() {
                     value={courseSemesterFilter}
                     onChange={(e) => setCourseSemesterFilter(e.target.value)}
                     className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    aria-label="Filter Subjects by Course"
                   >
                     <option value="all">All Courses</option>
                     {courses.map(course => (
@@ -3045,6 +3039,7 @@ export default function AdminDashboard() {
                     value={selectedSemester}
                     onChange={(e) => setSelectedSemester(e.target.value === 'all' ? 'all' : Number(e.target.value))}
                     className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    aria-label="Filter Subjects by Semester"
                   >
                     <option value="all">All Semesters</option>
                     {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
@@ -3093,6 +3088,7 @@ export default function AdminDashboard() {
                             value={subjectForm.course_id}
                             onChange={(e) => setSubjectForm({...subjectForm, course_id: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Subject Course"
                           >
                             <option value="">Select Course</option>
                             {courses.map(course => (
@@ -3109,6 +3105,7 @@ export default function AdminDashboard() {
                             value={subjectForm.department_id}
                             onChange={(e) => setSubjectForm({...subjectForm, department_id: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Subject Department"
                           >
                             <option value="">None (No Department)</option>
                             {departments.map(dept => (
@@ -3128,6 +3125,7 @@ export default function AdminDashboard() {
                             onChange={(e) => setSubjectForm({...subjectForm, code: e.target.value.toUpperCase()})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             placeholder="e.g., CS101, MATH201"
+                            aria-label="Subject Code"
                           />
                         </div>
 
@@ -3140,6 +3138,7 @@ export default function AdminDashboard() {
                             onChange={(e) => setSubjectForm({...subjectForm, name: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             placeholder="e.g., Data Structures"
+                            aria-label="Subject Name"
                           />
                         </div>
 
@@ -3153,6 +3152,7 @@ export default function AdminDashboard() {
                             value={subjectForm.credits_per_week}
                             onChange={(e) => setSubjectForm({...subjectForm, credits_per_week: parseInt(e.target.value) || 1})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Subject Credits Per Week"
                           />
                         </div>
 
@@ -3163,6 +3163,7 @@ export default function AdminDashboard() {
                             value={subjectForm.semester}
                             onChange={(e) => setSubjectForm({...subjectForm, semester: parseInt(e.target.value)})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Subject Semester"
                           >
                             {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
                               <option key={sem} value={sem}>Semester {sem}</option>
@@ -3188,6 +3189,7 @@ export default function AdminDashboard() {
                             value={subjectForm.subject_type}
                             onChange={(e) => setSubjectForm({...subjectForm, subject_type: e.target.value as any})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Subject Type"
                           >
                             <option value="THEORY">Theory</option>
                             <option value="LAB">Lab</option>
@@ -3202,6 +3204,7 @@ export default function AdminDashboard() {
                             value={subjectForm.nep_category}
                             onChange={(e) => setSubjectForm({...subjectForm, nep_category: e.target.value as any})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Subject NEP Category"
                           >
                             <option value="CORE">Core</option>
                             <option value="MAJOR">Major</option>
@@ -3439,6 +3442,7 @@ export default function AdminDashboard() {
                             value={courseForm.nature_of_course}
                             onChange={(e) => setCourseForm({...courseForm, nature_of_course: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Course Nature"
                           >
                             <option value="">Select Type</option>
                             <option value="UG">Undergraduate (UG)</option>
@@ -3620,6 +3624,7 @@ export default function AdminDashboard() {
                     value={departmentFilter}
                     onChange={(e) => setDepartmentFilter(e.target.value)}
                     className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    aria-label="Filter Students by Department"
                   >
                     <option value="all">All Departments</option>
                     {departments.map(dept => (
@@ -3632,6 +3637,7 @@ export default function AdminDashboard() {
                     value={courseFilter}
                     onChange={(e) => setCourseFilter(e.target.value)}
                     className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    aria-label="Filter Students by Course"
                   >
                     <option value="all">All Courses</option>
                     {courses.map(course => (
@@ -3683,6 +3689,7 @@ export default function AdminDashboard() {
                             value={studentForm.first_name}
                             onChange={(e) => setStudentForm({...studentForm, first_name: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Student First Name"
                           />
                         </div>
 
@@ -3694,6 +3701,7 @@ export default function AdminDashboard() {
                             value={studentForm.last_name}
                             onChange={(e) => setStudentForm({...studentForm, last_name: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Student Last Name"
                           />
                         </div>
 
@@ -3705,6 +3713,7 @@ export default function AdminDashboard() {
                             value={studentForm.email}
                             onChange={(e) => setStudentForm({...studentForm, email: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Student Email"
                           />
                         </div>
 
@@ -3716,6 +3725,7 @@ export default function AdminDashboard() {
                             onChange={(e) => setStudentForm({...studentForm, student_id: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             placeholder="e.g., STU001"
+                            aria-label="Student ID Number"
                           />
                         </div>
 
@@ -3726,6 +3736,7 @@ export default function AdminDashboard() {
                             value={studentForm.phone}
                             onChange={(e) => setStudentForm({...studentForm, phone: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Student Phone Number"
                           />
                         </div>
 
@@ -3737,6 +3748,7 @@ export default function AdminDashboard() {
                             onChange={(e) => setStudentForm({...studentForm, current_semester: parseInt(e.target.value)})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             disabled={!studentForm.course_id}
+                            aria-label="Student Current Semester"
                           >
                             {Array.from({ length: getMaxSemestersForCourse(studentForm.course_id) }, (_, i) => i + 1).map(sem => (
                               <option key={sem} value={sem}>Semester {sem}</option>
@@ -3758,6 +3770,7 @@ export default function AdminDashboard() {
                             placeholder="e.g., 2024"
                             min="2000"
                             max="2099"
+                            aria-label="Student Admission Year"
                           />
                         </div>
 
@@ -3774,6 +3787,7 @@ export default function AdminDashboard() {
                               setStudentForm({...studentForm, course_id: newCourseId, current_semester: newSemester});
                             }}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Student Course"
                           >
                             <option value="">Select Course *</option>
                             {courses.map(course => (
@@ -3791,6 +3805,7 @@ export default function AdminDashboard() {
                             value={studentForm.department_id}
                             onChange={(e) => setStudentForm({...studentForm, department_id: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            aria-label="Student Department"
                           >
                             <option value="">Select Department *</option>
                             {departments.map(dept => (

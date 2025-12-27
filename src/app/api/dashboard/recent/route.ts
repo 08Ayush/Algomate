@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
 
     console.log('📋 Fetching recent timetables for user:', user.id);
 
-    // Fetch recent timetables based on user type
+    // Build timetables query
     let query = supabase
       .from('generated_timetables')
       .select('id, title, status, created_at, batch_id, batches!inner(name, department_id)')
@@ -57,7 +57,26 @@ export async function GET(request: NextRequest) {
       query = query.eq('batches.department_id', user.department_id);
     }
 
-    const { data, error } = await query;
+    // Parallelize timetables, notifications, and batches queries
+    const [
+      { data, error },
+      { data: notifications },
+      { data: batches }
+    ] = await Promise.all([
+      query,
+      supabase
+        .from('notifications')
+        .select('*')
+        .eq('recipient_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(5),
+      user.faculty_type === 'publisher' && user.department_id
+        ? supabase
+            .from('batches')
+            .select('id')
+            .eq('department_id', user.department_id)
+        : Promise.resolve({ data: [] })
+    ]);
 
     if (error) {
       console.error('❌ Error fetching recent timetables:', error);
@@ -72,20 +91,6 @@ export async function GET(request: NextRequest) {
       batch_name: (t.batches as any)?.name || 'Unknown Batch'
     })) || [];
 
-    console.log('✅ Found', formatted.length, 'recent timetables');
-
-    // Fetch notifications for activities
-    const { data: notifications, error: notifError } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('recipient_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(5);
-
-    if (notifError) {
-      console.error('❌ Error fetching notifications:', notifError);
-    }
-
     const activities = notifications?.map(n => ({
       id: n.id,
       type: n.type === 'timetable_published' ? 'timetable_published' : 
@@ -95,27 +100,18 @@ export async function GET(request: NextRequest) {
       created_at: n.created_at
     })) || [];
 
-    console.log('✅ Found', activities.length, 'recent activities');
-
-    // Fetch pending review count for publishers
+    // Fetch pending review count for publishers if batches exist
     let pendingReviewCount = 0;
-    if (user.faculty_type === 'publisher' && user.department_id) {
-      const { data: batches } = await supabase
-        .from('batches')
-        .select('id')
-        .eq('department_id', user.department_id);
+    const batchIds = batches?.map(b => b.id) || [];
+    
+    if (batchIds.length > 0) {
+      const { count } = await supabase
+        .from('generated_timetables')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending_approval')
+        .in('batch_id', batchIds);
 
-      const batchIds = batches?.map(b => b.id) || [];
-
-      if (batchIds.length > 0) {
-        const { count } = await supabase
-          .from('generated_timetables')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'pending_approval')
-          .in('batch_id', batchIds);
-
-        pendingReviewCount = count || 0;
-      }
+      pendingReviewCount = count || 0;
     }
 
     console.log('✅ Pending review count:', pendingReviewCount);

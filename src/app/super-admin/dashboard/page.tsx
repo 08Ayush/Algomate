@@ -107,19 +107,21 @@ export default function SuperAdminDashboard() {
     try {
       setLoading(true);
       
-      // Fetch colleges
-      const collegeResponse = await fetch('/api/super-admin/colleges');
-      if (collegeResponse.ok) {
-        const collegeData = await collegeResponse.json();
-        setColleges(collegeData.colleges || []);
-      }
+      // Fetch all data in parallel for faster loading
+      const [collegeResponse, adminResponse] = await Promise.all([
+        fetch('/api/super-admin/colleges'),
+        fetch('/api/super-admin/college-admins')
+      ]);
 
-      // Fetch college admins
-      const adminResponse = await fetch('/api/super-admin/college-admins');
-      if (adminResponse.ok) {
-        const adminData = await adminResponse.json();
-        setAdmins(adminData.admins || []);
-      }
+      // Process responses in parallel
+      const [collegeData, adminData] = await Promise.all([
+        collegeResponse.ok ? collegeResponse.json() : Promise.resolve({ colleges: [] }),
+        adminResponse.ok ? adminResponse.json() : Promise.resolve({ admins: [] })
+      ]);
+
+      // Update state
+      setColleges(collegeData.colleges || []);
+      setAdmins(adminData.admins || []);
 
     } catch (error: any) {
       setError('Failed to fetch data');
@@ -442,6 +444,7 @@ export default function SuperAdminDashboard() {
                             value={collegeForm.name}
                             onChange={(e) => setCollegeForm({...collegeForm, name: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="College Name"
                           />
                         </div>
                         <div>
@@ -452,6 +455,7 @@ export default function SuperAdminDashboard() {
                             value={collegeForm.code}
                             onChange={(e) => setCollegeForm({...collegeForm, code: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="College Code"
                           />
                         </div>
                         <div className="col-span-2">
@@ -461,6 +465,7 @@ export default function SuperAdminDashboard() {
                             onChange={(e) => setCollegeForm({...collegeForm, address: e.target.value})}
                             rows={2}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="College Address"
                           />
                         </div>
                         <div>
@@ -470,6 +475,7 @@ export default function SuperAdminDashboard() {
                             value={collegeForm.city}
                             onChange={(e) => setCollegeForm({...collegeForm, city: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="College City"
                           />
                         </div>
                         <div>
@@ -479,6 +485,7 @@ export default function SuperAdminDashboard() {
                             value={collegeForm.state}
                             onChange={(e) => setCollegeForm({...collegeForm, state: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="College State"
                           />
                         </div>
                         <div>
@@ -488,6 +495,7 @@ export default function SuperAdminDashboard() {
                             value={collegeForm.pincode}
                             onChange={(e) => setCollegeForm({...collegeForm, pincode: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="College Pincode"
                           />
                         </div>
                         <div>
@@ -497,6 +505,7 @@ export default function SuperAdminDashboard() {
                             value={collegeForm.phone}
                             onChange={(e) => setCollegeForm({...collegeForm, phone: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="College Phone"
                           />
                         </div>
                         <div>
@@ -506,6 +515,7 @@ export default function SuperAdminDashboard() {
                             value={collegeForm.email}
                             onChange={(e) => setCollegeForm({...collegeForm, email: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="College Email"
                           />
                         </div>
                         <div>
@@ -515,6 +525,7 @@ export default function SuperAdminDashboard() {
                             value={collegeForm.website}
                             onChange={(e) => setCollegeForm({...collegeForm, website: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="College Website"
                           />
                         </div>
                         <div>
@@ -524,6 +535,7 @@ export default function SuperAdminDashboard() {
                             value={collegeForm.academic_year}
                             onChange={(e) => setCollegeForm({...collegeForm, academic_year: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="College Academic Year"
                           />
                         </div>
                         <div>
@@ -532,6 +544,7 @@ export default function SuperAdminDashboard() {
                             value={collegeForm.semester_system}
                             onChange={(e) => setCollegeForm({...collegeForm, semester_system: e.target.value as any})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="College Semester System"
                           >
                             <option value="semester">Semester</option>
                             <option value="trimester">Trimester</option>
@@ -665,6 +678,7 @@ export default function SuperAdminDashboard() {
                             value={adminForm.first_name}
                             onChange={(e) => setAdminForm({...adminForm, first_name: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="Admin First Name"
                           />
                         </div>
                         <div>
@@ -675,6 +689,7 @@ export default function SuperAdminDashboard() {
                             value={adminForm.last_name}
                             onChange={(e) => setAdminForm({...adminForm, last_name: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="Admin Last Name"
                           />
                         </div>
                         <div>
@@ -685,6 +700,7 @@ export default function SuperAdminDashboard() {
                             value={adminForm.email}
                             onChange={(e) => setAdminForm({...adminForm, email: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="Admin Email"
                           />
                         </div>
                         <div>
@@ -694,6 +710,7 @@ export default function SuperAdminDashboard() {
                             value={adminForm.phone}
                             onChange={(e) => setAdminForm({...adminForm, phone: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="Admin Phone"
                           />
                         </div>
                         <div>
@@ -703,6 +720,7 @@ export default function SuperAdminDashboard() {
                             value={adminForm.college_id}
                             onChange={(e) => setAdminForm({...adminForm, college_id: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="Admin College"
                           >
                             <option value="">Select College</option>
                             {colleges.map((college) => (
@@ -723,6 +741,7 @@ export default function SuperAdminDashboard() {
                             value={adminForm.college_uid}
                             onChange={(e) => setAdminForm({...adminForm, college_uid: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="Admin College UID"
                           />
                         </div>
                         <div className="col-span-2">

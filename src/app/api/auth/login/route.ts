@@ -46,8 +46,13 @@ export async function POST(request: NextRequest) {
       .from('users')
       .update({ last_login: new Date().toISOString() })
       .eq('id', userData.id)
-      .then(() => console.log('Last login updated'))
-      .catch((err) => console.error('Failed to update last login:', err));
+      .then((result) => {
+        if (result.error) {
+          console.error('Failed to update last login:', result.error);
+        } else {
+          console.log('Last login updated');
+        }
+      });
 
     // Fetch department and college data in parallel (only after auth succeeds)
     const [deptResult, collegeResult] = await Promise.all([
