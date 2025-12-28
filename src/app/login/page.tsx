@@ -66,8 +66,13 @@ export default function LoginPage() {
     }
 
     setIsLoading(true);
+    setErrors({}); // Clear previous errors
     
     try {
+      // Add timeout to detect slow responses
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
@@ -77,7 +82,10 @@ export default function LoginPage() {
           collegeUid: formData.collegeUid,
           password: formData.password,
         }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       const data = await response.json();
 
@@ -135,7 +143,11 @@ export default function LoginPage() {
       
     } catch (error: any) {
       console.error('Login error:', error);
-      setErrors({ submit: error.message || 'Login failed. Please check your credentials.' });
+      if (error.name === 'AbortError') {
+        setErrors({ submit: 'Login is taking too long. Please check your internet connection and try again.' });
+      } else {
+        setErrors({ submit: error.message || 'Login failed. Please check your credentials.' });
+      }
     } finally {
       setIsLoading(false);
     }

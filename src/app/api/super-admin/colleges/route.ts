@@ -4,6 +4,8 @@ import { supabaseAdmin } from '@/lib/supabase';
 // GET - List all colleges with counts
 export async function GET(request: NextRequest) {
   try {
+    console.log('Fetching colleges from database...');
+    
     // First get all colleges
     const { data: colleges, error } = await supabaseAdmin
       .from('colleges')
@@ -13,14 +15,21 @@ export async function GET(request: NextRequest) {
     if (error) {
       console.error('Colleges fetch error:', error);
       return NextResponse.json(
-        { error: 'Failed to fetch colleges' },
+        { error: 'Failed to fetch colleges', details: error.message },
         { status: 500 }
       );
     }
 
+    console.log(`Found ${colleges?.length || 0} colleges`);
+
+    // If no colleges, return empty array immediately
+    if (!colleges || colleges.length === 0) {
+      return NextResponse.json({ colleges: [] });
+    }
+
     // Get counts for each college
     const collegesWithCounts = await Promise.all(
-      (colleges || []).map(async (college) => {
+      colleges.map(async (college) => {
         // Count departments
         const { count: deptCount } = await supabaseAdmin
           .from('departments')

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
-import { Search, Building2, Users, BookOpen, Calendar, ChevronDown, RefreshCw, Eye, EyeOff } from 'lucide-react';
+import { Search, Building2, Users, BookOpen, Calendar, ChevronDown, RefreshCw } from 'lucide-react';
 
 interface College {
   id: string;
@@ -68,7 +68,7 @@ interface Batch {
   name: string;
   college_id: string;
   department_id: string;
-  course_id?: string;
+  course?: string;
   semester: number;
   section: string;
   academic_year: string;
@@ -79,11 +79,6 @@ interface Batch {
   departments?: {
     id: string;
     name: string;
-    code: string;
-  } | null;
-  courses?: {
-    id: string;
-    title: string;
     code: string;
   } | null;
 }
@@ -151,41 +146,9 @@ interface Student {
   } | null;
 }
 
-interface ElectiveBucket {
-  id: string;
-  batch_id: string;
-  bucket_name: string;
-  min_selection: number;
-  max_selection: number;
-  is_common_slot: boolean;
-  created_at: string;
-  updated_at?: string;
-  subjects?: Array<{ id: string }>;
-  batches?: {
-    id: string;
-    name: string;
-    semester: number;
-    section: string;
-    academic_year: string;
-    course_id?: string;
-    department_id: string;
-    college_id: string;
-    departments?: {
-      id: string;
-      name: string;
-      code: string;
-    } | null;
-    courses?: {
-      id: string;
-      title: string;
-      code: string;
-    } | null;
-  } | null;
-}
-
 export default function AdminDashboard() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'departments' | 'faculty' | 'classrooms' | 'batches' | 'buckets' | 'subjects' | 'courses' | 'students'>('departments');
+  const [activeTab, setActiveTab] = useState<'departments' | 'faculty' | 'classrooms' | 'batches' | 'subjects' | 'courses' | 'students'>('departments');
   const [colleges, setColleges] = useState<College[]>([]);
   const [selectedCollege, setSelectedCollege] = useState<College | null>(null);
   const [collegeDropdownOpen, setCollegeDropdownOpen] = useState(false);
@@ -195,13 +158,10 @@ export default function AdminDashboard() {
   const [faculty, setFaculty] = useState<Faculty[]>([]);
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
-  const [buckets, setBuckets] = useState<ElectiveBucket[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [courseFilter, setCourseFilter] = useState<string>('all');
-  const [bucketCourseFilter, setBucketCourseFilter] = useState<string>('all');
-  const [bucketSemesterFilter, setBucketSemesterFilter] = useState<string>('all');
   const [courseSemesterFilter, setCourseSemesterFilter] = useState<string>('all');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
@@ -209,16 +169,6 @@ export default function AdminDashboard() {
   const [successMessage, setSuccessMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSemester, setSelectedSemester] = useState<number | 'all'>('all');
-  const [showPassword, setShowPassword] = useState(false);
-
-  // Loading states for forms
-  const [submittingDept, setSubmittingDept] = useState(false);
-  const [submittingFaculty, setSubmittingFaculty] = useState(false);
-  const [submittingClassroom, setSubmittingClassroom] = useState(false);
-  const [submittingSubject, setSubmittingSubject] = useState(false);
-  const [submittingCourse, setSubmittingCourse] = useState(false);
-  const [submittingStudent, setSubmittingStudent] = useState(false);
-  const [submittingBucket, setSubmittingBucket] = useState(false);
 
   // Department form state
   const [showDeptForm, setShowDeptForm] = useState(false);
@@ -303,57 +253,12 @@ export default function AdminDashboard() {
     email: '',
     student_id: '',
     phone: '',
-    password: '',
     current_semester: 1,
     admission_year: new Date().getFullYear(),
     course_id: '',
     department_id: '',
     is_active: true
   });
-
-  // Bucket form state
-  const [showBucketForm, setShowBucketForm] = useState(false);
-  const [showBatchForm, setShowBatchForm] = useState(false);
-  const [batchForm, setBatchForm] = useState({
-    department_id: '',
-    course_id: '',
-    semester: 1,
-    academic_year: '2025-26',
-    admission_year: 2025,
-    section: 'A',
-    expected_strength: 60,
-    actual_strength: 0
-  });
-  const [editingBucket, setEditingBucket] = useState<ElectiveBucket | null>(null);
-  const [bucketForm, setBucketForm] = useState({
-    batch_id: '',
-    bucket_name: '',
-    min_selection: 1,
-    max_selection: 1,
-    is_common_slot: true
-  });
-  const [bucketSubjectFilter, setBucketSubjectFilter] = useState({
-    course_id: '',
-    department_id: '',
-    semester: ''
-  });
-  const [selectedSubjectsForBucket, setSelectedSubjectsForBucket] = useState<string[]>([]);
-  const [bucketSubjects, setBucketSubjects] = useState<Subject[]>([]);
-
-  // Auto-filter subjects when batch is selected for bucket
-  useEffect(() => {
-    if (bucketForm.batch_id) {
-      const selectedBatch = batches.find(b => b.id === bucketForm.batch_id);
-      if (selectedBatch) {
-        // Auto-set filters based on batch
-        setBucketSubjectFilter({
-          course_id: selectedBatch.course_id || '',
-          department_id: selectedBatch.department_id || '',
-          semester: selectedBatch.semester?.toString() || ''
-        });
-      }
-    }
-  }, [bucketForm.batch_id, batches]);
 
   useEffect(() => {
     // Check if user is admin
@@ -370,12 +275,6 @@ export default function AdminDashboard() {
     }
 
     setUserRole(user.role);
-    
-    // Set default tab for super_admin to faculty
-    if (user.role === 'super_admin') {
-      setActiveTab('faculty');
-    }
-    
     fetchColleges(user);
   }, [router]);
 
@@ -400,17 +299,7 @@ export default function AdminDashboard() {
           if (userCollege) {
             setSelectedCollege(userCollege);
             fetchData(userCollege.id);
-          } else {
-            // If college not found but user has college_id, still fetch data
-            fetchData(user.college_id);
           }
-        } else if (user.role === 'admin' && user.college_id) {
-          // For regular admin with college_id, fetch their college data
-          const userCollege = collegesList.find((c: College) => c.id === user.college_id);
-          if (userCollege) {
-            setSelectedCollege(userCollege);
-          }
-          fetchData(user.college_id);
         } else if (user.role === 'super_admin') {
           // For super admin, check if there's a saved college preference
           const savedCollegeId = localStorage.getItem('selected_college_id');
@@ -427,22 +316,13 @@ export default function AdminDashboard() {
             setSelectedCollege(collegesList[0]);
             fetchData(collegesList[0].id);
           }
-        } else {
-          // Fallback: if no college_id, just fetch data without filtering
-          fetchData();
         }
       } else if (response.status === 401) {
         router.push('/login?message=Session expired');
-      } else {
-        // If colleges API fails, still try to fetch data
-        console.warn('Failed to fetch colleges, attempting to fetch data anyway');
-        fetchData(user.college_id);
       }
     } catch (error) {
       console.error('Error fetching colleges:', error);
       setError('Failed to load colleges');
-      // Even if college fetch fails, try to fetch data
-      fetchData(user.college_id);
     }
   };
 
@@ -503,12 +383,11 @@ export default function AdminDashboard() {
       const queryParam = targetCollegeId ? `?college_id=${targetCollegeId}` : '';
       
       // Fetch all data in parallel for faster loading
-      const [deptResponse, facultyResponse, classroomResponse, batchResponse, bucketResponse, subjectResponse, courseResponse, studentResponse] = await Promise.all([
+      const [deptResponse, facultyResponse, classroomResponse, batchResponse, subjectResponse, courseResponse, studentResponse] = await Promise.all([
         fetch(`/api/admin/departments${queryParam}`, { headers }),
         fetch(`/api/admin/faculty${queryParam}`, { headers }),
         fetch(`/api/admin/classrooms${queryParam}`, { headers }),
         fetch(`/api/admin/batches${queryParam}`, { headers }),
-        fetch(`/api/admin/buckets${queryParam}`, { headers }),
         fetch(`/api/admin/subjects${queryParam}`, { headers }),
         fetch(`/api/admin/courses${queryParam}`, { headers }),
         fetch(`/api/admin/students${queryParam}`, { headers })
@@ -516,19 +395,17 @@ export default function AdminDashboard() {
 
       // Check for auth errors
       if (deptResponse.status === 401 || facultyResponse.status === 401 || classroomResponse.status === 401 || 
-          batchResponse.status === 401 || bucketResponse.status === 401 || subjectResponse.status === 401 || 
-          courseResponse.status === 401 || studentResponse.status === 401) {
+          batchResponse.status === 401 || subjectResponse.status === 401 || courseResponse.status === 401 || studentResponse.status === 401) {
         router.push('/login?message=Session expired');
         return;
       }
 
-      // Process all responses in parallel
-      const [deptData, facultyData, classroomData, batchData, bucketData, subjectData, courseData, studentData] = await Promise.all([
+      // Process all responses
+      const [deptData, facultyData, classroomData, batchData, subjectData, courseData, studentData] = await Promise.all([
         deptResponse.ok ? deptResponse.json() : Promise.resolve({ departments: [] }),
         facultyResponse.ok ? facultyResponse.json() : Promise.resolve({ faculty: [] }),
         classroomResponse.ok ? classroomResponse.json() : Promise.resolve({ classrooms: [] }),
         batchResponse.ok ? batchResponse.json() : Promise.resolve({ batches: [] }),
-        bucketResponse.ok ? bucketResponse.json() : Promise.resolve({ buckets: [] }),
         subjectResponse.ok ? subjectResponse.json() : Promise.resolve({ subjects: [] }),
         courseResponse.ok ? courseResponse.json() : Promise.resolve({ courses: [] }),
         studentResponse.ok ? studentResponse.json() : Promise.resolve({ students: [] })
@@ -539,7 +416,6 @@ export default function AdminDashboard() {
       setFaculty(facultyData.faculty || []);
       setClassrooms(classroomData.classrooms || []);
       setBatches(batchData.batches || []);
-      setBuckets(bucketData.buckets || []);
       setSubjects(subjectData.subjects || []);
       setCourses(courseData.courses || []);
       setStudents(studentData.students || []);
@@ -554,9 +430,6 @@ export default function AdminDashboard() {
 
   const handleDeptSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmittingDept(true);
-    setError('');
-    
     try {
       // Get authentication token
       const userData = localStorage.getItem('user');
@@ -580,30 +453,16 @@ export default function AdminDashboard() {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        const dept = data.department;
-        
-        // Optimistic update
-        if (editingDept) {
-          setDepartments(prev => prev.map(d => d.id === dept.id ? dept : d));
-          setSuccessMessage('Department updated successfully');
-        } else {
-          setDepartments(prev => [...prev, dept]);
-          setSuccessMessage('Department created successfully');
-        }
-        
         setShowDeptForm(false);
         setEditingDept(null);
         setDeptForm({ name: '', code: '', description: '' });
-        setTimeout(() => setSuccessMessage(''), 3000);
+        fetchData();
       } else {
         const data = await response.json();
         setError(data.error || 'Failed to save department');
       }
     } catch (error) {
       setError('Failed to save department');
-    } finally {
-      setSubmittingDept(false);
     }
   };
 
@@ -639,9 +498,6 @@ export default function AdminDashboard() {
 
   const handleFacultySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmittingFaculty(true);
-    setError('');
-    
     try {
       // Get authentication token
       const userData = localStorage.getItem('user');
@@ -665,18 +521,6 @@ export default function AdminDashboard() {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        const fac = data.faculty;
-        
-        // Optimistic update
-        if (editingFaculty) {
-          setFaculty(prev => prev.map(f => f.id === fac.id ? fac : f));
-          setSuccessMessage('Faculty updated successfully');
-        } else {
-          setFaculty(prev => [...prev, fac]);
-          setSuccessMessage('Faculty created successfully');
-        }
-        
         setShowFacultyForm(false);
         setEditingFaculty(null);
         setFacultyForm({
@@ -690,15 +534,15 @@ export default function AdminDashboard() {
           college_id: '',
           is_active: true
         });
-        setTimeout(() => setSuccessMessage(''), 3000);
+        setSuccessMessage(editingFaculty ? 'Faculty updated successfully' : 'Faculty created successfully');
+        fetchData();
+        setTimeout(() => setSuccessMessage(''), 5000);
       } else {
         const data = await response.json();
         setError(data.error || 'Failed to save faculty');
       }
     } catch (error) {
       setError('Failed to save faculty');
-    } finally {
-      setSubmittingFaculty(false);
     }
   };
 
@@ -767,9 +611,6 @@ export default function AdminDashboard() {
 
   const handleClassroomSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmittingClassroom(true);
-    setError('');
-    
     try {
       // Get authentication token
       const userData = localStorage.getItem('user');
@@ -793,18 +634,6 @@ export default function AdminDashboard() {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        const classroom = data.classroom;
-        
-        // Optimistic update
-        if (editingClassroom) {
-          setClassrooms(prev => prev.map(c => c.id === classroom.id ? classroom : c));
-          setSuccessMessage('Classroom updated successfully');
-        } else {
-          setClassrooms(prev => [...prev, classroom]);
-          setSuccessMessage('Classroom created successfully');
-        }
-        
         setShowClassroomForm(false);
         setEditingClassroom(null);
         setClassroomForm({
@@ -824,15 +653,13 @@ export default function AdminDashboard() {
           location_notes: '',
           is_available: true
         });
-        setTimeout(() => setSuccessMessage(''), 3000);
+        fetchData();
       } else {
         const data = await response.json();
         setError(data.error || 'Failed to save classroom');
       }
     } catch (error) {
       setError('Failed to save classroom');
-    } finally {
-      setSubmittingClassroom(false);
     }
   };
 
@@ -889,54 +716,6 @@ export default function AdminDashboard() {
   };
 
   // Batch handlers
-  const handleBatchCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    try {
-      const userData = localStorage.getItem('user');
-      if (!userData) {
-        router.push('/login');
-        return;
-      }
-      
-      const parsedUser = JSON.parse(userData);
-      const token = btoa(JSON.stringify({ id: parsedUser.id, role: parsedUser.role, department_id: parsedUser.department_id }));
-      
-      const response = await fetch('/api/batches/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(batchForm)
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        alert(`Failed to create batch: ${result.error || 'Unknown error'}`);
-        return;
-      }
-
-      alert(result.message || 'Batch created successfully!');
-      setShowBatchForm(false);
-      setBatchForm({
-        department_id: '',
-        course_id: '',
-        semester: 1,
-        academic_year: '2025-26',
-        admission_year: 2025,
-        section: 'A',
-        expected_strength: 60,
-        actual_strength: 0
-      });
-      fetchData();
-    } catch (error: any) {
-      console.error('Error creating batch:', error);
-      alert(`Error: ${error.message}`);
-    }
-  };
-
   const handleBatchDelete = async (id: string, batchName: string) => {
     if (!confirm(`Are you sure you want to delete batch "${batchName}"?\n\nThis will also delete:\n- All elective buckets associated with this batch\n- All subject assignments linked to this batch\n- Student enrollments\n\nThis action cannot be undone.`)) return;
 
@@ -948,13 +727,11 @@ export default function AdminDashboard() {
         return;
       }
       
-      const parsedUser = JSON.parse(userData);
-      const token = btoa(JSON.stringify({ id: parsedUser.id, role: parsedUser.role, department_id: parsedUser.department_id }));
-      
+      const authToken = Buffer.from(userData).toString('base64');
       const response = await fetch(`/api/admin/batches?id=${id}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${authToken}`
         }
       });
 
@@ -975,9 +752,6 @@ export default function AdminDashboard() {
   // Subject handlers
   const handleSubjectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmittingSubject(true);
-    setError('');
-    
     try {
       const userData = localStorage.getItem('user');
       if (!userData) {
@@ -1000,18 +774,6 @@ export default function AdminDashboard() {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        const subject = data.subject;
-        
-        // Optimistic update
-        if (editingSubject) {
-          setSubjects(prev => prev.map(s => s.id === subject.id ? subject : s));
-          setSuccessMessage('Subject updated successfully');
-        } else {
-          setSubjects(prev => [...prev, subject]);
-          setSuccessMessage('Subject created successfully');
-        }
-        
         setShowSubjectForm(false);
         setEditingSubject(null);
         setSubjectForm({
@@ -1028,15 +790,15 @@ export default function AdminDashboard() {
           requires_projector: false,
           is_active: true
         });
-        setTimeout(() => setSuccessMessage(''), 3000);
+        setSuccessMessage(editingSubject ? 'Subject updated successfully' : 'Subject created successfully');
+        fetchData();
+        setTimeout(() => setSuccessMessage(''), 5000);
       } else {
         const data = await response.json();
         setError(data.error || 'Failed to save subject');
       }
     } catch (error) {
       setError('Failed to save subject');
-    } finally {
-      setSubmittingSubject(false);
     }
   };
 
@@ -1092,9 +854,6 @@ export default function AdminDashboard() {
 
   const handleCourseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmittingCourse(true);
-    setError('');
-    
     try {
       const userData = localStorage.getItem('user');
       if (!userData) {
@@ -1117,18 +876,6 @@ export default function AdminDashboard() {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        const course = data.course;
-        
-        // Optimistic update
-        if (editingCourse) {
-          setCourses(prev => prev.map(c => c.id === course.id ? course : c));
-          setSuccessMessage('Course updated successfully');
-        } else {
-          setCourses(prev => [...prev, course]);
-          setSuccessMessage('Course created successfully');
-        }
-        
         setShowCourseForm(false);
         setEditingCourse(null);
         setCourseForm({
@@ -1138,15 +885,15 @@ export default function AdminDashboard() {
           intake: 0,
           duration_years: 4
         });
-        setTimeout(() => setSuccessMessage(''), 3000);
+        setSuccessMessage(editingCourse ? 'Course updated successfully' : 'Course created successfully');
+        fetchData();
+        setTimeout(() => setSuccessMessage(''), 5000);
       } else {
         const data = await response.json();
         setError(data.error || 'Failed to save course');
       }
     } catch (error) {
       setError('Failed to save course');
-    } finally {
-      setSubmittingCourse(false);
     }
   };
 
@@ -1204,9 +951,6 @@ export default function AdminDashboard() {
       return;
     }
     
-    setSubmittingStudent(true);
-    setError('');
-    
     try {
       const userData = localStorage.getItem('user');
       if (!userData) {
@@ -1229,18 +973,6 @@ export default function AdminDashboard() {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        const student = data.student;
-        
-        // Optimistic update
-        if (editingStudent) {
-          setStudents(prev => prev.map(s => s.id === student.id ? student : s));
-          setSuccessMessage('Student updated successfully');
-        } else {
-          setStudents(prev => [...prev, student]);
-          setSuccessMessage('Student created successfully');
-        }
-        
         setShowStudentForm(false);
         setEditingStudent(null);
         setStudentForm({
@@ -1249,23 +981,21 @@ export default function AdminDashboard() {
           email: '',
           student_id: '',
           phone: '',
-          password: '',
           current_semester: 1,
           admission_year: new Date().getFullYear(),
           course_id: '',
           department_id: '',
           is_active: true
         });
-        setShowPassword(false);
-        setTimeout(() => setSuccessMessage(''), 3000);
+        setSuccessMessage(editingStudent ? 'Student updated successfully' : 'Student created successfully');
+        fetchData();
+        setTimeout(() => setSuccessMessage(''), 5000);
       } else {
         const data = await response.json();
         setError(data.error || 'Failed to save student');
       }
     } catch (error) {
       setError('Failed to save student');
-    } finally {
-      setSubmittingStudent(false);
     }
   };
 
@@ -1308,167 +1038,13 @@ export default function AdminDashboard() {
       email: student.email,
       student_id: student.student_id || '',
       phone: student.phone || '',
-      password: '',
       current_semester: student.current_semester,
       admission_year: student.admission_year,
       course_id: student.course_id || '',
       department_id: student.department_id || '',
       is_active: student.is_active
     });
-    setShowPassword(false);
     setShowStudentForm(true);
-  };
-
-  // Bucket handlers
-  const handleBucketSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!bucketForm.batch_id) {
-      setError('Batch selection is required');
-      setTimeout(() => setError(''), 3000);
-      return;
-    }
-    
-    if (!bucketForm.bucket_name.trim()) {
-      setError('Bucket name is required');
-      setTimeout(() => setError(''), 3000);
-      return;
-    }
-    
-    if (selectedSubjectsForBucket.length === 0 && !editingBucket) {
-      if (!confirm('No subjects selected. Create bucket without subjects?')) {
-        return;
-      }
-    }
-    
-    setSubmittingBucket(true);
-    setError('');
-    
-    try {
-      const userData = localStorage.getItem('user');
-      if (!userData) {
-        router.push('/login');
-        return;
-      }
-      
-      const authToken = Buffer.from(userData).toString('base64');
-      const url = editingBucket 
-        ? `/api/admin/buckets/${editingBucket.id}` 
-        : '/api/admin/buckets';
-      
-      const payload = {
-        ...bucketForm,
-        subject_ids: selectedSubjectsForBucket
-      };
-      
-      console.log('Submitting bucket:', payload);
-      
-      const response = await fetch(url, {
-        method: editingBucket ? 'PUT' : 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const bucket = data.bucket;
-        
-        console.log('Bucket saved successfully:', bucket);
-        
-        // Optimistic update
-        if (editingBucket) {
-          setBuckets(prev => prev.map(b => b.id === bucket.id ? bucket : b));
-          setSuccessMessage('Bucket updated successfully');
-        } else {
-          setBuckets(prev => [...prev, bucket]);
-          setSuccessMessage('Bucket created successfully');
-        }
-        
-        setShowBucketForm(false);
-        setEditingBucket(null);
-        setBucketForm({
-          batch_id: '',
-          bucket_name: '',
-          min_selection: 1,
-          max_selection: 1,
-          is_common_slot: true
-        });
-        setSelectedSubjectsForBucket([]);
-        setBucketSubjectFilter({ course_id: '', department_id: '', semester: '' });
-        setTimeout(() => setSuccessMessage(''), 3000);
-      } else {
-        const data = await response.json();
-        setError(data.error || 'Failed to save bucket');
-      }
-    } catch (error) {
-      setError('Failed to save bucket');
-    } finally {
-      setSubmittingBucket(false);
-    }
-  };
-
-  const handleBucketDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this bucket? This will remove all subject associations.')) return;
-
-    try {
-      const userData = localStorage.getItem('user');
-      if (!userData) {
-        router.push('/login');
-        return;
-      }
-      
-      const authToken = Buffer.from(userData).toString('base64');
-      const response = await fetch(`/api/admin/buckets/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${authToken}`
-        }
-      });
-
-      if (response.ok) {
-        setBuckets(prev => prev.filter(b => b.id !== id));
-        setSuccessMessage('Bucket deleted successfully');
-        setTimeout(() => setSuccessMessage(''), 3000);
-      } else {
-        const data = await response.json();
-        setError(data.error || 'Failed to delete bucket');
-      }
-    } catch (error) {
-      setError('Failed to delete bucket');
-    }
-  };
-
-  const startEditBucket = async (bucket: ElectiveBucket) => {
-    setEditingBucket(bucket);
-    setBucketForm({
-      batch_id: bucket.batch_id,
-      bucket_name: bucket.bucket_name,
-      min_selection: bucket.min_selection,
-      max_selection: bucket.max_selection,
-      is_common_slot: bucket.is_common_slot
-    });
-    
-    // Fetch subjects for this bucket
-    try {
-      const userData = localStorage.getItem('user');
-      if (userData) {
-        const authToken = Buffer.from(userData).toString('base64');
-        const response = await fetch(`/api/admin/buckets/${bucket.id}`, {
-          headers: { 'Authorization': `Bearer ${authToken}` }
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setSelectedSubjectsForBucket(data.subject_ids || []);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching bucket subjects:', error);
-    }
-    
-    setShowBucketForm(true);
   };
 
   // Helper function to get max semesters for a course
@@ -1553,27 +1129,6 @@ export default function AdminDashboard() {
     return matchesSearch && matchesCourse && matchesDepartment;
   });
 
-  const filteredBuckets = buckets.filter(b => {
-    const matchesSearch = b.bucket_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (b.batches?.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (b.batches?.section || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (b.batches?.departments?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesCourse = bucketCourseFilter === 'all' || b.batches?.course_id === bucketCourseFilter;
-    const matchesSemester = bucketSemesterFilter === 'all' || b.batches?.semester === parseInt(bucketSemesterFilter);
-    const matchesDepartment = departmentFilter === 'all' || b.batches?.department_id === departmentFilter;
-    
-    return matchesSearch && matchesCourse && matchesSemester && matchesDepartment;
-  });
-
-  // Filter subjects for bucket creation based on bucket filters
-  const availableSubjectsForBucket = subjects.filter(s => {
-    const matchesCourse = !bucketSubjectFilter.course_id || s.course_id === bucketSubjectFilter.course_id;
-    const matchesDepartment = !bucketSubjectFilter.department_id || s.department_id === bucketSubjectFilter.department_id;
-    const matchesSemester = !bucketSubjectFilter.semester || s.semester === parseInt(bucketSubjectFilter.semester);
-    return matchesCourse && matchesDepartment && matchesSemester && s.is_active;
-  });
-
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -1596,8 +1151,8 @@ export default function AdminDashboard() {
         <div className="max-w-7xl mx-auto">
           <div className="mb-8 flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-              <p className="mt-2 text-gray-600">Manage departments and faculty members. Creator Faculty can access NEP Bucket Builder from their dashboard.</p>
+              <h1 className="text-3xl font-bold text-gray-900">Super Admin - Manage College Data</h1>
+              <p className="mt-2 text-gray-600">Manage departments, faculty, classrooms, batches, subjects, courses and students across all colleges.</p>
             </div>
 
             {/* College Selector - Only for Super Admin */}
@@ -1714,18 +1269,16 @@ export default function AdminDashboard() {
           <div className="mb-6">
             <div className="border-b border-gray-200">
               <nav className="-mb-px flex space-x-8">
-                {userRole !== 'super_admin' && (
-                  <button
-                    onClick={() => setActiveTab('departments')}
-                    className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                      activeTab === 'departments'
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    Departments ({departments.length})
-                  </button>
-                )}
+                <button
+                  onClick={() => setActiveTab('departments')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'departments'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Departments ({departments.length})
+                </button>
                 <button
                   onClick={() => setActiveTab('faculty')}
                   className={`py-2 px-1 border-b-2 font-medium text-sm ${
@@ -1734,94 +1287,78 @@ export default function AdminDashboard() {
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
                 >
-                  {userRole === 'super_admin' ? 'College Admins' : 'Faculty'} ({faculty.length})
+                  Faculty ({faculty.length})
                 </button>
-                {userRole !== 'super_admin' && (
-                  <>
-                    <button
-                      onClick={() => setActiveTab('classrooms')}
-                      className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                        activeTab === 'classrooms'
-                          ? 'border-blue-500 text-blue-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      }`}
-                    >
-                      Classrooms ({classrooms.length})
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('batches')}
-                      className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                        activeTab === 'batches'
-                          ? 'border-blue-500 text-blue-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      }`}
-                    >
-                      Batches ({batches.length})
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('buckets')}
-                      className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                        activeTab === 'buckets'
-                          ? 'border-blue-500 text-blue-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      }`}
-                    >
-                      Buckets ({buckets.length})
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('subjects')}
-                      className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                        activeTab === 'subjects'
-                          ? 'border-blue-500 text-blue-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      }`}
-                    >
-                      Subjects ({subjects.length})
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('courses')}
-                      className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                        activeTab === 'courses'
-                          ? 'border-blue-500 text-blue-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      }`}
-                    >
-                      Courses ({courses.length})
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('students')}
-                      className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                        activeTab === 'students'
-                          ? 'border-blue-500 text-blue-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      }`}
-                    >
-                      Students ({students.length})
-                    </button>
-                  </>
-                )}
+                <button
+                  onClick={() => setActiveTab('classrooms')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'classrooms'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Classrooms ({classrooms.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('batches')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'batches'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Batches ({batches.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('subjects')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'subjects'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Subjects ({subjects.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('courses')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'courses'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Courses ({courses.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('students')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'students'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Students ({students.length})
+                </button>
               </nav>
             </div>
           </div>
 
           {/* Search Bar */}
-          {userRole !== 'super_admin' || activeTab === 'faculty' ? (
-            <div className="mb-6">
-              <div className="relative max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder={`Search ${activeTab}...`}
-                  value={searchQuery}
+          <div className="mb-6">
+            <div className="relative max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+              <input
+                type="text"
+                placeholder={`Search ${activeTab}...`}
+                value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
           </div>
-          ) : null}
 
           {/* Departments Tab */}
-          {activeTab === 'departments' && userRole !== 'super_admin' && (
+          {activeTab === 'departments' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h2 className="text-xl font-semibold text-gray-900">Departments</h2>
@@ -1889,20 +1426,9 @@ export default function AdminDashboard() {
                         </button>
                         <button
                           type="submit"
-                          disabled={submittingDept}
-                          className="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                          className="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700"
                         >
-                          {submittingDept ? (
-                            <>
-                              <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                              <span>{editingDept ? 'Updating...' : 'Creating...'}</span>
-                            </>
-                          ) : (
-                            editingDept ? 'Update' : 'Create'
-                          )}
+                          {editingDept ? 'Update' : 'Create'}
                         </button>
                       </div>
                     </form>
@@ -2052,7 +1578,7 @@ export default function AdminDashboard() {
                             value={facultyForm.phone}
                             onChange={(e) => setFacultyForm({...facultyForm, phone: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                            aria-label="Faculty Phone Number"
+                            aria-label="Faculty Phone"
                           />
                         </div>
                         <div>
@@ -2143,20 +1669,9 @@ export default function AdminDashboard() {
                         </button>
                         <button
                           type="submit"
-                          disabled={submittingFaculty}
-                          className="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                          className="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700"
                         >
-                          {submittingFaculty ? (
-                            <>
-                              <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                              <span>{editingFaculty ? 'Updating...' : 'Creating...'}</span>
-                            </>
-                          ) : (
-                            editingFaculty ? 'Update' : 'Create'
-                          )}
+                          {editingFaculty ? 'Update' : 'Create'}
                         </button>
                       </div>
                     </form>
@@ -2231,7 +1746,7 @@ export default function AdminDashboard() {
           )}
 
           {/* Classrooms Tab */}
-          {activeTab === 'classrooms' && userRole !== 'super_admin' && (
+          {activeTab === 'classrooms' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-4">
@@ -2465,20 +1980,9 @@ export default function AdminDashboard() {
                         </button>
                         <button
                           type="submit"
-                          disabled={submittingClassroom}
-                          className="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                          className="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700"
                         >
-                          {submittingClassroom ? (
-                            <>
-                              <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                              <span>{editingClassroom ? 'Updating...' : 'Creating...'}</span>
-                            </>
-                          ) : (
-                            editingClassroom ? 'Update' : 'Create'
-                          )}
+                          {editingClassroom ? 'Update' : 'Create'}
                         </button>
                       </div>
                     </form>
@@ -2588,7 +2092,7 @@ export default function AdminDashboard() {
           )}
 
           {/* Batches Tab */}
-          {activeTab === 'batches' && userRole !== 'super_admin' && (
+          {activeTab === 'batches' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-4">
@@ -2607,176 +2111,10 @@ export default function AdminDashboard() {
                     ))}
                   </select>
                 </div>
-                <button
-                  onClick={() => setShowBatchForm(true)}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  Create Batch
-                </button>
-              </div>
-
-              {/* Create Batch Modal */}
-              {showBatchForm && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                  <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Create New Batch</h3>
-                    <form onSubmit={handleBatchCreate} className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Department *
-                          </label>
-                          <select
-                            required
-                            value={batchForm.department_id}
-                            onChange={(e) => setBatchForm({ ...batchForm, department_id: e.target.value })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value="">Select Department</option>
-                            {departments.map(dept => (
-                              <option key={dept.id} value={dept.id}>
-                                {dept.code} - {dept.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Course *
-                          </label>
-                          <select
-                            required
-                            value={batchForm.course_id}
-                            onChange={(e) => setBatchForm({ ...batchForm, course_id: e.target.value })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value="">Select Course</option>
-                            {courses.map(course => (
-                              <option key={course.id} value={course.id}>
-                                {course.code} - {course.title}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Current Semester *
-                          </label>
-                          <select
-                            required
-                            value={batchForm.semester}
-                            onChange={(e) => setBatchForm({ ...batchForm, semester: parseInt(e.target.value) })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
-                              <option key={sem} value={sem}>Semester {sem}</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Academic Year *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="2025-26"
-                            value={batchForm.academic_year}
-                            onChange={(e) => setBatchForm({ ...batchForm, academic_year: e.target.value })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Admission Year *
-                          </label>
-                          <input
-                            type="number"
-                            required
-                            min="2020"
-                            max="2030"
-                            value={batchForm.admission_year}
-                            onChange={(e) => setBatchForm({ ...batchForm, admission_year: parseInt(e.target.value) })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                          <p className="text-xs text-gray-500 mt-1">Year when students were admitted</p>
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Section *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="A"
-                            value={batchForm.section}
-                            onChange={(e) => setBatchForm({ ...batchForm, section: e.target.value })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Expected Strength *
-                          </label>
-                          <input
-                            type="number"
-                            required
-                            min="1"
-                            max="200"
-                            value={batchForm.expected_strength}
-                            onChange={(e) => setBatchForm({ ...batchForm, expected_strength: parseInt(e.target.value) })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Actual Strength
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            max="200"
-                            value={batchForm.actual_strength}
-                            onChange={(e) => setBatchForm({ ...batchForm, actual_strength: parseInt(e.target.value) })}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="bg-blue-50 p-3 rounded-lg">
-                        <p className="text-sm text-blue-900">
-                          <strong>Batch Name Preview:</strong> {batchForm.department_id && batchForm.semester ? 
-                            `${departments.find(d => d.id === batchForm.department_id)?.code || 'DEPT'} Batch ${batchForm.admission_year} - Sem ${batchForm.semester} (${batchForm.academic_year})` 
-                            : 'Select department and semester to preview name'}
-                        </p>
-                      </div>
-
-                      <div className="flex justify-end gap-2 pt-4">
-                        <button
-                          type="button"
-                          onClick={() => setShowBatchForm(false)}
-                          className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="submit"
-                          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                        >
-                          Create Batch
-                        </button>
-                      </div>
-                    </form>
-                  </div>
+                <div className="text-sm text-gray-600">
+                  <p>Batches are created automatically when you create NEP curriculum buckets</p>
                 </div>
-              )}
+              </div>
 
               {/* Batches List */}
               <div className="bg-white shadow overflow-hidden sm:rounded-md">
@@ -2867,394 +2205,8 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* Buckets Tab */}
-          {activeTab === 'buckets' && userRole !== 'super_admin' && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-4">
-                  <h2 className="text-xl font-semibold text-gray-900">Elective Buckets</h2>
-                  <select
-                    value={bucketCourseFilter}
-                    onChange={(e) => setBucketCourseFilter(e.target.value)}
-                    className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    aria-label="Filter Buckets by Course"
-                  >
-                    <option value="all">All Courses</option>
-                    {courses.map(course => (
-                      <option key={course.id} value={course.id}>
-                        {course.code} - {course.title}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={departmentFilter}
-                    onChange={(e) => setDepartmentFilter(e.target.value)}
-                    className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    aria-label="Filter Buckets by Department"
-                  >
-                    <option value="all">All Departments</option>
-                    {departments.map(dept => (
-                      <option key={dept.id} value={dept.id}>
-                        {dept.code} - {dept.name}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={bucketSemesterFilter}
-                    onChange={(e) => setBucketSemesterFilter(e.target.value)}
-                    className="px-3 py-1.5 border border-gray-300 rounded-md bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    aria-label="Filter Buckets by Semester"
-                  >
-                    <option value="all">All Semesters</option>
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
-                      <option key={sem} value={sem}>
-                        Semester {sem}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <button
-                  onClick={() => {
-                    setEditingBucket(null);
-                    setBucketForm({
-                      batch_id: '',
-                      bucket_name: '',
-                      min_selection: 1,
-                      max_selection: 1,
-                      is_common_slot: true
-                    });
-                    setSelectedSubjectsForBucket([]);
-                    setBucketSubjectFilter({ course_id: '', department_id: '', semester: '' });
-                    setShowBucketForm(true);
-                  }}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  Create Bucket
-                </button>
-              </div>
-
-              {/* Bucket Form Modal */}
-              {showBucketForm && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                  <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-screen overflow-y-auto">
-                    <h3 className="text-lg font-semibold mb-4">
-                      {editingBucket ? 'Edit Elective Bucket' : 'Create New Elective Bucket'}
-                    </h3>
-                    <form onSubmit={handleBucketSubmit}>
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Batch *</label>
-                          <select
-                            value={bucketForm.batch_id}
-                            onChange={(e) => setBucketForm({...bucketForm, batch_id: e.target.value})}
-                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                            required
-                            disabled={!!editingBucket}
-                            aria-label="Bucket Batch"
-                          >
-                            <option value="">Select Batch</option>
-                            {batches.map(batch => (
-                              <option key={batch.id} value={batch.id}>
-                                {batch.name} - {batch.section} (Sem {batch.semester}, {batch.academic_year})
-                              </option>
-                            ))}
-                          </select>
-                          {bucketForm.batch_id && batches.find(b => b.id === bucketForm.batch_id) && (
-                            <p className="mt-1 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
-                              ✓ Selected: {batches.find(b => b.id === bucketForm.batch_id)?.name} - 
-                              Sem {batches.find(b => b.id === bucketForm.batch_id)?.semester} 
-                              ({batches.find(b => b.id === bucketForm.batch_id)?.departments?.code})
-                            </p>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Bucket Name *</label>
-                          <input
-                            type="text"
-                            value={bucketForm.bucket_name}
-                            onChange={(e) => setBucketForm({...bucketForm, bucket_name: e.target.value})}
-                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                            placeholder="e.g., Open Elective 1"
-                            required
-                            aria-label="Bucket Name"
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700">Min Selection</label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={bucketForm.min_selection}
-                              onChange={(e) => setBucketForm({...bucketForm, min_selection: parseInt(e.target.value)})}
-                              className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                              aria-label="Minimum Subject Selection"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700">Max Selection</label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={bucketForm.max_selection}
-                              onChange={(e) => setBucketForm({...bucketForm, max_selection: parseInt(e.target.value)})}
-                              className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                              aria-label="Maximum Subject Selection"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="flex items-center">
-                          <input
-                            type="checkbox"
-                            id="is_common_slot"
-                            checked={bucketForm.is_common_slot}
-                            onChange={(e) => setBucketForm({...bucketForm, is_common_slot: e.target.checked})}
-                            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                          />
-                          <label htmlFor="is_common_slot" className="ml-2 block text-sm text-gray-900">
-                            Common Time Slot (All subjects scheduled together)
-                          </label>
-                        </div>
-
-                        {/* Subject Selection Section */}
-                        {bucketForm.batch_id ? (
-                          <div className="border-t pt-4 mt-4">
-                            <h4 className="text-sm font-semibold text-gray-900 mb-3">Add Subjects to Bucket</h4>
-                            
-                            {/* Subject Filters */}
-                            <div className="grid grid-cols-3 gap-2 mb-3">
-                            <select
-                              value={bucketSubjectFilter.course_id}
-                              onChange={(e) => setBucketSubjectFilter({...bucketSubjectFilter, course_id: e.target.value})}
-                              className="text-xs px-2 py-1.5 border border-gray-300 rounded bg-white text-gray-900"
-                              aria-label="Filter Bucket Subjects by Course"
-                            >
-                              <option value="">All Courses</option>
-                              {courses.map(course => (
-                                <option key={course.id} value={course.id}>{course.code}</option>
-                              ))}
-                            </select>
-                            <select
-                              value={bucketSubjectFilter.department_id}
-                              onChange={(e) => setBucketSubjectFilter({...bucketSubjectFilter, department_id: e.target.value})}
-                              className="text-xs px-2 py-1.5 border border-gray-300 rounded bg-white text-gray-900"
-                              aria-label="Filter Bucket Subjects by Department"
-                            >
-                              <option value="">All Depts</option>
-                              {departments.map(dept => (
-                                <option key={dept.id} value={dept.id}>{dept.code}</option>
-                              ))}
-                            </select>
-                            <select
-                              value={bucketSubjectFilter.semester}
-                              onChange={(e) => setBucketSubjectFilter({...bucketSubjectFilter, semester: e.target.value})}
-                              className="text-xs px-2 py-1.5 border border-gray-300 rounded bg-white text-gray-900"
-                              aria-label="Filter Bucket Subjects by Semester"
-                            >
-                              <option value="">All Sems</option>
-                              {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
-                                <option key={sem} value={sem}>Sem {sem}</option>
-                              ))}
-                            </select>
-                          </div>
-
-                          {/* Available Subjects */}
-                          <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-md">
-                            {availableSubjectsForBucket.length === 0 ? (
-                              <div className="p-3 text-xs text-gray-500 text-center">
-                                No subjects available with selected filters
-                              </div>
-                            ) : (
-                              availableSubjectsForBucket.map(subject => (
-                                <label
-                                  key={subject.id}
-                                  className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0"
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedSubjectsForBucket.includes(subject.id)}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        setSelectedSubjectsForBucket([...selectedSubjectsForBucket, subject.id]);
-                                      } else {
-                                        setSelectedSubjectsForBucket(selectedSubjectsForBucket.filter(id => id !== subject.id));
-                                      }
-                                    }}
-                                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                                  />
-                                  <span className="ml-2 text-sm text-gray-900">
-                                    <span className="font-medium">{subject.code}</span> - {subject.name}
-                                    <span className="text-xs text-gray-500 ml-1">
-                                      ({subject.subject_type}, {subject.credits_per_week} hrs)
-                                    </span>
-                                  </span>
-                                </label>
-                              ))
-                            )}
-                          </div>
-                          
-                          {selectedSubjectsForBucket.length > 0 && (
-                            <div className="mt-2 text-xs text-gray-600">
-                              {selectedSubjectsForBucket.length} subject(s) selected
-                            </div>
-                          )}
-                        </div>
-                        ) : (
-                          <div className="border-t pt-4 mt-4">
-                            <div className="text-center py-6 text-gray-500">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto mb-2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                              </svg>
-                              <p className="text-sm font-medium">Select a batch first</p>
-                              <p className="text-xs mt-1">Choose a batch above to add subjects to this bucket</p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="mt-6 flex justify-end space-x-3">
-                        <button
-                          type="button"
-                          onClick={() => setShowBucketForm(false)}
-                          className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="submit"
-                          disabled={submittingBucket}
-                          className="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                        >
-                          {submittingBucket ? (
-                            <>
-                              <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                              <span>{editingBucket ? 'Updating...' : 'Creating...'}</span>
-                            </>
-                          ) : (
-                            editingBucket ? 'Update' : 'Create'
-                          )}
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                </div>
-              )}
-
-              {/* Buckets List */}
-              <div className="bg-white shadow overflow-hidden sm:rounded-md">
-                <ul className="divide-y divide-gray-200">
-                  {filteredBuckets.length === 0 ? (
-                    <li className="px-4 py-8 text-center text-gray-500">
-                      {searchQuery ? `No buckets found matching "${searchQuery}"` : 'No buckets created yet. Create your first elective bucket!'}
-                    </li>
-                  ) : (
-                    filteredBuckets.map((bucket) => (
-                      <li key={bucket.id} className="px-4 py-4 hover:bg-gray-50">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <h3 className="text-lg font-semibold text-gray-900">{bucket.bucket_name}</h3>
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                {bucket.batches?.name} - {bucket.batches?.section}
-                              </span>
-                              {bucket.is_common_slot && (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                  Common Slot
-                                </span>
-                              )}
-                              {bucket.subjects && bucket.subjects.length > 0 && (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                                  {bucket.subjects.length} Subject{bucket.subjects.length !== 1 ? 's' : ''}
-                                </span>
-                              )}
-                            </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                              <div>
-                                <span className="text-gray-500">Department:</span>
-                                <p className="font-medium text-gray-900">
-                                  {bucket.batches?.departments?.code || 'N/A'}
-                                </p>
-                              </div>
-                              <div>
-                                <span className="text-gray-500">Course:</span>
-                                <p className="font-medium text-gray-900">{bucket.batches?.courses?.code || bucket.batches?.courses?.title || 'N/A'}</p>
-                              </div>
-                              <div>
-                                <span className="text-gray-500">Semester:</span>
-                                <p className="font-medium text-gray-900">{bucket.batches?.semester || 'N/A'}</p>
-                              </div>
-                              <div>
-                                <span className="text-gray-500">Selection:</span>
-                                <p className="font-medium text-gray-900">
-                                  {bucket.min_selection} - {bucket.max_selection} subjects
-                                </p>
-                              </div>
-                            </div>
-                            <div className="mt-2 text-xs text-gray-500">
-                              <span>Academic Year: {bucket.batches?.academic_year || 'N/A'}</span>
-                              <span className="mx-2">•</span>
-                              <span>Created: {new Date(bucket.created_at).toLocaleDateString()}</span>
-                              {bucket.subjects && bucket.subjects.length > 0 && (
-                                <>
-                                  <span className="mx-2">•</span>
-                                  <span className="text-purple-600 font-medium">
-                                    {bucket.subjects.length} subject(s) available for selection
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-2 ml-4">
-                            <button
-                              onClick={() => {
-                                // Navigate to student choices view for this bucket
-                                router.push(`/admin/bucket_creator/choices/${bucket.id}?name=${encodeURIComponent(bucket.bucket_name)}`);
-                              }}
-                              className="text-green-600 hover:text-green-900 p-2 rounded hover:bg-green-50"
-                              title="View student choices"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
-                                <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
-                              </svg>
-                            </button>
-                            <button
-                              onClick={() => startEditBucket(bucket)}
-                              className="text-blue-600 hover:text-blue-900 p-2 rounded hover:bg-blue-50"
-                              title="Edit bucket"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                              </svg>
-                            </button>
-                            <button
-                              onClick={() => handleBucketDelete(bucket.id)}
-                              className="text-red-600 hover:text-red-900 p-2 rounded hover:bg-red-50"
-                              title="Delete bucket"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                              </svg>
-                            </button>
-                          </div>
-                        </div>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </div>
-            </div>
-          )}
-
           {/* Subjects Tab */}
-          {activeTab === 'subjects' && userRole !== 'super_admin' && (
+          {activeTab === 'subjects' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-4">
@@ -3388,7 +2340,6 @@ export default function AdminDashboard() {
                             onChange={(e) => setSubjectForm({...subjectForm, name: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             placeholder="e.g., Data Structures"
-                            aria-label="Subject Name"
                           />
                         </div>
 
@@ -3519,20 +2470,9 @@ export default function AdminDashboard() {
                         </button>
                         <button
                           type="submit"
-                          disabled={submittingSubject}
-                          className="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                          className="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700"
                         >
-                          {submittingSubject ? (
-                            <>
-                              <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                              <span>{editingSubject ? 'Updating...' : 'Creating...'}</span>
-                            </>
-                          ) : (
-                            editingSubject ? 'Update' : 'Create'
-                          )}
+                          {editingSubject ? 'Update' : 'Create'}
                         </button>
                       </div>
                     </form>
@@ -3631,7 +2571,7 @@ export default function AdminDashboard() {
           )}
 
           {/* Courses Tab */}
-          {activeTab === 'courses' && userRole !== 'super_admin' && (
+          {activeTab === 'courses' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h2 className="text-xl font-semibold text-gray-900">Courses</h2>
@@ -3692,7 +2632,7 @@ export default function AdminDashboard() {
                             value={courseForm.nature_of_course}
                             onChange={(e) => setCourseForm({...courseForm, nature_of_course: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                            aria-label="Course Nature"
+                            aria-label="Nature of Course"
                           >
                             <option value="">Select Type</option>
                             <option value="UG">Undergraduate (UG)</option>
@@ -3740,20 +2680,9 @@ export default function AdminDashboard() {
                         </button>
                         <button
                           type="submit"
-                          disabled={submittingCourse}
-                          className="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                          className="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700"
                         >
-                          {submittingCourse ? (
-                            <>
-                              <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                              <span>{editingCourse ? 'Updating...' : 'Creating...'}</span>
-                            </>
-                          ) : (
-                            editingCourse ? 'Update' : 'Create'
-                          )}
+                          {editingCourse ? 'Update' : 'Create'}
                         </button>
                       </div>
                     </form>
@@ -3865,7 +2794,7 @@ export default function AdminDashboard() {
           )}
 
           {/* Students Tab */}
-          {activeTab === 'students' && userRole !== 'super_admin' && (
+          {activeTab === 'students' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-4">
@@ -3906,14 +2835,12 @@ export default function AdminDashboard() {
                       email: '',
                       student_id: '',
                       phone: '',
-                      password: '',
                       current_semester: 1,
                       admission_year: new Date().getFullYear(),
                       course_id: '',
                       department_id: '',
                       is_active: true
                     });
-                    setShowPassword(false);
                     setShowStudentForm(true);
                   }}
                   className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -3975,7 +2902,7 @@ export default function AdminDashboard() {
                             onChange={(e) => setStudentForm({...studentForm, student_id: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             placeholder="e.g., STU001"
-                            aria-label="Student ID Number"
+                            aria-label="Student ID"
                           />
                         </div>
 
@@ -3986,7 +2913,7 @@ export default function AdminDashboard() {
                             value={studentForm.phone}
                             onChange={(e) => setStudentForm({...studentForm, phone: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                            aria-label="Student Phone Number"
+                            aria-label="Student Phone"
                           />
                         </div>
 
@@ -4049,54 +2976,20 @@ export default function AdminDashboard() {
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">Department *</label>
+                          <label className="block text-sm font-medium text-gray-700">Department (Optional)</label>
                           <select
-                            required
                             value={studentForm.department_id}
                             onChange={(e) => setStudentForm({...studentForm, department_id: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Student Department"
                           >
-                            <option value="">Select Department *</option>
+                            <option value="">No Department</option>
                             {departments.map(dept => (
                               <option key={dept.id} value={dept.id}>
                                 {dept.code} - {dept.name}
                               </option>
                             ))}
                           </select>
-                        </div>
-
-                        <div className="col-span-2">
-                          <label className="block text-sm font-medium text-gray-700">
-                            Password {!editingStudent && '*'}
-                          </label>
-                          <div className="relative">
-                            <input
-                              type={showPassword ? "text" : "password"}
-                              required={!editingStudent}
-                              value={studentForm.password}
-                              onChange={(e) => setStudentForm({...studentForm, password: e.target.value})}
-                              placeholder={editingStudent ? 'Leave blank to keep current password' : 'Enter new password'}
-                              className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500 pr-10"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setShowPassword(!showPassword)}
-                              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none mt-0.5"
-                              tabIndex={-1}
-                            >
-                              {showPassword ? (
-                                <EyeOff className="h-5 w-5" />
-                              ) : (
-                                <Eye className="h-5 w-5" />
-                              )}
-                            </button>
-                          </div>
-                          {editingStudent && (
-                            <p className="mt-1 text-xs text-gray-500">
-                              💡 Leave blank to keep the current password, or enter a new password to change it
-                            </p>
-                          )}
                         </div>
 
                         <div className="flex items-center">
@@ -4123,20 +3016,9 @@ export default function AdminDashboard() {
                         </button>
                         <button
                           type="submit"
-                          disabled={submittingStudent}
-                          className="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                          className="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700"
                         >
-                          {submittingStudent ? (
-                            <>
-                              <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
-                              <span>{editingStudent ? 'Updating...' : 'Creating...'}</span>
-                            </>
-                          ) : (
-                            <>{editingStudent ? 'Update' : 'Create'} Student</>
-                          )}
+                          {editingStudent ? 'Update' : 'Create'} Student
                         </button>
                       </div>
                     </form>

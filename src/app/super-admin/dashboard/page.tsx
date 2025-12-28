@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
+import { Eye, EyeOff } from 'lucide-react';
 
 interface College {
   id: string;
@@ -32,9 +33,11 @@ interface CollegeAdmin {
   last_name: string;
   email: string;
   college_uid: string;
+  college_id: string;
   phone?: string;
   is_active: boolean;
   college: {
+    id: string;
     name: string;
     code: string;
   };
@@ -48,6 +51,7 @@ export default function SuperAdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   // College form state
   const [showCollegeForm, setShowCollegeForm] = useState(false);
@@ -103,19 +107,21 @@ export default function SuperAdminDashboard() {
     try {
       setLoading(true);
       
-      // Fetch colleges
-      const collegeResponse = await fetch('/api/super-admin/colleges');
-      if (collegeResponse.ok) {
-        const collegeData = await collegeResponse.json();
-        setColleges(collegeData.colleges || []);
-      }
+      // Fetch all data in parallel for faster loading
+      const [collegeResponse, adminResponse] = await Promise.all([
+        fetch('/api/super-admin/colleges'),
+        fetch('/api/super-admin/college-admins')
+      ]);
 
-      // Fetch college admins
-      const adminResponse = await fetch('/api/super-admin/college-admins');
-      if (adminResponse.ok) {
-        const adminData = await adminResponse.json();
-        setAdmins(adminData.admins || []);
-      }
+      // Process responses in parallel
+      const [collegeData, adminData] = await Promise.all([
+        collegeResponse.ok ? collegeResponse.json() : Promise.resolve({ colleges: [] }),
+        adminResponse.ok ? adminResponse.json() : Promise.resolve({ admins: [] })
+      ]);
+
+      // Update state
+      setColleges(collegeData.colleges || []);
+      setAdmins(adminData.admins || []);
 
     } catch (error: any) {
       setError('Failed to fetch data');
@@ -289,7 +295,7 @@ export default function SuperAdminDashboard() {
       last_name: admin.last_name,
       email: admin.email,
       phone: admin.phone || '',
-      college_id: '', // Will be shown as read-only
+      college_id: admin.college_id || admin.college?.id || '', // Fetch from database
       college_uid: admin.college_uid,
       password: '',
       is_active: admin.is_active
@@ -318,6 +324,29 @@ export default function SuperAdminDashboard() {
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900">Super Admin Dashboard</h1>
             <p className="mt-2 text-gray-600">Manage colleges and college administrators</p>
+          </div>
+
+          {/* Quick Navigation Cards */}
+          <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-6 rounded-lg shadow-lg">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold">Colleges</h3>
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+              </div>
+              <p className="text-purple-100 text-sm">Total: {colleges.length} college{colleges.length !== 1 ? 's' : ''}</p>
+            </div>
+
+            <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-6 rounded-lg shadow-lg">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold">Admins</h3>
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              </div>
+              <p className="text-green-100 text-sm">Total: {admins.length} college admin{admins.length !== 1 ? 's' : ''}</p>
+            </div>
           </div>
 
           {error && (
@@ -402,6 +431,7 @@ export default function SuperAdminDashboard() {
                             value={collegeForm.name}
                             onChange={(e) => setCollegeForm({...collegeForm, name: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="College Name"
                           />
                         </div>
                         <div>
@@ -412,6 +442,7 @@ export default function SuperAdminDashboard() {
                             value={collegeForm.code}
                             onChange={(e) => setCollegeForm({...collegeForm, code: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="College Code"
                           />
                         </div>
                         <div className="col-span-2">
@@ -421,6 +452,7 @@ export default function SuperAdminDashboard() {
                             onChange={(e) => setCollegeForm({...collegeForm, address: e.target.value})}
                             rows={2}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="College Address"
                           />
                         </div>
                         <div>
@@ -430,6 +462,7 @@ export default function SuperAdminDashboard() {
                             value={collegeForm.city}
                             onChange={(e) => setCollegeForm({...collegeForm, city: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="College City"
                           />
                         </div>
                         <div>
@@ -439,6 +472,7 @@ export default function SuperAdminDashboard() {
                             value={collegeForm.state}
                             onChange={(e) => setCollegeForm({...collegeForm, state: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="College State"
                           />
                         </div>
                         <div>
@@ -448,6 +482,7 @@ export default function SuperAdminDashboard() {
                             value={collegeForm.pincode}
                             onChange={(e) => setCollegeForm({...collegeForm, pincode: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="College Pincode"
                           />
                         </div>
                         <div>
@@ -457,6 +492,7 @@ export default function SuperAdminDashboard() {
                             value={collegeForm.phone}
                             onChange={(e) => setCollegeForm({...collegeForm, phone: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="College Phone"
                           />
                         </div>
                         <div>
@@ -466,6 +502,7 @@ export default function SuperAdminDashboard() {
                             value={collegeForm.email}
                             onChange={(e) => setCollegeForm({...collegeForm, email: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="College Email"
                           />
                         </div>
                         <div>
@@ -475,6 +512,7 @@ export default function SuperAdminDashboard() {
                             value={collegeForm.website}
                             onChange={(e) => setCollegeForm({...collegeForm, website: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="College Website"
                           />
                         </div>
                         <div>
@@ -484,6 +522,7 @@ export default function SuperAdminDashboard() {
                             value={collegeForm.academic_year}
                             onChange={(e) => setCollegeForm({...collegeForm, academic_year: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="College Academic Year"
                           />
                         </div>
                         <div>
@@ -492,6 +531,7 @@ export default function SuperAdminDashboard() {
                             value={collegeForm.semester_system}
                             onChange={(e) => setCollegeForm({...collegeForm, semester_system: e.target.value as any})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="College Semester System"
                           >
                             <option value="semester">Semester</option>
                             <option value="trimester">Trimester</option>
@@ -625,6 +665,7 @@ export default function SuperAdminDashboard() {
                             value={adminForm.first_name}
                             onChange={(e) => setAdminForm({...adminForm, first_name: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="Admin First Name"
                           />
                         </div>
                         <div>
@@ -635,6 +676,7 @@ export default function SuperAdminDashboard() {
                             value={adminForm.last_name}
                             onChange={(e) => setAdminForm({...adminForm, last_name: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="Admin Last Name"
                           />
                         </div>
                         <div>
@@ -645,6 +687,7 @@ export default function SuperAdminDashboard() {
                             value={adminForm.email}
                             onChange={(e) => setAdminForm({...adminForm, email: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="Admin Email"
                           />
                         </div>
                         <div>
@@ -654,6 +697,7 @@ export default function SuperAdminDashboard() {
                             value={adminForm.phone}
                             onChange={(e) => setAdminForm({...adminForm, phone: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="Admin Phone"
                           />
                         </div>
                         <div>
@@ -662,16 +706,19 @@ export default function SuperAdminDashboard() {
                             required
                             value={adminForm.college_id}
                             onChange={(e) => setAdminForm({...adminForm, college_id: e.target.value})}
-                            disabled={!!editingAdmin}
-                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 disabled:bg-gray-100"
+                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="Admin College"
                           >
                             <option value="">Select College</option>
-                            {colleges.filter(c => c.is_active).map((college) => (
+                            {colleges.map((college) => (
                               <option key={college.id} value={college.id}>
                                 {college.name} ({college.code})
                               </option>
                             ))}
                           </select>
+                          {editingAdmin && (
+                            <p className="mt-1 text-xs text-gray-500">Current college from database</p>
+                          )}
                         </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700">College UID *</label>
@@ -681,21 +728,41 @@ export default function SuperAdminDashboard() {
                             value={adminForm.college_uid}
                             onChange={(e) => setAdminForm({...adminForm, college_uid: e.target.value})}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            aria-label="Admin College UID"
                           />
                         </div>
-                        {!editingAdmin && (
-                          <div className="col-span-2">
-                            <label className="block text-sm font-medium text-gray-700">Password *</label>
+                        <div className="col-span-2">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Password {!editingAdmin && '*'}
+                          </label>
+                          <div className="relative">
                             <input
-                              type="password"
+                              type={showPassword ? "text" : "password"}
                               required={!editingAdmin}
                               value={adminForm.password}
                               onChange={(e) => setAdminForm({...adminForm, password: e.target.value})}
-                              placeholder={editingAdmin ? 'Leave blank to keep current password' : ''}
-                              className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                              placeholder={editingAdmin ? 'Leave blank to keep current password' : 'Enter new password'}
+                              className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 pr-10"
                             />
+                            <button
+                              type="button"
+                              onClick={() => setShowPassword(!showPassword)}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none mt-0.5"
+                              tabIndex={-1}
+                            >
+                              {showPassword ? (
+                                <EyeOff className="h-5 w-5" />
+                              ) : (
+                                <Eye className="h-5 w-5" />
+                              )}
+                            </button>
                           </div>
-                        )}
+                          {editingAdmin && (
+                            <p className="mt-1 text-xs text-gray-500">
+                              💡 Leave blank to keep the current password, or enter a new password to change it
+                            </p>
+                          )}
+                        </div>
                         <div className="flex items-center">
                           <input
                             type="checkbox"

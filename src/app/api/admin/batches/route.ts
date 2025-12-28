@@ -35,14 +35,14 @@ async function authenticateUser(request: NextRequest, requireAdmin = false) {
       return null;
     }
 
-    // For write operations, only allow admin/college_admin
-    if (requireAdmin && !['admin', 'college_admin'].includes(user.role)) {
+    // For write operations, only allow admin/college_admin/super_admin
+    if (requireAdmin && !['admin', 'college_admin', 'super_admin'].includes(user.role)) {
       return null;
     }
 
-    // For read operations, allow admin, college_admin, and faculty with creator/publisher types
+    // For read operations, allow admin, college_admin, super_admin, and faculty with creator/publisher types
     if (!requireAdmin) {
-      const allowedRoles = ['admin', 'college_admin'];
+      const allowedRoles = ['admin', 'college_admin', 'super_admin'];
       const allowedFacultyTypes = ['creator', 'publisher'];
       
       if (!allowedRoles.includes(user.role) && 
@@ -67,6 +67,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Get college_id from query parameter (for super_admin) or use user's college_id
+    const { searchParams } = new URL(request.url);
+    const queryCollegeId = searchParams.get('college_id');
+    
+    let targetCollegeId = user.college_id;
+    
+    // Super admin can view any college's batches
+    if (user.role === 'super_admin' && queryCollegeId) {
+      targetCollegeId = queryCollegeId;
+    }
+
     // Build query based on user role
     let query = supabase
       .from('batches')
@@ -80,13 +91,13 @@ export async function GET(request: NextRequest) {
       `)
       .eq('is_active', true);
 
-    // Filter by college for college admin and faculty
-    if (user.college_id) {
-      query = query.eq('college_id', user.college_id);
+    // Filter by college
+    if (targetCollegeId) {
+      query = query.eq('college_id', targetCollegeId);
     }
 
     // Filter by department for non-admin users
-    if (user.role !== 'admin' && user.role !== 'college_admin' && user.department_id) {
+    if (!['super_admin', 'admin', 'college_admin'].includes(user.role) && user.department_id) {
       query = query.eq('department_id', user.department_id);
     }
 

@@ -1342,7 +1342,7 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1504,49 +1504,45 @@ export default function StudentDashboard() {
     fetchDashboardData(parsedUser);
   }, [router]);
 
-  // Fetch NEP curriculum data when dashboard data is loaded
+  // Fetch NEP curriculum data when dashboard data is loaded - optimized dependencies
   useEffect(() => {
     if (user?.role === 'student' && dashboardData?.additionalData?.batch && !loadingBuckets && electiveBuckets.length === 0) {
       fetchNepCurriculumData(user);
     }
-  }, [user, dashboardData, loadingBuckets, electiveBuckets.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, dashboardData?.additionalData?.batchId]);
 
-  const fetchDashboardData = async (user: any) => {
+  const fetchDashboardData = useCallback(async (user: any) => {
     try {
       setLoading(true);
       
-      // Fetch user profile and events
-      const response = await fetch(
-        `/api/student/dashboard?userId=${user.id}&role=${user.role}`
-      );
+      // Fetch dashboard data first
+      const dashboardResponse = await fetch(`/api/student/dashboard?userId=${user.id}&role=${user.role}`);
       
-      if (!response.ok) {
+      if (!dashboardResponse.ok) {
         throw new Error('Failed to fetch dashboard data');
       }
       
-      const data = await response.json();
-      console.log('📥 Dashboard data received:', data);
+      const data = await dashboardResponse.json();
       setDashboardData(data);
 
-      // Update localStorage with complete user data including course info
+      // Update localStorage and user state
+      let updatedUser = user;
       if (data.user) {
-        const updatedUser = {
+        updatedUser = {
           ...user,
           college_uid: data.user.college_uid,
           current_semester: data.user.current_semester || data.additionalData?.batch?.semester,
           course: data.user.course,
           course_id: data.user.course_id
         };
-        console.log('🔄 Updating user with course_id:', updatedUser.course_id);
         localStorage.setItem('user', JSON.stringify(updatedUser));
         setUser(updatedUser);
-      } else {
-        console.warn('⚠️ No user data in API response, keeping original user');
       }
 
-      // Fetch published timetables for the course
+      // Fetch timetables with updated course_id
       const timetablesResponse = await fetch(
-        `/api/student/published-timetables?courseId=${user.course_id}${user.role === 'student' && data.additionalData.batch ? `&semester=${data.additionalData.batch.semester}` : ''}`
+        `/api/student/published-timetables?courseId=${updatedUser.course_id}${updatedUser.role === 'student' && data.additionalData?.batch ? `&semester=${data.additionalData.batch.semester}` : ''}`
       );
       
       if (timetablesResponse.ok) {
@@ -1554,8 +1550,8 @@ export default function StudentDashboard() {
         setPublishedTimetables(timetablesData.timetables || []);
         setAvailableBatches(timetablesData.batches || []);
         
-        // Auto-select student's own timetable or first available
-        if (user.role === 'student' && data.additionalData.batchId) {
+        // Auto-select timetable
+        if (updatedUser.role === 'student' && data.additionalData?.batchId) {
           const studentTimetable = timetablesData.timetables.find(
             (tt: PublishedTimetable) => tt.batches?.id === data.additionalData.batchId
           );
@@ -1573,9 +1569,9 @@ export default function StudentDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchTimetableClasses = async (timetableId: string) => {
+  const fetchTimetableClasses = useCallback(async (timetableId: string) => {
     try {
       setLoadingTimetable(true);
       const response = await fetch(
@@ -1594,12 +1590,12 @@ export default function StudentDashboard() {
     } finally {
       setLoadingTimetable(false);
     }
-  };
+  }, []);
 
-  const handleTimetableChange = (timetable: PublishedTimetable) => {
+  const handleTimetableChange = useCallback((timetable: PublishedTimetable) => {
     setSelectedTimetable(timetable);
     fetchTimetableClasses(timetable.id);
-  };
+  }, [fetchTimetableClasses]);
 
   // NEP Curriculum Functions
   const fetchNepCurriculumData = async (user: any) => {
@@ -1768,16 +1764,17 @@ export default function StudentDashboard() {
     }
   };
 
-  const getClassForSlot = (day: string, timeSlot: string): TimetableClass | undefined => {
+  // Memoized helper functions for better performance
+  const getClassForSlot = useCallback((day: string, timeSlot: string): TimetableClass | undefined => {
     const [startTime] = timeSlot.split('-');
     const normalizeTime = (time: string) => time.substring(0, 5);
     
     return timetableClasses.find(
       cls => cls.day === day && normalizeTime(cls.startTime) === normalizeTime(startTime)
     );
-  };
+  }, [timetableClasses]);
 
-  const getClassColor = (subjectType: string, index: number) => {
+  const getClassColor = useCallback((subjectType: string, index: number) => {
     const colors = [
       'bg-blue-100 text-blue-800',
       'bg-green-100 text-green-800',
@@ -1794,7 +1791,26 @@ export default function StudentDashboard() {
     }
     
     return colors[index % colors.length];
-  };
+  }, []);
+
+  const getEventTypeColor = useCallback((type: string) => {
+    switch (type.toLowerCase()) {
+      case 'workshop': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'event': return 'bg-green-100 text-green-800 border-green-200';
+      case 'seminar': return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'academic': return 'bg-orange-100 text-orange-800 border-orange-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  }, []);
+
+  // Memoize expensive calculations
+  const totalSelectedSubjects = useMemo(() => {
+    return Object.values(selectedSubjects).reduce((acc, arr) => acc + arr.length, 0);
+  }, [selectedSubjects]);
+
+  const totalClassesCount = useMemo(() => {
+    return timetableClasses.filter(c => !c.isBreak && !c.isLunch).length;
+  }, [timetableClasses]);
 
   // Export to PDF function
   const exportToPDF = () => {
@@ -1904,16 +1920,6 @@ export default function StudentDashboard() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-  };
-
-  const getEventTypeColor = (type: string) => {
-    switch (type.toLowerCase()) {
-      case 'workshop': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'event': return 'bg-green-100 text-green-800 border-green-200';
-      case 'seminar': return 'bg-purple-100 text-purple-800 border-purple-200';
-      case 'academic': return 'bg-orange-100 text-orange-800 border-orange-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
   };
 
   if (!user || loading) {
@@ -2096,7 +2102,7 @@ export default function StudentDashboard() {
                   NEP 2020 Curriculum Selection
                 </h3>
                 <p className="text-sm text-indigo-700 dark:text-indigo-300 mb-4">
-                  Choose your MAJOR and MINOR subjects for Semester {dashboardData.additionalData.batch.semester}
+                  Choose your MAJOR and MINOR subjects for Semester {dashboardData && dashboardData.additionalData.batch.semester}
                 </p>
                 <div className="flex items-center gap-4 text-sm text-indigo-600 dark:text-indigo-400 mb-4">
                   <div className="flex items-center gap-1">
@@ -2221,6 +2227,7 @@ export default function StudentDashboard() {
               {publishedTimetables.length > 1 && (
                 <div className="relative">
                   <select
+                    aria-label="Select batch timetable"
                     value={selectedTimetable?.id || ''}
                     onChange={(e) => {
                       const selected = publishedTimetables.find(tt => tt.id === e.target.value);
@@ -2261,7 +2268,7 @@ export default function StudentDashboard() {
                     Excel
                   </Button>
                   <Badge variant="secondary">
-                    {timetableClasses.filter(c => !c.isBreak && !c.isLunch).length} classes
+                    {totalClassesCount} classes
                   </Badge>
                 </>
               )}
@@ -2476,7 +2483,7 @@ export default function StudentDashboard() {
                       <div className="flex-1">
                         <h4 className="font-semibold text-blue-900">Subject Selection Summary</h4>
                         <p className="text-sm text-blue-700 mt-1">
-                          You have {Object.values(selectedSubjects).reduce((acc, arr) => acc + arr.length, 0)} subjects selected from {electiveBuckets.length} available buckets
+                          You have {totalSelectedSubjects} subjects selected from {electiveBuckets.length} available buckets
                         </p>
                         <div className="flex flex-wrap gap-2 mt-2">
                           {electiveBuckets.map(bucket => {
@@ -2496,7 +2503,7 @@ export default function StudentDashboard() {
                 {showNepCurriculum && (
                   <div className="space-y-6">
                     {/* Display Selected Courses Summary */}
-                    {Object.values(selectedSubjects).reduce((acc, arr) => acc + arr.length, 0) > 0 && (
+                    {totalSelectedSubjects > 0 && (
                       <Card className="border-2 border-green-500 bg-gradient-to-r from-green-50 to-emerald-50">
                         <CardHeader className="pb-3">
                           <div className="flex items-center justify-between">

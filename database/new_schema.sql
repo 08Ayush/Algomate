@@ -273,16 +273,36 @@ CREATE TABLE subjects (
 
 -- NEP 2020: Elective Buckets Table
 -- This holds the "Pools" (e.g., "Sem 1 Humanities Major Pool")
+-- Supports both batch-based (old) and college-based (new NEP) approaches
 CREATE TABLE elective_buckets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    batch_id UUID NOT NULL REFERENCES batches(id) ON DELETE CASCADE,
+    batch_id UUID REFERENCES batches(id) ON DELETE CASCADE, -- Made nullable for college-based approach
     bucket_name VARCHAR(255) NOT NULL,
     min_selection INTEGER DEFAULT 1,
     max_selection INTEGER DEFAULT 1,
     is_common_slot BOOLEAN DEFAULT TRUE, -- TRUE = All subjects in this bucket run simultaneously
+    -- NEP 2020 college-based fields (added for direct college-course-semester lookup)
+    college_id UUID REFERENCES colleges(id) ON DELETE CASCADE,
+    course VARCHAR(50), -- Course code (e.g., 'B.Tech', 'B.Ed', 'ITEP')
+    semester INTEGER CHECK (semester BETWEEN 1 AND 8),
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    -- Ensure either batch_id OR (college_id + course + semester) is provided
+    CONSTRAINT elective_buckets_reference_check CHECK (
+        (batch_id IS NOT NULL) OR 
+        (college_id IS NOT NULL AND course IS NOT NULL AND semester IS NOT NULL)
+    ),
+    -- Unique constraint for college-course-semester-bucket_name combination
+    CONSTRAINT unique_college_course_semester_bucket UNIQUE (college_id, course, semester, bucket_name)
 );
+
+-- Indexes for elective_buckets
+CREATE INDEX IF NOT EXISTS idx_elective_buckets_college_course_semester 
+ON elective_buckets(college_id, course, semester);
+
+CREATE INDEX IF NOT EXISTS idx_elective_buckets_batch 
+ON elective_buckets(batch_id) 
+WHERE batch_id IS NOT NULL;
 
 CREATE TABLE batches (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -292,6 +312,8 @@ CREATE TABLE batches (
     course_id UUID REFERENCES courses(id) ON DELETE CASCADE,
     semester INT NOT NULL CHECK (semester BETWEEN 1 AND 8),
     academic_year VARCHAR(10) NOT NULL,
+    admission_year INTEGER,
+    batch_year VARCHAR(20),
     expected_strength INT DEFAULT 60 CHECK (expected_strength BETWEEN 1 AND 200),
     actual_strength INT DEFAULT 0 CHECK (actual_strength >= 0),
     max_hours_per_day INT DEFAULT 6 CHECK (max_hours_per_day BETWEEN 1 AND 10),
@@ -316,6 +338,11 @@ CREATE TABLE batches (
         (semester_start_date < semester_end_date)
     )
 );
+
+COMMENT ON COLUMN batches.admission_year IS 'Year when students were admitted (e.g., 2025)';
+COMMENT ON COLUMN batches.batch_year IS 'Batch cohort year (e.g., ''2025'' for Batch 2025)';
+COMMENT ON COLUMN batches.semester IS 'Current semester the batch is studying (1-8)';
+COMMENT ON COLUMN batches.academic_year IS 'Current academic year (e.g., ''2025-26'')';
 
 -- Add unique constraint for batches with named constraint
 DO $$ 
@@ -656,6 +683,8 @@ CREATE INDEX idx_batches_college_dept_semester ON batches(college_id, department
 CREATE INDEX idx_batches_access_control ON batches(college_id, department_id, semester, section);
 CREATE INDEX IF NOT EXISTS idx_batches_course_id ON batches(course_id);
 CREATE INDEX IF NOT EXISTS idx_batches_semester_validity ON batches(semester_start_date, semester_end_date, is_current_semester) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_batches_admission_year ON batches(admission_year);
+CREATE INDEX IF NOT EXISTS idx_batches_batch_year ON batches(batch_year);
 CREATE INDEX idx_time_slots_college_algorithm ON time_slots(college_id, day, start_time, is_active) WHERE NOT is_break_time;
 CREATE INDEX idx_faculty_qualifications_lookup ON faculty_qualified_subjects(faculty_id, subject_id, proficiency_level);
 CREATE INDEX idx_faculty_availability_lookup ON faculty_availability(faculty_id, time_slot_id, is_available);

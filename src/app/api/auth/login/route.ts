@@ -118,14 +118,30 @@ export async function POST(request: NextRequest) {
       console.warn('⚠️  Session context error:', sessionError);
     }
 
-    // Remove password from response
+    // Fetch department and college data in parallel (only after auth succeeds)
+    const [deptResult, collegeResult] = await Promise.all([
+      userData.department_id 
+        ? supabaseAdmin.from('departments').select('id, name, code').eq('id', userData.department_id).single()
+        : Promise.resolve({ data: null, error: null }),
+      userData.college_id
+        ? supabaseAdmin.from('colleges').select('id, name, code').eq('id', userData.college_id).single()
+        : Promise.resolve({ data: null, error: null })
+    ]);
+
+    // Remove password from response and add department/college data
     const { password_hash: _, ...userWithoutPassword } = userData;
+
+    const enrichedUserData = {
+      ...userWithoutPassword,
+      department: deptResult.data,
+      college: collegeResult.data
+    };
 
     console.log(`⚡ Total login time: ${Date.now() - startTime}ms`);
 
     return NextResponse.json({
       message: 'Login successful',
-      userData: userWithoutPassword
+      userData: enrichedUserData
     });
 
   } catch (error: any) {

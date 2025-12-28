@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Eye } from 'lucide-react';
 import CurriculumBuilder from '@/components/nep/CurriculumBuilder';
 import MockStudentGenerator from '@/components/nep/MockStudentGenerator';
 import { createClient } from '@/lib/supabase/client';
@@ -56,7 +56,8 @@ export default function NEPCurriculumPage() {
         .from('courses')
         .select('id, title, code, nature_of_course, intake, duration_years, college_id')
         .eq('college_id', collegeId)
-        .order('code');
+        .order('code')
+        .returns<Course[]>();
 
       if (error) {
         console.error('Error fetching courses:', error);
@@ -64,9 +65,9 @@ export default function NEPCurriculumPage() {
       }
 
       if (data && data.length > 0) {
-        setCourses(data as Course[]);
+        setCourses(data);
         // Set first course as default
-        setSelectedCourse(data[0].id as string);
+        setSelectedCourse(data[0].id);
       }
     } catch (error) {
       console.error('Error fetching courses:', error);
@@ -137,13 +138,22 @@ export default function NEPCurriculumPage() {
                 <div>
                   <h1 className="text-3xl font-bold text-gray-900">NEP 2020 Bucket Builder</h1>
                   <p className="text-gray-600 mt-1">
-                    Create elective buckets and assign subjects for Choice-Based Credit System
+                    Create elective bucket structures. Creator Faculty will add subjects from their departments.
                   </p>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm text-gray-500">Logged in as</p>
-                  <p className="font-semibold text-gray-900">{user.first_name} {user.last_name}</p>
-                  <p className="text-xs text-blue-600">College Admin</p>
+                <div className="flex flex-col items-end gap-2">
+                  <button
+                    onClick={() => router.push('/admin/bucket_creator/all')}
+                    className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                  >
+                    <Eye className="w-4 h-4" />
+                    View All Buckets
+                  </button>
+                  <div className="text-right">
+                    <p className="text-sm text-gray-500">Logged in as</p>
+                    <p className="font-semibold text-gray-900">{user.first_name} {user.last_name}</p>
+                    <p className="text-xs text-blue-600">College Admin</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -151,7 +161,7 @@ export default function NEPCurriculumPage() {
 
           {/* Course and Semester Selector */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">"
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Select Course / Program
@@ -203,7 +213,7 @@ export default function NEPCurriculumPage() {
           </div>
 
           {/* Curriculum Builder */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200\">"
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200">
             <CurriculumBuilder
               collegeId={user.college_id}
               course={selectedCourse}
@@ -211,24 +221,39 @@ export default function NEPCurriculumPage() {
             />
           </div>
 
+          {/* Workflow Info Banner */}
+          <div className="mt-6 bg-yellow-50 border border-yellow-300 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">🔄</span>
+              <div>
+                <h4 className="font-semibold text-yellow-900">Split Responsibility Workflow</h4>
+                <p className="text-sm text-yellow-800 mt-1">
+                  <strong>Admin</strong> creates bucket structure (name, selection limits, common slot) → 
+                  <strong> Creator Faculty</strong> adds subjects from their department to these buckets.
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* Help Section */}
           <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-6">
             <h3 className="font-bold text-blue-900 mb-3 text-lg">📚 How to use the NEP Bucket Builder:</h3>
           <ol className="list-decimal list-inside space-y-2 text-blue-800">
-            <li><strong>Select Course & Semester:</strong> Choose the program (ITEP/B.Ed/M.Ed) and semester from the dropdowns above</li>
-            <li><strong>Create Elective Buckets:</strong> Enter a bucket name (e.g., "Major Pool", "Minor Pool") and click "Create Bucket" - saves immediately!</li>
-            <li><strong>Drag & Drop Subjects:</strong> Drag subjects from the available list on the left into the appropriate bucket on the right - auto-saved!</li>
-            <li><strong>Configure Common Time Slot:</strong> Toggle this option if all subjects in the bucket should run simultaneously - updates instantly!</li>
-            <li><strong>Set Selection Limits:</strong> Define minimum and maximum number of subjects students can choose - saved automatically!</li>
-            <li><strong>Delete Buckets:</strong> Click the "Delete" button on any bucket to permanently remove it and return subjects to available pool</li>
+            <li><strong>Select Course & Semester:</strong> Choose the program and semester from the dropdowns above</li>
+            <li><strong>Create Elective Buckets:</strong> Enter a bucket name (e.g., "SEM 5 Major", "SEM 5 Minor", "Open Elective") and click "Create Bucket"</li>
+            <li><strong>Configure Common Time Slot:</strong> Toggle this option if all subjects in the bucket should run simultaneously</li>
+            <li><strong>Set Selection Limits:</strong> Define minimum and maximum number of subjects students can choose</li>
+            <li><strong>Delete Buckets:</strong> Click the "Delete" button on any bucket to permanently remove it</li>
+            <li><strong>Subject Assignment:</strong> Creator Faculty from each department will add their subjects to these buckets</li>
           </ol>
           <div className="mt-4 p-4 bg-white rounded-lg border border-blue-300">
             <h4 className="font-semibold text-blue-900 mb-2">📌 Important Notes:</h4>
             <ul className="list-disc list-inside space-y-1 text-sm text-blue-700">
               <li><strong>✓ Auto-Save:</strong> All changes (create, update, delete) are saved immediately to the database</li>
-              <li>Subjects are filtered based on your college, selected course, and semester</li>
-              <li>Only College Admins can access this page</li>
-              <li>Changes are specific to the selected course and semester combination</li>
+              <li><strong>✓ Split Responsibility:</strong> Admin creates buckets → Creator Faculty adds subjects</li>
+              <li>Buckets are mapped to batches based on course, department, and semester</li>
+              <li>Only College Admins can create/modify bucket structure</li>
+              <li>Creator Faculty can only add subjects to existing buckets for their department</li>
               <li>Use this to implement NEP 2020 Choice-Based Credit System (CBCS)</li>
               <li>Deleted buckets cannot be recovered - confirm before deleting!</li>
             </ul>
