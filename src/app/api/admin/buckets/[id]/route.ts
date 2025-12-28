@@ -78,9 +78,10 @@ export async function PUT(
           semester,
           section,
           academic_year,
-          course,
+          course_id,
           department_id,
-          departments:departments (id, name, code)
+          departments:departments (id, name, code),
+          courses:courses (id, title, code)
         )
       `)
       .single();

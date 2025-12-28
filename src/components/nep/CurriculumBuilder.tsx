@@ -1714,140 +1714,139 @@ export default function CurriculumBuilder({
     );
   }
 
-  const activeSubject = availableSubjects.find((s) => s.id === activeId);
-
+  // Admin-only bucket creation UI (no subject assignment)
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-    >
-      <div className="grid grid-cols-3 gap-6 p-6">
-        {/* Left: Available Subjects */}
-        <div className="col-span-1">
-          <h2 className="text-2xl font-bold mb-4">Available Subjects</h2>
-          
-          {/* Credit Filter Buttons */}
-          <div className="mb-4">
-            <p className="text-sm font-medium text-gray-700 mb-2">Filter by Credits:</p>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setSelectedCredits(null)}
-                className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
-                  selectedCredits === null
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                All ({availableSubjects.length})
-              </button>
-              {uniqueCredits.map((credit) => {
-                const count = availableSubjects.filter(s => s.credit_value === credit).length;
-                return (
-                  <button
-                    key={credit}
-                    onClick={() => setSelectedCredits(credit)}
-                    className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
-                      selectedCredits === credit
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                  >
-                    {credit} Credits ({count})
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          
-          <div className="bg-white border border-gray-200 rounded-lg p-4 max-h-[600px] overflow-y-auto">
-            <SortableContext items={filteredSubjects.map(s => s.id)} strategy={verticalListSortingStrategy}>
-              {filteredSubjects.map((subject) => (
-                <DraggableSubject key={subject.id} subject={subject} />
-              ))}
-            </SortableContext>
-            {filteredSubjects.length === 0 && (
-              <p className="text-center text-gray-400 py-8">
-                {selectedCredits !== null 
-                  ? `No subjects with ${selectedCredits} credits`
-                  : 'No available subjects'
-                }
-              </p>
-            )}
+    <div className="p-6">
+      {/* Bucket Creation Section */}
+      <div className="mb-6">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-2xl font-bold text-gray-900">Elective Buckets</h2>
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <span className="bg-green-50 border border-green-200 px-3 py-1.5 rounded-md flex items-center gap-1">
+              <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+              Auto-save enabled
+            </span>
           </div>
         </div>
 
-        {/* Right: Buckets */}
-        <div className="col-span-2">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold">Elective Buckets</h2>
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <span className="bg-green-50 border border-green-200 px-3 py-1.5 rounded-md">
-                ✓ Auto-save enabled
-              </span>
-            </div>
+        {/* Create New Bucket Form */}
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-5 mb-6">
+          <h3 className="text-lg font-semibold text-blue-900 mb-3">Create New Elective Bucket</h3>
+          <div className="flex gap-3">
+            <input
+              type="text"
+              value={newBucketName}
+              onChange={(e) => setNewBucketName(e.target.value)}
+              placeholder="e.g., Sem 1 Major Elective, Sem 3 Open Elective..."
+              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+            <button
+              onClick={handleCreateBucket}
+              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium whitespace-nowrap flex items-center gap-2"
+            >
+              <span className="text-lg">+</span> Create Bucket
+            </button>
           </div>
-
-          <div className="mb-4 space-y-2">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newBucketName}
-                onChange={(e) => setNewBucketName(e.target.value)}
-                placeholder="New bucket name (e.g., Sem 1 Elective Pool)"
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
-              />
-              <button
-                onClick={handleCreateBucket}
-                className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 whitespace-nowrap"
-              >
-                Create Bucket
-              </button>
-            </div>
-            <p className="text-xs text-gray-600 px-1">
-              Create a bucket to organize elective subjects
-            </p>
-          </div>
-
-          <div className="max-h-[600px] overflow-y-auto">
-            {buckets.map((bucket) => (
-              <DroppableBucket
-                key={bucket.id}
-                bucket={bucket}
-                onRemoveSubject={handleRemoveSubject}
-                onToggleCommonSlot={handleToggleCommonSlot}
-                onUpdateSelection={handleUpdateSelection}
-                onDeleteBucket={handleDeleteBucket}
-              />
-            ))}
-            {buckets.length === 0 && (
-              <div className="text-center text-gray-400 py-12 border-2 border-dashed border-gray-300 rounded-lg">
-                Create a bucket to get started
-              </div>
-            )}
-          </div>
+          <p className="text-sm text-blue-700 mt-2">
+            💡 Create bucket structure here. Creator Faculty will add subjects from their department.
+          </p>
         </div>
       </div>
 
-      <DragOverlay>
-        {activeSubject ? (
-          <div className="bg-white border-2 border-blue-500 rounded-lg p-3 shadow-2xl opacity-90 transform rotate-2">
-            <div className="flex justify-between items-start">
-              <div className="flex-1">
-                <p className="font-bold text-sm text-gray-900">{activeSubject.name}</p>
-                <p className="text-xs text-gray-500 mt-1">{activeSubject.code}</p>
-              </div>
-              <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded ml-2 whitespace-nowrap">
-                {activeSubject.credit_value} credits
-              </span>
-            </div>
-            <div className="mt-2 text-xs text-gray-500">
-              L: {activeSubject.lecture_hours} | T: {activeSubject.tutorial_hours} | P: {activeSubject.practical_hours}
-            </div>
+      {/* Existing Buckets List */}
+      <div className="space-y-4">
+        {buckets.length === 0 ? (
+          <div className="text-center py-16 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50">
+            <div className="text-gray-400 text-6xl mb-4">📦</div>
+            <h3 className="text-xl font-medium text-gray-600 mb-2">No Buckets Created Yet</h3>
+            <p className="text-gray-500 max-w-md mx-auto">
+              Create your first elective bucket above. Creator Faculty will then add subjects to these buckets.
+            </p>
           </div>
-        ) : null}
-      </DragOverlay>
-    </DndContext>
+        ) : (
+          buckets.map((bucket) => (
+            <div
+              key={bucket.id}
+              className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow"
+            >
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">{bucket.bucket_name}</h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {bucket.subjects.length} subjects assigned • Bucket ID: {bucket.id.slice(0, 8)}...
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleDeleteBucket(bucket.id)}
+                  className="flex items-center gap-2 px-4 py-2 text-red-600 hover:text-white hover:bg-red-600 border border-red-300 rounded-lg text-sm font-medium transition-colors"
+                  title="Delete this bucket"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <label className="flex items-center space-x-3 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={bucket.is_common_slot}
+                      onChange={() => handleToggleCommonSlot(bucket.id)}
+                      className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="font-medium text-gray-700">Common Time Slot</span>
+                  </label>
+                  <p className="text-xs text-gray-500 mt-1 ml-8">
+                    All subjects in this bucket run at the same time
+                  </p>
+                </div>
+                <div className="flex gap-4">
+                  <div>
+                    <label className="text-xs font-medium text-gray-600">Min Selection</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={bucket.min_selection}
+                      onChange={(e) => handleUpdateSelection(bucket.id, parseInt(e.target.value) || 1, bucket.max_selection)}
+                      className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-center mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600">Max Selection</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={bucket.max_selection}
+                      onChange={(e) => handleUpdateSelection(bucket.id, bucket.min_selection, parseInt(e.target.value) || 1)}
+                      className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-center mt-1"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Show assigned subjects (read-only) */}
+              {bucket.subjects.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">
+                    Assigned Subjects ({bucket.subjects.length})
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {bucket.subjects.map((subject) => (
+                      <span
+                        key={subject.id}
+                        className="inline-flex items-center px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
+                      >
+                        {subject.code} - {subject.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
   );
 }

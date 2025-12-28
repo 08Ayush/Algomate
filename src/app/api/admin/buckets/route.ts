@@ -30,10 +30,11 @@ export async function GET(request: NextRequest) {
           semester,
           section,
           academic_year,
-          course,
+          course_id,
           department_id,
           college_id,
-          departments:departments (id, name, code)
+          departments:departments (id, name, code),
+          courses:courses (id, title, code)
         ),
         subjects:subjects!subjects_course_group_id_fkey (id)
       `)
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
     let filteredBuckets = buckets || [];
 
     if (courseId) {
-      filteredBuckets = filteredBuckets.filter(b => b.batches?.course === courseId);
+      filteredBuckets = filteredBuckets.filter(b => b.batches?.course_id === courseId);
     }
 
     if (departmentId) {
@@ -108,7 +109,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create the bucket
+    // Fetch batch info to get college_id, course, and semester
+    const { data: batchInfo, error: batchError } = await supabaseAdmin
+      .from('batches')
+      .select(`
+        id,
+        college_id,
+        semester,
+        course_id,
+        courses:courses (code, title)
+      `)
+      .eq('id', batch_id)
+      .single();
+
+    if (batchError || !batchInfo) {
+      console.error('Error fetching batch info:', batchError);
+      return NextResponse.json({ error: 'Invalid batch ID' }, { status: 400 });
+    }
+
+    // Get course code from the batch's course
+    const courseCode = (batchInfo.courses as any)?.code || (batchInfo.courses as any)?.title || 'Unknown';
+
+    // Create the bucket with all required fields
     const { data: bucket, error } = await supabaseAdmin
       .from('elective_buckets')
       .insert({
@@ -116,7 +138,11 @@ export async function POST(request: NextRequest) {
         bucket_name,
         min_selection,
         max_selection,
-        is_common_slot
+        is_common_slot,
+        // Always populate these fields to avoid NULL values
+        college_id: batchInfo.college_id,
+        course: courseCode,
+        semester: batchInfo.semester,
       })
       .select(`
         *,
@@ -126,9 +152,10 @@ export async function POST(request: NextRequest) {
           semester,
           section,
           academic_year,
-          course,
+          course_id,
           department_id,
-          departments:departments (id, name, code)
+          departments:departments (id, name, code),
+          courses:courses (id, title, code)
         )
       `)
       .single();

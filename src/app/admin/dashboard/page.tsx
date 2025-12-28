@@ -68,7 +68,7 @@ interface Batch {
   name: string;
   college_id: string;
   department_id: string;
-  course?: string;
+  course_id?: string;
   semester: number;
   section: string;
   academic_year: string;
@@ -79,6 +79,11 @@ interface Batch {
   departments?: {
     id: string;
     name: string;
+    code: string;
+  } | null;
+  courses?: {
+    id: string;
+    title: string;
     code: string;
   } | null;
 }
@@ -162,12 +167,17 @@ interface ElectiveBucket {
     semester: number;
     section: string;
     academic_year: string;
-    course: string;
+    course_id?: string;
     department_id: string;
     college_id: string;
     departments?: {
       id: string;
       name: string;
+      code: string;
+    } | null;
+    courses?: {
+      id: string;
+      title: string;
       code: string;
     } | null;
   } | null;
@@ -337,7 +347,7 @@ export default function AdminDashboard() {
       if (selectedBatch) {
         // Auto-set filters based on batch
         setBucketSubjectFilter({
-          course_id: selectedBatch.course || '',
+          course_id: selectedBatch.course_id || '',
           department_id: selectedBatch.department_id || '',
           semester: selectedBatch.semester?.toString() || ''
         });
@@ -1549,7 +1559,7 @@ export default function AdminDashboard() {
       (b.batches?.section || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (b.batches?.departments?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
     
-    const matchesCourse = bucketCourseFilter === 'all' || b.batches?.course === bucketCourseFilter;
+    const matchesCourse = bucketCourseFilter === 'all' || b.batches?.course_id === bucketCourseFilter;
     const matchesSemester = bucketSemesterFilter === 'all' || b.batches?.semester === parseInt(bucketSemesterFilter);
     const matchesDepartment = departmentFilter === 'all' || b.batches?.department_id === departmentFilter;
     
@@ -2871,7 +2881,7 @@ export default function AdminDashboard() {
                   >
                     <option value="all">All Courses</option>
                     {courses.map(course => (
-                      <option key={course.id} value={course.code}>
+                      <option key={course.id} value={course.id}>
                         {course.code} - {course.title}
                       </option>
                     ))}
@@ -3174,7 +3184,7 @@ export default function AdminDashboard() {
                               </div>
                               <div>
                                 <span className="text-gray-500">Course:</span>
-                                <p className="font-medium text-gray-900">{bucket.batches?.course || 'N/A'}</p>
+                                <p className="font-medium text-gray-900">{bucket.batches?.courses?.code || bucket.batches?.courses?.title || 'N/A'}</p>
                               </div>
                               <div>
                                 <span className="text-gray-500">Semester:</span>
@@ -3204,9 +3214,8 @@ export default function AdminDashboard() {
                           <div className="flex items-center space-x-2 ml-4">
                             <button
                               onClick={() => {
-                                // TODO: Navigate to student choices view
-                                setSuccessMessage(`View student choices for: ${bucket.bucket_name}`);
-                                setTimeout(() => setSuccessMessage(''), 3000);
+                                // Navigate to student choices view for this bucket
+                                router.push(`/admin/bucket_creator/choices/${bucket.id}?name=${encodeURIComponent(bucket.bucket_name)}`);
                               }}
                               className="text-green-600 hover:text-green-900 p-2 rounded hover:bg-green-50"
                               title="View student choices"
