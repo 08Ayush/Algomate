@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
+import bcrypt from 'bcryptjs';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -35,9 +36,9 @@ interface CollegeRegistrationData {
   registrationToken?: string;
 }
 
-// Hash password (simple implementation - in production use bcrypt)
-function hashPassword(password: string): string {
-  return crypto.createHash('sha256').update(password + process.env.JWT_SECRET).digest('hex');
+// Hash password using bcrypt (same as login verification)
+async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 10);
 }
 
 // Generate a unique college UID for the admin
@@ -59,8 +60,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate registration token if provided
+    let tokenData: any = null;
     if (data.registrationToken) {
-      const { data: tokenData, error: tokenError } = await supabaseAdmin
+      const { data: fetchedToken, error: tokenError } = await supabaseAdmin
         .from('registration_tokens')
         .select('*')
         .eq('token', data.registrationToken)
@@ -68,26 +70,15 @@ export async function POST(request: NextRequest) {
         .gt('expires_at', new Date().toISOString())
         .single();
 
-      if (tokenError || !tokenData) {
+      if (tokenError || !fetchedToken) {
         return NextResponse.json(
           { error: 'Invalid or expired registration token' },
           { status: 400 }
         );
       }
-
-      // Mark token as used
-      await supabaseAdmin
-        .from('registration_tokens')
-        .update({ is_used: true, used_at: new Date().toISOString() })
-        .eq('token', data.registrationToken);
-
-      // Update demo request status if linked
-      if (tokenData.demo_request_id) {
-        await supabaseAdmin
-          .from('demo_requests')
-          .update({ status: 'registered' })
-          .eq('id', tokenData.demo_request_id);
-      }
+      
+      // Store token data for later use - don't mark as used yet!
+      tokenData = fetchedToken;
     }
 
     // Check if college code already exists
@@ -119,9 +110,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Create the college
+    const collegeId = crypto.randomUUID();
     const { data: college, error: collegeError } = await supabaseAdmin
       .from('colleges')
       .insert({
+        id: collegeId,
         name: data.collegeName,
         code: data.collegeCode.toUpperCase(),
         address: data.address,
@@ -153,7 +146,11 @@ export async function POST(request: NextRequest) {
     // Generate admin UID
     const adminUID = generateCollegeUID(data.collegeCode);
 
+    // Hash password
+    const passwordHash = await hashPassword(data.adminPassword);
+
     // Create the college admin user
+    // Note: designation is NULL for college_admin role (not faculty)
     const { data: adminUser, error: userError } = await supabaseAdmin
       .from('users')
       .insert({
@@ -162,10 +159,9 @@ export async function POST(request: NextRequest) {
         email: data.adminEmail.toLowerCase(),
         phone: data.adminPhone,
         college_uid: adminUID,
-        password_hash: hashPassword(data.adminPassword),
+        password_hash: passwordHash,
         role: 'college_admin',
         college_id: college.id,
-        designation: data.adminDesignation || 'System Administrator',
         is_active: true,
         email_verified: true, // Pre-verified since they came through registration
         created_at: new Date().toISOString()
@@ -178,6 +174,25 @@ export async function POST(request: NextRequest) {
       // Rollback college creation
       await supabaseAdmin.from('colleges').delete().eq('id', college.id);
       throw new Error('Failed to create admin user');
+    }
+
+    // NOW mark token as used - only after successful college and user creation
+    if (data.registrationToken && tokenData) {
+      await supabaseAdmin
+        .from('registration_tokens')
+        .update({ 
+          is_used: true, 
+          used_at: new Date().toISOString()
+        })
+        .eq('token', data.registrationToken);
+
+      // Update demo request status if linked
+      if (tokenData.demo_request_id) {
+        await supabaseAdmin
+          .from('demo_requests')
+          .update({ status: 'registered' })
+          .eq('id', tokenData.demo_request_id);
+      }
     }
 
     // Send welcome email

@@ -9,10 +9,10 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 // GET - Fetch single demo request
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     const { data: demoRequest, error } = await supabase
       .from('demo_requests')
@@ -41,10 +41,10 @@ export async function GET(
 // PATCH - Update demo request status
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
 
     const {
@@ -52,18 +52,16 @@ export async function PATCH(
       demo_scheduled_at,
       demo_completed_at,
       follow_up_notes,
-      rejection_reason,
       assigned_to
     } = body;
 
-    // Build update object
+    // Build update object (only include fields that exist in the table)
     const updateData: Record<string, any> = {};
     
     if (status) updateData.status = status;
     if (demo_scheduled_at) updateData.demo_scheduled_at = demo_scheduled_at;
     if (demo_completed_at) updateData.demo_completed_at = demo_completed_at;
     if (follow_up_notes !== undefined) updateData.follow_up_notes = follow_up_notes;
-    if (rejection_reason !== undefined) updateData.rejection_reason = rejection_reason;
     if (assigned_to) updateData.assigned_to = assigned_to;
 
     // Auto-set demo_completed_at when status changes to demo_completed
@@ -103,10 +101,10 @@ export async function PATCH(
 // DELETE - Delete demo request
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     const { error } = await supabase
       .from('demo_requests')

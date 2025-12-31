@@ -76,6 +76,9 @@ export default function CollegeRegistrationPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [adminCredentials, setAdminCredentials] = useState<{ uid: string; email: string } | null>(null);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
 
   const [formData, setFormData] = useState<CollegeFormData>({
     collegeName: '',
@@ -262,6 +265,14 @@ export default function CollegeRegistrationPage() {
         throw new Error(data.error || 'Registration failed');
       }
 
+      // Store admin credentials for display
+      if (data.admin) {
+        setAdminCredentials({
+          uid: data.admin.uid,
+          email: data.admin.email
+        });
+      }
+
       setIsSuccess(true);
     } catch (error: any) {
       setErrors({ submit: error.message || 'Registration failed. Please try again.' });
@@ -332,6 +343,30 @@ export default function CollegeRegistrationPage() {
 
   // Success view
   if (isSuccess) {
+    const handleSendCredentialsEmail = async () => {
+      setIsSendingEmail(true);
+      try {
+        const response = await fetch('/api/college/send-credentials', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: adminCredentials?.email || formData.adminEmail,
+            uid: adminCredentials?.uid,
+            collegeName: formData.collegeName,
+            adminName: `${formData.adminFirstName} ${formData.adminLastName}`
+          })
+        });
+        
+        if (response.ok) {
+          setEmailSent(true);
+        }
+      } catch (error) {
+        console.error('Failed to send email:', error);
+      } finally {
+        setIsSendingEmail(false);
+      }
+    };
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 flex items-center justify-center px-4">
         <div className="max-w-lg w-full text-center">
@@ -346,29 +381,58 @@ export default function CollegeRegistrationPage() {
             been successfully registered on Academic Compass.
           </p>
 
-          <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-xl p-6 border border-gray-200 dark:border-gray-700 mb-8 text-left">
+          <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-xl p-6 border border-gray-200 dark:border-gray-700 mb-6 text-left">
             <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
               <Key className="h-5 w-5 text-primary" />
-              Your Admin Credentials
+              Your Admin Login Credentials
             </h3>
             <div className="space-y-3">
               <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
-                <span className="text-sm text-gray-600 dark:text-gray-400">College Code:</span>
-                <span className="font-mono font-semibold text-gray-900 dark:text-white">
-                  {formData.collegeCode.toUpperCase()}
+                <span className="text-sm text-gray-600 dark:text-gray-400">Admin UID:</span>
+                <span className="font-mono font-semibold text-gray-900 dark:text-white text-sm">
+                  {adminCredentials?.uid || `${formData.collegeCode.toUpperCase()}-ADMIN-XXXXX`}
                 </span>
               </div>
               <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Admin Email:</span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">Password:</span>
                 <span className="font-mono font-semibold text-gray-900 dark:text-white">
-                  {formData.adminEmail}
+                  (The password you set during registration)
                 </span>
               </div>
             </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-4">
-              Use your email and the password you set to log in. Your College Admin account 
-              is now active.
-            </p>
+            <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <p className="text-sm text-amber-800 dark:text-amber-300">
+                <strong>Important:</strong> Use your Admin UID and password to log in. Please save these credentials securely.
+              </p>
+            </div>
+          </div>
+
+          {/* Send Credentials via Email */}
+          <div className="mb-6">
+            {emailSent ? (
+              <div className="flex items-center justify-center gap-2 text-green-600 dark:text-green-400">
+                <CheckCircle2 className="h-5 w-5" />
+                <span>Credentials sent to {adminCredentials?.email || formData.adminEmail}</span>
+              </div>
+            ) : (
+              <button
+                onClick={handleSendCredentialsEmail}
+                disabled={isSendingEmail}
+                className="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-all disabled:opacity-50"
+              >
+                {isSendingEmail ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Mail className="h-4 w-4" />
+                    Send Credentials to Email
+                  </>
+                )}
+              </button>
+            )}
           </div>
 
           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-8">
@@ -376,7 +440,7 @@ export default function CollegeRegistrationPage() {
             <ul className="text-sm text-blue-700 dark:text-blue-400 text-left space-y-2">
               <li className="flex items-start gap-2">
                 <span className="w-5 h-5 bg-blue-200 dark:bg-blue-800 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
-                <span>Log in to your Admin Dashboard</span>
+                <span>Log in to your Admin Dashboard using your UID and password</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="w-5 h-5 bg-blue-200 dark:bg-blue-800 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">2</span>

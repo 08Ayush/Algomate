@@ -32,7 +32,6 @@ interface DemoRequest {
   demo_scheduled_at?: string;
   demo_completed_at?: string;
   follow_up_notes?: string;
-  rejection_reason?: string;
   created_at: string;
   updated_at: string;
 }
@@ -74,8 +73,7 @@ export default function DemoRequestsPage() {
   const [updateForm, setUpdateForm] = useState({
     status: '',
     demo_scheduled_at: '',
-    follow_up_notes: '',
-    rejection_reason: ''
+    follow_up_notes: ''
   });
 
   useEffect(() => {
@@ -211,8 +209,7 @@ export default function DemoRequestsPage() {
     setUpdateForm({
       status: request.status,
       demo_scheduled_at: request.demo_scheduled_at ? new Date(request.demo_scheduled_at).toISOString().slice(0, 16) : '',
-      follow_up_notes: request.follow_up_notes || '',
-      rejection_reason: request.rejection_reason || ''
+      follow_up_notes: request.follow_up_notes || ''
     });
     setShowDetailModal(true);
   };
@@ -629,19 +626,6 @@ export default function DemoRequestsPage() {
                         value={updateForm.demo_scheduled_at}
                         onChange={(e) => setUpdateForm({...updateForm, demo_scheduled_at: e.target.value})}
                         className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
-                      />
-                    </div>
-                  )}
-
-                  {updateForm.status === 'rejected' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Rejection Reason</label>
-                      <textarea
-                        value={updateForm.rejection_reason}
-                        onChange={(e) => setUpdateForm({...updateForm, rejection_reason: e.target.value})}
-                        rows={2}
-                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
-                        placeholder="Why was this request rejected?"
                       />
                     </div>
                   )}

@@ -147,6 +147,33 @@ export default function RegistrationTokensPage() {
     }
   };
 
+  const handleReactivateToken = async (tokenId: string) => {
+    if (!confirm('Are you sure you want to reactivate this token? This will allow it to be used for registration again.')) return;
+
+    try {
+      const response = await fetch(`/api/super-admin/registration-tokens/${tokenId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reactivate', expiresInDays: 7 })
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to reactivate token');
+      }
+
+      // Copy the registration URL to clipboard
+      await navigator.clipboard.writeText(data.registrationUrl);
+      setSuccessMessage(`Token reactivated successfully!\n\nRegistration URL (copied to clipboard):\n${data.registrationUrl}\n\nNew Expiry: ${new Date(data.expiresAt).toLocaleString()}`);
+      fetchData();
+      setTimeout(() => setSuccessMessage(''), 10000);
+    } catch (err: any) {
+      setError(err.message);
+      setTimeout(() => setError(''), 5000);
+    }
+  };
+
   const handleCopyToken = async (token: RegistrationToken) => {
     const registrationUrl = `${window.location.origin}/college/register?token=${token.token}`;
     await navigator.clipboard.writeText(registrationUrl);
@@ -468,6 +495,15 @@ export default function RegistrationTokensPage() {
                                 title="Send via Email"
                               >
                                 <Send className="w-4 h-4 text-blue-600" />
+                              </button>
+                            )}
+                            {status === 'used' && (
+                              <button
+                                onClick={() => handleReactivateToken(token.id)}
+                                className="p-2 hover:bg-green-100 rounded-lg transition-colors"
+                                title="Reactivate Token"
+                              >
+                                <RefreshCw className="w-4 h-4 text-green-600" />
                               </button>
                             )}
                             {status !== 'used' && (

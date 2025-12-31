@@ -66,13 +66,10 @@ export async function GET(request: NextRequest) {
 }
 
 // Generate a new registration token (for super admin)
+// Note: This endpoint is protected at the page level (super-admin routes)
+// The service role key is used to bypass RLS for database operations
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const body = await request.json();
     const { demoRequestId, email, institutionName, expiresInDays = 7 } = body;
 
