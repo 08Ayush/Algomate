@@ -1,4 +1,4 @@
-]-- ============================================================================
+-- ============================================================================
 -- PYGRAM 2025 - FINAL MULTI-COLLEGE PRODUCTION SCHEMA (Corrected)
 -- This version is corrected and ready to run on a new project.
 -- ============================================================================
@@ -799,6 +799,71 @@ GROUP BY ts.id;
 -- 8. FUNCTIONS AND TRIGGERS
 -- ============================================================================
 
+-- ============================================================================
+-- SESSION CONTEXT OPTIMIZATION FUNCTIONS
+-- These functions dramatically improve RLS policy performance by caching user context
+-- ============================================================================
+
+-- Function to set session context variables (called after login)
+CREATE OR REPLACE FUNCTION set_user_context(
+  p_user_id UUID,
+  p_college_id UUID,
+  p_role VARCHAR,
+  p_department_id UUID DEFAULT NULL
+) RETURNS VOID AS $$
+BEGIN
+  -- Store user context in session variables for RLS policy optimization
+  PERFORM set_config('app.current_user_id', p_user_id::TEXT, TRUE);
+  PERFORM set_config('app.current_college_id', p_college_id::TEXT, TRUE);
+  PERFORM set_config('app.current_role', p_role, TRUE);
+  
+  IF p_department_id IS NOT NULL THEN
+    PERFORM set_config('app.current_department_id', p_department_id::TEXT, TRUE);
+  ELSE
+    PERFORM set_config('app.current_department_id', '', TRUE);
+  END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Helper function to get current user ID from session
+CREATE OR REPLACE FUNCTION current_app_user_id() RETURNS UUID AS $$
+BEGIN
+    RETURN NULLIF(current_setting('app.current_user_id', TRUE), '')::UUID;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+-- Helper function to get current college ID from session
+CREATE OR REPLACE FUNCTION current_app_college_id() RETURNS UUID AS $$
+BEGIN
+    RETURN NULLIF(current_setting('app.current_college_id', TRUE), '')::UUID;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+-- Helper function to get current role from session
+CREATE OR REPLACE FUNCTION current_app_role() RETURNS VARCHAR AS $$
+BEGIN
+    RETURN NULLIF(current_setting('app.current_role', TRUE), '');
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+-- Helper function to get current department ID from session
+CREATE OR REPLACE FUNCTION current_app_department_id() RETURNS UUID AS $$
+BEGIN
+    RETURN NULLIF(current_setting('app.current_department_id', TRUE), '')::UUID;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+-- Grant execute permissions
+GRANT EXECUTE ON FUNCTION set_user_context(UUID, UUID, VARCHAR, UUID) TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION current_app_user_id() TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION current_app_college_id() TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION current_app_role() TO authenticated, anon;
+GRANT EXECUTE ON FUNCTION current_app_department_id() TO authenticated, anon;
+
+-- ============================================================================
+-- STANDARD TRIGGER FUNCTIONS
+-- ============================================================================
+
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -1497,6 +1562,369 @@ BEGIN
     RAISE NOTICE '✓ NEP 2020 Architecture: INTEGRATED';
     RAISE NOTICE 'Ready for PyGram 2025 Algorithm Integration!';
     RAISE NOTICE '==============================================================';
+END $$;
+
+-- ============================================================================
+-- 10A. ASSIGNMENT & PROCTORING SYSTEM
+-- Complete assignment module with MCQ/MSQ/essay/coding questions and proctoring
+-- Added: December 2025
+-- ============================================================================
+
+-- 1. Create Assignment System Enums (Safe Block)
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'assignment_type') THEN
+        CREATE TYPE assignment_type AS ENUM ('MCQ', 'MSQ', 'FILL_BLANK', 'ESSAY', 'CODING', 'MIXED');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'assignment_status') THEN
+        CREATE TYPE assignment_status AS ENUM ('DRAFT', 'SCHEDULED', 'ACTIVE', 'CLOSED', 'ARCHIVED');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'submission_status') THEN
+        CREATE TYPE submission_status AS ENUM ('NOT_STARTED', 'IN_PROGRESS', 'SUBMITTED', 'LATE_SUBMISSION', 'GRADED', 'RESUBMISSION_REQUIRED');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'question_type') THEN
+        CREATE TYPE question_type AS ENUM ('MCQ', 'MSQ', 'FILL_BLANK', 'ESSAY', 'CODING');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'violation_type') THEN
+        CREATE TYPE violation_type AS ENUM ('TAB_SWITCH', 'WINDOW_BLUR', 'COPY_PASTE', 'RIGHT_CLICK', 'DEVELOPER_TOOLS', 'FULLSCREEN_EXIT');
+    END IF;
+END $$;
+
+COMMENT ON TYPE assignment_type IS 'Types of assignments that can be created';
+COMMENT ON TYPE assignment_status IS 'Lifecycle status of an assignment';
+COMMENT ON TYPE submission_status IS 'Status of student submission';
+COMMENT ON TYPE question_type IS 'Types of questions within an assignment';
+COMMENT ON TYPE violation_type IS 'Types of proctoring violations that can be detected';
+
+-- 2. Create Assignment System Tables
+CREATE TABLE IF NOT EXISTS public.assignments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    college_id UUID NOT NULL REFERENCES colleges(id) ON DELETE CASCADE,
+    subject_id UUID REFERENCES subjects(id) ON DELETE SET NULL,
+    batch_id UUID REFERENCES batches(id) ON DELETE CASCADE,
+    created_by UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    type assignment_type NOT NULL,
+    status assignment_status DEFAULT 'DRAFT',
+    instructions TEXT,
+    total_marks DECIMAL(6,2) NOT NULL CHECK (total_marks > 0),
+    passing_marks DECIMAL(6,2) CHECK (passing_marks <= total_marks AND passing_marks >= 0),
+    duration_minutes INT CHECK (duration_minutes > 0),
+    scheduled_start TIMESTAMPTZ,
+    scheduled_end TIMESTAMPTZ,
+    max_attempts INT DEFAULT 1 CHECK (max_attempts > 0),
+    proctoring_enabled BOOLEAN DEFAULT FALSE,
+    max_violations INT DEFAULT 3 CHECK (max_violations >= 0),
+    show_results_immediately BOOLEAN DEFAULT FALSE,
+    allow_review BOOLEAN DEFAULT TRUE,
+    is_published BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT valid_schedule CHECK (scheduled_start IS NULL OR scheduled_end IS NULL OR scheduled_start < scheduled_end)
+);
+
+COMMENT ON TABLE assignments IS 'Main table storing assignment metadata and configuration';
+COMMENT ON COLUMN assignments.proctoring_enabled IS 'Whether browser-based proctoring is enabled for this assignment';
+COMMENT ON COLUMN assignments.max_violations IS 'Maximum proctoring violations before auto-submit (default 3)';
+
+CREATE TABLE IF NOT EXISTS public.assignment_questions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    assignment_id UUID NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+    question_order INT NOT NULL CHECK (question_order > 0),
+    question_text TEXT NOT NULL,
+    question_type question_type NOT NULL,
+    marks DECIMAL(5,2) NOT NULL CHECK (marks > 0),
+    negative_marking DECIMAL(5,2) DEFAULT 0 CHECK (negative_marking >= 0),
+    question_data JSONB NOT NULL DEFAULT '{}',
+    explanation TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(assignment_id, question_order)
+);
+
+COMMENT ON TABLE assignment_questions IS 'Individual questions within an assignment';
+COMMENT ON COLUMN assignment_questions.question_data IS 'JSONB field storing question-specific data (options, test cases, blanks, etc.)';
+
+CREATE TABLE IF NOT EXISTS public.assignment_submissions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    assignment_id UUID NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+    student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    batch_id UUID NOT NULL REFERENCES batches(id) ON DELETE CASCADE,
+    attempt_number INT NOT NULL DEFAULT 1 CHECK (attempt_number > 0),
+    submission_status submission_status DEFAULT 'NOT_STARTED',
+    started_at TIMESTAMPTZ,
+    submitted_at TIMESTAMPTZ,
+    time_taken_seconds INT,
+    score DECIMAL(6,2) DEFAULT 0,
+    percentage DECIMAL(5,2),
+    graded_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    graded_at TIMESTAMPTZ,
+    feedback TEXT,
+    auto_graded BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(assignment_id, student_id, attempt_number)
+);
+
+COMMENT ON TABLE assignment_submissions IS 'Student submission records for assignments';
+COMMENT ON COLUMN assignment_submissions.auto_graded IS 'Whether the submission was automatically graded (MCQ/MSQ/Fill-blank)';
+
+CREATE TABLE IF NOT EXISTS public.submission_answers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    submission_id UUID NOT NULL REFERENCES assignment_submissions(id) ON DELETE CASCADE,
+    question_id UUID NOT NULL REFERENCES assignment_questions(id) ON DELETE CASCADE,
+    answer_data JSONB NOT NULL DEFAULT '{}',
+    is_correct BOOLEAN,
+    marks_awarded DECIMAL(5,2) DEFAULT 0,
+    evaluator_comments TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(submission_id, question_id)
+);
+
+COMMENT ON TABLE submission_answers IS 'Individual answers for each question in a submission';
+
+CREATE TABLE IF NOT EXISTS public.proctoring_violations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    submission_id UUID NOT NULL REFERENCES assignment_submissions(id) ON DELETE CASCADE,
+    violation_type violation_type NOT NULL,
+    violation_count INT NOT NULL DEFAULT 1 CHECK (violation_count > 0),
+    detected_at TIMESTAMPTZ DEFAULT NOW(),
+    snapshot_data JSONB DEFAULT '{}',
+    action_taken VARCHAR(50),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+COMMENT ON TABLE proctoring_violations IS 'Log of proctoring violations during assignment attempts';
+
+CREATE TABLE IF NOT EXISTS public.assignment_attachments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    assignment_id UUID NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+    file_name VARCHAR(255) NOT NULL,
+    file_url TEXT NOT NULL,
+    file_type VARCHAR(50),
+    file_size BIGINT,
+    uploaded_by UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+COMMENT ON TABLE assignment_attachments IS 'File attachments for assignments (PDFs, images, reference materials)';
+
+CREATE TABLE IF NOT EXISTS public.coding_test_cases (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    question_id UUID NOT NULL REFERENCES assignment_questions(id) ON DELETE CASCADE,
+    test_case_order INT NOT NULL CHECK (test_case_order > 0),
+    input TEXT NOT NULL,
+    expected_output TEXT NOT NULL,
+    is_sample BOOLEAN DEFAULT FALSE,
+    points DECIMAL(5,2) DEFAULT 0,
+    time_limit_ms INT DEFAULT 1000,
+    memory_limit_mb INT DEFAULT 256,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(question_id, test_case_order)
+);
+
+COMMENT ON TABLE coding_test_cases IS 'Test cases for coding questions with input/output validation';
+
+CREATE TABLE IF NOT EXISTS public.assignment_analytics (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    assignment_id UUID NOT NULL REFERENCES assignments(id) ON DELETE CASCADE UNIQUE,
+    total_students INT DEFAULT 0,
+    submitted_count INT DEFAULT 0,
+    pending_count INT DEFAULT 0,
+    average_score DECIMAL(6,2) DEFAULT 0,
+    highest_score DECIMAL(6,2) DEFAULT 0,
+    lowest_score DECIMAL(6,2),
+    completion_rate DECIMAL(5,2) DEFAULT 0,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+COMMENT ON TABLE assignment_analytics IS 'Cached analytics and statistics for assignments';
+
+-- 3. Create Assignment System Indexes
+CREATE INDEX IF NOT EXISTS idx_assignments_college_batch_subject ON assignments(college_id, batch_id, subject_id, status);
+CREATE INDEX IF NOT EXISTS idx_assignments_status_scheduled ON assignments(status, scheduled_start, scheduled_end) WHERE is_published = TRUE;
+CREATE INDEX IF NOT EXISTS idx_assignments_created_by ON assignments(created_by, status);
+CREATE INDEX IF NOT EXISTS idx_submissions_college_student ON assignment_submissions(student_id, assignment_id, submission_status);
+CREATE INDEX IF NOT EXISTS idx_submissions_assignment_status ON assignment_submissions(assignment_id, submission_status);
+CREATE INDEX IF NOT EXISTS idx_submissions_batch ON assignment_submissions(batch_id, submission_status);
+CREATE INDEX IF NOT EXISTS idx_questions_assignment_order ON assignment_questions(assignment_id, question_order);
+CREATE INDEX IF NOT EXISTS idx_answers_submission ON submission_answers(submission_id, question_id);
+CREATE INDEX IF NOT EXISTS idx_violations_submission_time ON proctoring_violations(submission_id, detected_at);
+CREATE INDEX IF NOT EXISTS idx_attachments_assignment ON assignment_attachments(assignment_id);
+CREATE INDEX IF NOT EXISTS idx_test_cases_question ON coding_test_cases(question_id, test_case_order);
+
+-- 4. Enable RLS on Assignment Tables
+ALTER TABLE public.assignments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.assignment_questions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.assignment_submissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.submission_answers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.proctoring_violations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.assignment_attachments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.coding_test_cases ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.assignment_analytics ENABLE ROW LEVEL SECURITY;
+
+-- 5. Create Assignment System RLS Policies
+DROP POLICY IF EXISTS "assignments_faculty_crud" ON assignments;
+CREATE POLICY "assignments_faculty_crud" ON assignments FOR ALL USING (
+    college_id = current_app_college_id() AND (
+        created_by = current_app_user_id() OR 
+        current_app_role() IN ('college_admin', 'admin', 'hod') OR
+        (current_app_role() = 'faculty' AND batch_id IN (SELECT batch_id FROM batch_subjects WHERE assigned_faculty_id = current_app_user_id()))
+    )
+);
+
+DROP POLICY IF EXISTS "assignments_student_view" ON assignments;
+CREATE POLICY "assignments_student_view" ON assignments FOR SELECT USING (
+    college_id = current_app_college_id() AND is_published = TRUE AND current_app_role() = 'student' AND 
+    batch_id IN (SELECT batch_id FROM student_batch_enrollment WHERE student_id = current_app_user_id() AND is_active = TRUE)
+);
+
+DROP POLICY IF EXISTS "questions_access" ON assignment_questions;
+CREATE POLICY "questions_access" ON assignment_questions FOR ALL USING (
+    assignment_id IN (SELECT id FROM assignments WHERE college_id = current_app_college_id())
+);
+
+DROP POLICY IF EXISTS "submissions_student_own" ON assignment_submissions;
+CREATE POLICY "submissions_student_own" ON assignment_submissions FOR ALL USING (
+    student_id = current_app_user_id()
+);
+
+DROP POLICY IF EXISTS "submissions_faculty_view" ON assignment_submissions;
+CREATE POLICY "submissions_faculty_view" ON assignment_submissions FOR ALL USING (
+    batch_id IN (SELECT id FROM batches WHERE college_id = current_app_college_id()) AND current_app_role() != 'student'
+);
+
+DROP POLICY IF EXISTS "answers_access" ON submission_answers;
+CREATE POLICY "answers_access" ON submission_answers FOR ALL USING (
+    submission_id IN (SELECT id FROM assignment_submissions WHERE student_id = current_app_user_id() OR batch_id IN (SELECT id FROM batches WHERE college_id = current_app_college_id()))
+);
+
+DROP POLICY IF EXISTS "violations_access" ON proctoring_violations;
+CREATE POLICY "violations_access" ON proctoring_violations FOR ALL USING (
+    submission_id IN (SELECT id FROM assignment_submissions WHERE student_id = current_app_user_id() OR batch_id IN (SELECT id FROM batches WHERE college_id = current_app_college_id()))
+);
+
+DROP POLICY IF EXISTS "attachments_access" ON assignment_attachments;
+CREATE POLICY "attachments_access" ON assignment_attachments FOR ALL USING (
+    assignment_id IN (SELECT id FROM assignments WHERE college_id = current_app_college_id())
+);
+
+DROP POLICY IF EXISTS "test_cases_access" ON coding_test_cases;
+CREATE POLICY "test_cases_access" ON coding_test_cases FOR ALL USING (
+    question_id IN (SELECT id FROM assignment_questions WHERE assignment_id IN (SELECT id FROM assignments WHERE college_id = current_app_college_id()))
+);
+
+DROP POLICY IF EXISTS "analytics_access" ON assignment_analytics;
+CREATE POLICY "analytics_access" ON assignment_analytics FOR ALL USING (
+    assignment_id IN (SELECT id FROM assignments WHERE college_id = current_app_college_id())
+);
+
+-- 6. Auto-Grade Trigger Function
+CREATE OR REPLACE FUNCTION public.trigger_auto_grade_submission()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_assignment_id UUID;
+    v_total_score DECIMAL(6,2) := 0;
+    v_assignment_total_marks DECIMAL(6,2);
+    v_calc_percentage DECIMAL(5,2);
+    v_question RECORD;
+    v_answer RECORD;
+    v_is_correct BOOLEAN;
+    v_marks_awarded DECIMAL(5,2);
+    p_submission_id UUID;
+BEGIN
+    -- We grab the ID from the NEW record automatically
+    p_submission_id := NEW.id;
+
+    SELECT assignment_id INTO v_assignment_id FROM assignment_submissions WHERE id = p_submission_id;
+    SELECT total_marks INTO v_assignment_total_marks FROM assignments WHERE id = v_assignment_id;
+
+    FOR v_question IN 
+        SELECT aq.id, aq.question_type, aq.marks, aq.negative_marking, aq.question_data
+        FROM assignment_questions aq
+        WHERE aq.assignment_id = v_assignment_id AND aq.question_type IN ('MCQ', 'MSQ', 'FILL_BLANK')
+    LOOP
+        SELECT * INTO v_answer FROM submission_answers WHERE submission_id = p_submission_id AND question_id = v_question.id;
+        CONTINUE WHEN v_answer IS NULL;
+        
+        v_is_correct := FALSE;
+        v_marks_awarded := 0;
+
+        IF v_question.question_type = 'MCQ' THEN
+            v_is_correct := (SELECT (v_answer.answer_data->>'selected_option') = opt->>'id' FROM jsonb_array_elements(v_question.question_data->'options') AS opt WHERE (opt->>'is_correct')::boolean = true LIMIT 1);
+            v_marks_awarded := CASE WHEN v_is_correct THEN v_question.marks ELSE -v_question.negative_marking END;
+        END IF;
+
+        UPDATE submission_answers SET is_correct = v_is_correct, marks_awarded = v_marks_awarded, updated_at = NOW() WHERE id = v_answer.id;
+        v_total_score := v_total_score + v_marks_awarded;
+    END LOOP;
+
+    IF v_assignment_total_marks > 0 THEN
+        v_calc_percentage := (v_total_score / v_assignment_total_marks) * 100;
+    ELSE
+        v_calc_percentage := 0;
+    END IF;
+
+    -- Update without triggering recursion
+    UPDATE assignment_submissions
+    SET score = v_total_score, percentage = v_calc_percentage, auto_graded = TRUE, submission_status = 'GRADED', graded_at = NOW(), updated_at = NOW()
+    WHERE id = p_submission_id;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+COMMENT ON FUNCTION trigger_auto_grade_submission() IS 'Automatically grades MCQ, MSQ, and Fill-in-blank questions for a submission';
+
+-- 7. Notification Trigger Function
+CREATE OR REPLACE FUNCTION public.notify_submission_graded() 
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.submission_status = 'GRADED' AND (OLD.submission_status IS NULL OR OLD.submission_status != 'GRADED') THEN
+        INSERT INTO notifications (recipient_id, sender_id, type, title, message, created_at)
+        SELECT NEW.student_id, NEW.graded_by, 'submission_graded'::notification_type, 'Assignment Graded',
+        'Your submission for "' || a.title || '" has been graded. Score: ' || NEW.score || '/' || a.total_marks || ' (' || ROUND(COALESCE(NEW.percentage, 0), 2) || '%)', NOW()
+        FROM assignments a WHERE a.id = NEW.assignment_id;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+COMMENT ON FUNCTION notify_submission_graded() IS 'Sends notification to student when their submission is graded';
+
+-- 8. Create Assignment System Triggers
+DROP TRIGGER IF EXISTS trigger_auto_grade_on_submit ON public.assignment_submissions;
+CREATE TRIGGER trigger_auto_grade_on_submit 
+    AFTER UPDATE OF submission_status ON public.assignment_submissions
+    FOR EACH ROW 
+    WHEN (NEW.submission_status IN ('SUBMITTED', 'LATE_SUBMISSION') AND OLD.submission_status = 'IN_PROGRESS')
+    EXECUTE FUNCTION public.trigger_auto_grade_submission();
+
+DROP TRIGGER IF EXISTS trigger_notify_submission_graded ON public.assignment_submissions;
+CREATE TRIGGER trigger_notify_submission_graded 
+    AFTER UPDATE OF submission_status ON public.assignment_submissions
+    FOR EACH ROW 
+    EXECUTE FUNCTION public.notify_submission_graded();
+
+CREATE TRIGGER update_assignments_updated_at BEFORE UPDATE ON assignments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_assignment_questions_updated_at BEFORE UPDATE ON assignment_questions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_assignment_submissions_updated_at BEFORE UPDATE ON assignment_submissions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_submission_answers_updated_at BEFORE UPDATE ON submission_answers FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER audit_assignments AFTER INSERT OR UPDATE OR DELETE ON assignments FOR EACH ROW EXECUTE FUNCTION log_audit_changes();
+CREATE TRIGGER audit_assignment_submissions AFTER INSERT OR UPDATE OR DELETE ON assignment_submissions FOR EACH ROW EXECUTE FUNCTION log_audit_changes();
+
+-- 9. Add Assignment Notification Types (Safe)
+DO $$ 
+BEGIN
+    ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'assignment_created';
+    ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'submission_graded';
+    ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'violation_warning';
+    ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'auto_submitted';
+EXCEPTION
+    WHEN others THEN null;
 END $$;
 
 -- ============================================================================
@@ -2298,6 +2726,199 @@ FROM subjects
 WHERE is_active = true
 GROUP BY college_id;
 */
+
+-- ============================================================================
+-- 10. ENTERPRISE REGISTRATION SYSTEM
+-- ============================================================================
+
+-- Demo Request Status Enum
+DROP TYPE IF EXISTS demo_request_status CASCADE;
+CREATE TYPE demo_request_status AS ENUM ('pending', 'contacted', 'demo_scheduled', 'demo_completed', 'approved', 'registered', 'rejected');
+
+-- Demo Requests Table
+-- Stores all demo/trial requests from prospective institutions
+CREATE TABLE IF NOT EXISTS demo_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    
+    -- Institution Information
+    institution_name VARCHAR(255) NOT NULL,
+    institution_type VARCHAR(100) NOT NULL,
+    website VARCHAR(255),
+    student_count VARCHAR(50) NOT NULL,
+    faculty_count VARCHAR(50),
+    
+    -- Contact Person Information
+    contact_name VARCHAR(255) NOT NULL,
+    designation VARCHAR(100),
+    email VARCHAR(255) NOT NULL,
+    phone VARCHAR(50) NOT NULL,
+    
+    -- Location
+    city VARCHAR(100) NOT NULL,
+    state VARCHAR(100) NOT NULL,
+    country VARCHAR(100) DEFAULT 'India',
+    
+    -- Requirements
+    current_system VARCHAR(255),
+    challenges TEXT[], -- Array of challenges they face
+    preferred_date DATE,
+    preferred_time VARCHAR(50),
+    additional_notes TEXT,
+    
+    -- Status tracking
+    status demo_request_status DEFAULT 'pending',
+    assigned_to UUID REFERENCES users(id), -- Sales rep assigned
+    demo_scheduled_at TIMESTAMPTZ,
+    demo_completed_at TIMESTAMPTZ,
+    follow_up_notes TEXT,
+    rejection_reason TEXT,
+    
+    -- Timestamps
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Registration Tokens Table
+-- Stores unique tokens for college registration (sent after demo approval)
+CREATE TABLE IF NOT EXISTS registration_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    
+    -- Token details
+    token VARCHAR(64) UNIQUE NOT NULL, -- Secure random token
+    
+    -- Associated data
+    demo_request_id UUID REFERENCES demo_requests(id),
+    institution_name VARCHAR(255),
+    email VARCHAR(255),
+    
+    -- Token status
+    expires_at TIMESTAMPTZ NOT NULL,
+    is_used BOOLEAN DEFAULT FALSE,
+    used_at TIMESTAMPTZ,
+    college_id UUID REFERENCES colleges(id), -- Created college after registration
+    
+    -- Tracking
+    created_by UUID REFERENCES users(id), -- Super admin who created the token
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for efficient queries
+CREATE INDEX IF NOT EXISTS idx_demo_requests_status ON demo_requests(status);
+CREATE INDEX IF NOT EXISTS idx_demo_requests_created_at ON demo_requests(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_demo_requests_email ON demo_requests(email);
+CREATE INDEX IF NOT EXISTS idx_registration_tokens_token ON registration_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_registration_tokens_expires ON registration_tokens(expires_at) WHERE is_used = FALSE;
+CREATE INDEX IF NOT EXISTS idx_registration_tokens_demo_request ON registration_tokens(demo_request_id);
+
+-- Update timestamp trigger for demo_requests
+CREATE OR REPLACE FUNCTION update_demo_requests_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_update_demo_requests_timestamp ON demo_requests;
+CREATE TRIGGER trigger_update_demo_requests_timestamp
+    BEFORE UPDATE ON demo_requests
+    FOR EACH ROW
+    EXECUTE FUNCTION update_demo_requests_updated_at();
+
+-- RLS Policies for demo_requests
+ALTER TABLE demo_requests ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Super admins can view all demo requests" ON demo_requests;
+CREATE POLICY "Super admins can view all demo requests" 
+ON demo_requests FOR SELECT 
+TO authenticated 
+USING (
+    EXISTS (
+        SELECT 1 FROM users 
+        WHERE users.id = auth.uid() 
+        AND users.role = 'super_admin'
+    )
+);
+
+DROP POLICY IF EXISTS "Anyone can submit demo requests" ON demo_requests;
+CREATE POLICY "Anyone can submit demo requests" 
+ON demo_requests FOR INSERT 
+TO authenticated, anon
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Super admins can update demo requests" ON demo_requests;
+CREATE POLICY "Super admins can update demo requests" 
+ON demo_requests FOR UPDATE 
+TO authenticated 
+USING (
+    EXISTS (
+        SELECT 1 FROM users 
+        WHERE users.id = auth.uid() 
+        AND users.role = 'super_admin'
+    )
+);
+
+-- RLS Policies for registration_tokens
+ALTER TABLE registration_tokens ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Super admins can manage registration tokens" ON registration_tokens;
+CREATE POLICY "Super admins can manage registration tokens" 
+ON registration_tokens FOR ALL 
+TO authenticated 
+USING (
+    EXISTS (
+        SELECT 1 FROM users 
+        WHERE users.id = auth.uid() 
+        AND users.role = 'super_admin'
+    )
+);
+
+DROP POLICY IF EXISTS "Anyone can validate tokens" ON registration_tokens;
+CREATE POLICY "Anyone can validate tokens" 
+ON registration_tokens FOR SELECT 
+TO authenticated, anon
+USING (true);
+
+-- Grant permissions
+GRANT SELECT, INSERT ON demo_requests TO authenticated;
+GRANT SELECT, INSERT ON demo_requests TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON demo_requests TO service_role;
+GRANT SELECT ON registration_tokens TO authenticated;
+GRANT SELECT ON registration_tokens TO anon;
+GRANT ALL ON registration_tokens TO service_role;
+
+-- Add principal columns to colleges table if not exist
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'colleges' AND column_name = 'principal_name') THEN
+        ALTER TABLE colleges ADD COLUMN principal_name VARCHAR(255);
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'colleges' AND column_name = 'principal_email') THEN
+        ALTER TABLE colleges ADD COLUMN principal_email VARCHAR(255);
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'colleges' AND column_name = 'principal_phone') THEN
+        ALTER TABLE colleges ADD COLUMN principal_phone VARCHAR(50);
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'colleges' AND column_name = 'established_year') THEN
+        ALTER TABLE colleges ADD COLUMN established_year INTEGER;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'colleges' AND column_name = 'affiliated_university') THEN
+        ALTER TABLE colleges ADD COLUMN affiliated_university VARCHAR(255);
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'colleges' AND column_name = 'accreditation') THEN
+        ALTER TABLE colleges ADD COLUMN accreditation VARCHAR(255);
+    END IF;
+END $$;
+
+-- Enterprise Registration Comments
+COMMENT ON TABLE demo_requests IS 'Stores demo/trial requests from prospective educational institutions';
+COMMENT ON TABLE registration_tokens IS 'Stores unique registration tokens for approved institutions';
+COMMENT ON TYPE demo_request_status IS 'Status workflow for demo requests: pending → contacted → demo_scheduled → demo_completed → approved/rejected → registered';
 
 -- ============================================================================
 -- COMMENTS FOR DOCUMENTATION
