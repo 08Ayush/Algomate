@@ -1418,6 +1418,40 @@ interface TimetableClass {
   isContinuation: boolean;
 }
 
+interface Assignment {
+  id: string;
+  title: string;
+  description: string;
+  type: string;
+  status: string;
+  total_marks: number;
+  passing_marks: number;
+  duration_minutes: number;
+  scheduled_start: string;
+  scheduled_end: string;
+  max_attempts: number;
+  proctoring_enabled: boolean;
+  show_results_immediately: boolean;
+  is_published: boolean;
+  has_submitted?: boolean;
+  submission?: {
+    id: string;
+    score: number;
+    percentage: number;
+    submission_status: string;
+    submitted_at: string;
+  };
+  batches?: {
+    name: string;
+    semester: number;
+  };
+  subjects?: {
+    name: string;
+    code: string;
+  };
+  created_at: string;
+}
+
 interface ElectiveBucket {
   id: string;
   bucket_name: string;
@@ -1478,6 +1512,8 @@ export default function StudentDashboard() {
   const [loadingBuckets, setLoadingBuckets] = useState(false);
   const [loadingSelections, setLoadingSelections] = useState(false);
   const [showNepCurriculum, setShowNepCurriculum] = useState(false);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [loadingAssignments, setLoadingAssignments] = useState(false);
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -1564,10 +1600,43 @@ export default function StudentDashboard() {
           fetchTimetableClasses(timetablesData.timetables[0].id);
         }
       }
+      
+      // Fetch assignments for student's batch
+      if (updatedUser.role === 'student' && data.additionalData?.batchId) {
+        fetchAssignments(updatedUser, data.additionalData.batchId);
+      }
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
       setLoading(false);
+    }
+  }, []);
+  
+  const fetchAssignments = useCallback(async (user: any, batchId: string) => {
+    try {
+      setLoadingAssignments(true);
+      const token = btoa(JSON.stringify({
+        user_id: user.id,
+        id: user.id,
+        role: user.role,
+        college_id: user.college_id
+      }));
+      
+      const response = await fetch(
+        `/api/student/assignments?batchId=${batchId}`,
+        {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        setAssignments(data.assignments || []);
+      }
+    } catch (error) {
+      console.error('Error fetching assignments:', error);
+    } finally {
+      setLoadingAssignments(false);
     }
   }, []);
 
@@ -2349,84 +2418,220 @@ export default function StudentDashboard() {
       {/* Assignment Information Section */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BookOpen className="h-5 w-5" />
-            Assignment Deadlines
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Upcoming assignments and submission deadlines
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <BookOpen className="h-5 w-5" />
+                My Assignments
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Available assignments and deadlines
+              </p>
+            </div>
+            <Badge variant="secondary">
+              {assignments.length} Assignments
+            </Badge>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h4 className="font-semibold text-blue-900">Database Design and Implementation</h4>
-                  <p className="text-sm text-blue-700">Database Management Systems</p>
-                </div>
-                <Badge className="bg-red-100 text-red-800 border-red-300">Due Soon</Badge>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                <div>
-                  <span className="font-medium text-blue-800">Due Date:</span>
-                  <p className="text-blue-700">October 15, 2025</p>
-                </div>
-                <div>
-                  <span className="font-medium text-blue-800">Due Time:</span>
-                  <p className="text-blue-700">11:59 PM</p>
-                </div>
-                <div>
-                  <span className="font-medium text-blue-800">Maximum Marks:</span>
-                  <p className="text-blue-700">100 points</p>
-                </div>
-              </div>
-              <div className="mt-3">
-                <p className="text-sm text-blue-700">
-                  <span className="font-medium">Description:</span> Describe the assignment requirements, objectives, and guidelines. Include what students need to accomplish, learning outcomes, and any specific requirements.
-                </p>
-              </div>
-              <div className="mt-3">
-                <p className="text-sm text-blue-700">
-                  <span className="font-medium">Submission Format:</span> PDF document with code snippets, ZIP file containing source code and report
-                </p>
-              </div>
+          {loadingAssignments ? (
+            <div className="text-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-2" />
+              <p className="text-gray-500">Loading assignments...</p>
             </div>
-
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h4 className="font-semibold text-green-900">Data Structures Implementation</h4>
-                  <p className="text-sm text-green-700">Data Structures and Algorithms</p>
-                </div>
-                <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300">Upcoming</Badge>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                <div>
-                  <span className="font-medium text-green-800">Due Date:</span>
-                  <p className="text-green-700">October 22, 2025</p>
-                </div>
-                <div>
-                  <span className="font-medium text-green-800">Due Time:</span>
-                  <p className="text-green-700">5:00 PM</p>
-                </div>
-                <div>
-                  <span className="font-medium text-green-800">Maximum Marks:</span>
-                  <p className="text-green-700">80 points</p>
-                </div>
-              </div>
-              <div className="mt-3">
-                <p className="text-sm text-green-700">
-                  <span className="font-medium">Description:</span> Implement various data structures including linked lists, stacks, queues, trees, and graphs with proper documentation.
-                </p>
-              </div>
-              <div className="mt-3">
-                <p className="text-sm text-green-700">
-                  <span className="font-medium">Submission Format:</span> Source code with documentation, test cases, and performance analysis report
-                </p>
-              </div>
+          ) : assignments.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <BookOpen className="h-12 w-12 mx-auto mb-2 opacity-50" />
+              <p className="font-medium">No assignments available</p>
+              <p className="text-sm mt-1">Assignments will appear here when published by faculty</p>
             </div>
-          </div>
+          ) : (
+            <div className="space-y-4">
+              {assignments.map((assignment) => {
+                const isScheduled = assignment.scheduled_start && assignment.scheduled_end;
+                const now = new Date();
+                const startTime = isScheduled ? new Date(assignment.scheduled_start) : null;
+                const endTime = isScheduled ? new Date(assignment.scheduled_end) : null;
+                
+                const isAvailable = !isScheduled || (startTime && now >= startTime && endTime && now <= endTime);
+                const isExpired = endTime && now > endTime;
+                const isDueSoon = endTime && (endTime.getTime() - now.getTime()) < 24 * 60 * 60 * 1000;
+                
+                return (
+                  <div 
+                    key={assignment.id} 
+                    className={`border rounded-lg p-4 ${
+                      assignment.has_submitted ? 'bg-green-50 border-green-300' :
+                      isExpired ? 'bg-gray-50 border-gray-300' :
+                      isDueSoon ? 'bg-red-50 border-red-200' :
+                      'bg-blue-50 border-blue-200'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <h4 className={`font-semibold ${
+                          assignment.has_submitted ? 'text-green-900' :
+                          isExpired ? 'text-gray-900' :
+                          isDueSoon ? 'text-red-900' :
+                          'text-blue-900'
+                        }`}>
+                          {assignment.title}
+                        </h4>
+                        <p className={`text-sm ${
+                          assignment.has_submitted ? 'text-green-700' :
+                          isExpired ? 'text-gray-700' :
+                          isDueSoon ? 'text-red-700' :
+                          'text-blue-700'
+                        }`}>
+                          {assignment.subjects?.name || 'General Assignment'} • {assignment.subjects?.code || ''}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {assignment.has_submitted && assignment.submission && (
+                          <Badge className="bg-green-100 text-green-800 border-green-300">✓ Submitted</Badge>
+                        )}
+                        {!assignment.has_submitted && isExpired && (
+                          <Badge className="bg-gray-100 text-gray-800 border-gray-300">Expired</Badge>
+                        )}
+                        {!assignment.has_submitted && !isExpired && isDueSoon && (
+                          <Badge className="bg-red-100 text-red-800 border-red-300">Due Soon</Badge>
+                        )}
+                        {!assignment.has_submitted && !isExpired && !isDueSoon && isScheduled && (
+                          <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300">Upcoming</Badge>
+                        )}
+                        {assignment.proctoring_enabled && (
+                          <Badge className="bg-purple-100 text-purple-800 border-purple-300">Proctored</Badge>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm mb-3">
+                      {assignment.has_submitted && assignment.submission ? (
+                        <>
+                          <div>
+                            <span className="font-medium text-green-800">Your Score:</span>
+                            <p className="text-green-700 font-bold text-lg">
+                              {assignment.submission.score}/{assignment.total_marks}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="font-medium text-green-800">Percentage:</span>
+                            <p className="text-green-700 font-bold text-lg">
+                              {assignment.submission.percentage?.toFixed(2)}%
+                            </p>
+                          </div>
+                          <div>
+                            <span className="font-medium text-green-800">Submitted At:</span>
+                            <p className="text-green-700">
+                              {new Date(assignment.submission.submitted_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="font-medium text-green-800">Status:</span>
+                            <p className="text-green-700">
+                              {assignment.submission.submission_status}
+                            </p>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          {isScheduled && startTime && (
+                            <div>
+                              <span className={`font-medium ${
+                                isExpired ? 'text-gray-800' :
+                                isDueSoon ? 'text-red-800' :
+                                'text-blue-800'
+                              }`}>Start Time:</span>
+                              <p className={isExpired ? 'text-gray-700' : isDueSoon ? 'text-red-700' : 'text-blue-700'}>
+                                {startTime.toLocaleDateString()} {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                          )}
+                          {isScheduled && endTime && (
+                            <div>
+                              <span className={`font-medium ${
+                                isExpired ? 'text-gray-800' :
+                                isDueSoon ? 'text-red-800' :
+                                'text-blue-800'
+                              }`}>Due Date:</span>
+                              <p className={isExpired ? 'text-gray-700' : isDueSoon ? 'text-red-700' : 'text-blue-700'}>
+                                {endTime.toLocaleDateString()} {endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                          )}
+                          <div>
+                            <span className={`font-medium ${
+                              isExpired ? 'text-gray-800' :
+                              isDueSoon ? 'text-red-800' :
+                              'text-blue-800'
+                            }`}>Duration:</span>
+                            <p className={isExpired ? 'text-gray-700' : isDueSoon ? 'text-red-700' : 'text-blue-700'}>
+                              {assignment.duration_minutes} minutes
+                            </p>
+                          </div>
+                          <div>
+                            <span className={`font-medium ${
+                              isExpired ? 'text-gray-800' :
+                              isDueSoon ? 'text-red-800' :
+                              'text-blue-800'
+                            }`}>Total Marks:</span>
+                            <p className={isExpired ? 'text-gray-700' : isDueSoon ? 'text-red-700' : 'text-blue-700'}>
+                              {assignment.total_marks} points
+                            </p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    
+                    {assignment.description && (
+                      <div className="mt-3">
+                        <p className={`text-sm ${
+                          isExpired ? 'text-gray-700' :
+                          isDueSoon ? 'text-red-700' :
+                          'text-blue-700'
+                        }`}>
+                          <span className="font-medium">Description:</span> {assignment.description}
+                        </p>
+                      </div>
+                    )}
+                    
+                    <div className="mt-4 flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm">
+                        <Clock className="h-4 w-4" />
+                        <span className={assignment.has_submitted ? 'text-green-600' : isExpired ? 'text-gray-600' : isDueSoon ? 'text-red-600' : 'text-blue-600'}>
+                          Attempts: {assignment.max_attempts}
+                        </span>
+                      </div>
+                      {assignment.has_submitted ? (
+                        <Button 
+                          disabled
+                          variant="outline"
+                          className="bg-green-50 text-green-700 border-green-300"
+                        >
+                          ✓ Already Submitted
+                        </Button>
+                      ) : isAvailable && !isExpired ? (
+                        <Button 
+                          onClick={() => router.push(`/student/assignments/${assignment.id}`)}
+                          className="bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          Start Assignment →
+                        </Button>
+                      ) : isExpired ? (
+                        <Button disabled variant="outline">
+                          Expired
+                        </Button>
+                      ) : (
+                        <Button disabled variant="outline">
+                          Not Available Yet
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
 

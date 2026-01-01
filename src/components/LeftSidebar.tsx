@@ -21,7 +21,8 @@ import {
   Menu,
   X,
   Zap,
-  Sparkles
+  Sparkles,
+  FileText
 } from 'lucide-react';
 
 interface NavItem {
@@ -70,7 +71,7 @@ export default function LeftSidebar() {
       href: '/faculty/dashboard', 
       icon: Home, 
       label: 'Dashboard',
-      facultyTypes: ['creator', 'publisher']
+      facultyTypes: ['creator', 'publisher','general']
     },
     { 
       href: '/faculty/events', 
@@ -115,10 +116,16 @@ export default function LeftSidebar() {
       facultyTypes: ['creator', 'publisher']
     },
     { 
-      href: '/notifications', 
+      href: '/faculty/assignments/create', 
+      icon: FileText, 
+      label: 'Assignments',
+      facultyTypes: ['creator', 'publisher' , 'general']
+    },
+    { 
+      href: '/notifications',   
       icon: Bell, 
       label: 'Notifications',
-      facultyTypes: ['creator', 'publisher']
+      facultyTypes: ['creator', 'publisher' ,'general']
     },
   ];
 

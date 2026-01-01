@@ -127,12 +127,13 @@ export default function LoginPage() {
         case 'faculty':
           // Creator and Publisher go to faculty dashboard
           // General and Guest faculty go to student dashboard (view-only)
-          if (facultyType === 'creator' || facultyType === 'publisher') {
+          if (facultyType === 'creator' || facultyType === 'publisher' || facultyType === 'general') {
             router.push('/faculty/dashboard');
-          } else {
-            // General, Guest, or no faculty_type → student-like dashboard
-            router.push('/student/dashboard');
-          }
+          } 
+          // else {
+          //   // General, Guest, or no faculty_type → student-like dashboard
+          //   router.push('/student/dashboard');
+          // }
           break;
         case 'student':
           router.push('/student/dashboard');

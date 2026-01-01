@@ -11,6 +11,7 @@ interface User {
   role: string;
   faculty_type?: string;
   department_id?: string;
+  college_id?: string;
 }
 
 interface DashboardStats {
@@ -40,10 +41,23 @@ interface RecentActivity {
   created_at: string;
 }
 
+interface Assignment {
+  id: string;
+  title: string;
+  type: string;
+  is_draft: boolean;
+  is_published: boolean;
+  created_at: string;
+  batch_name?: string;
+  subject_name?: string;
+  total_marks: number;
+}
+
 export default function FacultyDashboard() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [stats, setStats] = useState<DashboardStats>({
     activeTimetables: 0,
     avgFitnessScore: 0,
@@ -57,6 +71,7 @@ export default function FacultyDashboard() {
   const [recentTimetables, setRecentTimetables] = useState<RecentTimetable[]>([]);
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
   const [pendingReviewCount, setPendingReviewCount] = useState(0);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -79,6 +94,33 @@ export default function FacultyDashboard() {
       localStorage.removeItem('user');
       router.push('/login');
     }
+
+    // Detect theme preference
+    const savedTheme = localStorage.getItem('theme') as 'light' | 'dark';
+    if (savedTheme) {
+      setTheme(savedTheme);
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      setTheme('dark');
+    }
+
+    // Listen for theme changes from toggle button
+    const handleThemeChange = (e: CustomEvent) => {
+      setTheme(e.detail.theme);
+    };
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'theme' && e.newValue) {
+        setTheme(e.newValue as 'light' | 'dark');
+      }
+    };
+
+    window.addEventListener('themeChange', handleThemeChange as EventListener);
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('themeChange', handleThemeChange as EventListener);
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, [router]);
 
   const fetchDashboardData = async (userData: User) => {
@@ -87,7 +129,8 @@ export default function FacultyDashboard() {
         fetchStats(userData),
         fetchRecentTimetables(userData),
         fetchRecentActivities(userData),
-        fetchPendingReviewCount(userData)
+        fetchPendingReviewCount(userData),
+        fetchAssignments(userData)
       ]);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -195,13 +238,51 @@ export default function FacultyDashboard() {
     router.push('/');
   };
 
+  const fetchAssignments = async (userData: User) => {
+    try {
+      const token = btoa(JSON.stringify({ 
+        user_id: userData.id,
+        id: userData.id, 
+        role: userData.role, 
+        college_id: userData.college_id 
+      }));
+      
+      const response = await fetch('/api/assignments', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      const data = await response.json();
+      if (data.success && data.assignments) {
+        // Get only assignments created by this faculty
+        const myAssignments = data.assignments
+          .filter((a: any) => a.created_by === userData.id)
+          .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .slice(0, 5); // Show only last 5
+        
+        setAssignments(myAssignments.map((a: any) => ({
+          id: a.id,
+          title: a.title,
+          type: a.type,
+          is_draft: a.is_draft,
+          is_published: a.is_published,
+          created_at: a.created_at,
+          batch_name: a.batches?.name,
+          subject_name: a.subjects?.name,
+          total_marks: a.total_marks
+        })));
+      }
+    } catch (error) {
+      console.error('Error fetching assignments:', error);
+    }
+  };
+
   // Check if user is a publisher
   const isPublisher = user?.faculty_type === 'publisher';
   const isCreator = user?.faculty_type === 'creator';
-
+  const isGeneral = user?.faculty_type === 'general';
   if (loading) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
+      <div className={`min-h-screen ${theme === 'dark' ? 'bg-slate-950' : 'bg-white'} flex items-center justify-center`}>
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
       </div>
     );
@@ -304,26 +385,32 @@ export default function FacultyDashboard() {
 
         {/* Stats Cards - Updated with modern design */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-          {/* Active Timetables */}
+          {/* Active Timetables / My Assignments */}
           <div className="group bg-white dark:bg-slate-800 rounded-3xl p-8 shadow-md hover:shadow-2xl border border-gray-100 dark:border-slate-700 transition-all duration-300 transform hover:scale-105 hover:-translate-y-2 cursor-pointer">
             <div className="flex flex-col items-center text-center">
               <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center mb-6 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6">
                 <svg className="w-8 h-8 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd"/>
+                  {isGeneral ? (
+                    <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+                  ) : (
+                    <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd"/>
+                  )}
                 </svg>
               </div>
               <div className="text-4xl font-extrabold text-gray-900 dark:text-white mb-2">
                 {loading ? (
                   <div className="animate-pulse bg-gray-300 dark:bg-gray-600 h-10 w-16 rounded"></div>
                 ) : (
-                  stats.activeTimetables
+                  isGeneral ? '0' : stats.activeTimetables
                 )}
               </div>
-              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">Active Timetables</div>
+              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                {isGeneral ? 'My Assignments' : 'Active Timetables'}
+              </div>
             </div>
           </div>
 
-          {/* Quality Score */}
+          {/* Quality Score / Student Progress */}
           <div className="group bg-white dark:bg-slate-800 rounded-3xl p-8 shadow-md hover:shadow-2xl border border-gray-100 dark:border-slate-700 transition-all duration-300 transform hover:scale-105 hover:-translate-y-2 cursor-pointer">
             <div className="flex flex-col items-center text-center">
               <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-2xl flex items-center justify-center mb-6 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6">
@@ -335,57 +422,73 @@ export default function FacultyDashboard() {
                 {loading ? (
                   <div className="animate-pulse bg-gray-300 dark:bg-gray-600 h-10 w-16 rounded"></div>
                 ) : (
-                  `${stats.avgFitnessScore}%`
+                  isGeneral ? '0%' : `${stats.avgFitnessScore}%`
                 )}
               </div>
-              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">Quality Score</div>
+              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                {isGeneral ? 'Avg. Student Score' : 'Quality Score'}
+              </div>
             </div>
           </div>
 
-          {/* Faculty Members */}
+          {/* Faculty Members / My Students */}
           <div className="group bg-white dark:bg-slate-800 rounded-3xl p-8 shadow-md hover:shadow-2xl border border-gray-100 dark:border-slate-700 transition-all duration-300 transform hover:scale-105 hover:-translate-y-2 cursor-pointer">
             <div className="flex flex-col items-center text-center">
               <div className="w-16 h-16 bg-purple-100 dark:bg-purple-900/30 rounded-2xl flex items-center justify-center mb-6 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6">
                 <svg className="w-8 h-8 text-purple-600 dark:text-purple-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/>
+                  {isGeneral ? (
+                    <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/>
+                  ) : (
+                    <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/>
+                  )}
                 </svg>
               </div>
               <div className="text-4xl font-extrabold text-gray-900 dark:text-white mb-2">
                 {loading ? (
                   <div className="animate-pulse bg-gray-300 dark:bg-gray-600 h-10 w-16 rounded"></div>
                 ) : (
-                  stats.facultyCount
+                  isGeneral ? '0' : stats.facultyCount
                 )}
               </div>
-              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">Faculty Members</div>
+              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                {isGeneral ? 'My Students' : 'Faculty Members'}
+              </div>
             </div>
           </div>
 
-          {/* Avg. Generation Time */}
+          {/* Avg. Generation Time / Pending Reviews */}
           <div className="group bg-white dark:bg-slate-800 rounded-3xl p-8 shadow-md hover:shadow-2xl border border-gray-100 dark:border-slate-700 transition-all duration-300 transform hover:scale-105 hover:-translate-y-2 cursor-pointer">
             <div className="flex flex-col items-center text-center">
               <div className="w-16 h-16 bg-orange-100 dark:bg-orange-900/30 rounded-2xl flex items-center justify-center mb-6 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-6">
                 <svg className="w-8 h-8 text-orange-600 dark:text-orange-400" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd"/>
+                  {isGeneral ? (
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd"/>
+                  ) : (
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd"/>
+                  )}
                 </svg>
               </div>
               <div className="text-4xl font-extrabold text-gray-900 dark:text-white mb-2">
                 {loading ? (
                   <div className="animate-pulse bg-gray-300 dark:bg-gray-600 h-10 w-16 rounded"></div>
                 ) : (
-                  stats.avgGenerationTime
+                  isGeneral ? '0' : stats.avgGenerationTime
                 )}
               </div>
-              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">Avg. Generation Time</div>
+              <div className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                {isGeneral ? 'Pending Reviews' : 'Avg. Generation Time'}
+              </div>
             </div>
           </div>
         </div>
 
         {/* Quick Actions - Two Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
-          {/* Recent Timetables */}
+          {/* Recent Timetables / My Assignments */}
           <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 shadow-md hover:shadow-xl border border-gray-100 dark:border-slate-700 transition-all duration-300">
-            <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Recent Timetables</h3>
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
+              {isGeneral ? 'My Assignments' : 'Recent Timetables'}
+            </h3>
             <div className="space-y-4">
               {loading ? (
                 <>
@@ -396,6 +499,46 @@ export default function FacultyDashboard() {
                     </div>
                   ))}
                 </>
+              ) : isGeneral ? (
+                assignments.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                    <svg className="w-16 h-16 mx-auto mb-4 opacity-50" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+                      <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd"/>
+                    </svg>
+                    <p className="mb-3">No assignments yet</p>
+                    <button 
+                      onClick={() => router.push('/faculty/assignments/create')}
+                      className="text-blue-600 dark:text-blue-400 hover:underline text-sm font-medium"
+                    >
+                      Create your first assignment →
+                    </button>
+                  </div>
+                ) : (
+                  assignments.map((assignment) => (
+                    <div 
+                      key={assignment.id}
+                      onClick={() => router.push(`/faculty/assignments/${assignment.id}/report`)}
+                      className="group flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-slate-700 dark:to-slate-600 rounded-2xl hover:shadow-md transition-all duration-300 transform hover:scale-[1.02] cursor-pointer"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <div className="font-semibold text-gray-900 dark:text-white">{assignment.title}</div>
+                          {assignment.is_draft && (
+                            <span className="bg-gray-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">Draft</span>
+                          )}
+                        </div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                          {assignment.batch_name || 'No batch'} • {assignment.type} • {assignment.total_marks} marks
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">{formatTimeAgo(assignment.created_at)}</div>
+                      </div>
+                      <span className={`${assignment.is_published ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'} text-xs font-bold px-3 py-1.5 rounded-full shadow-sm`}>
+                        {assignment.is_published ? 'Published' : 'Unpublished'}
+                      </span>
+                    </div>
+                  ))
+                )
               ) : recentTimetables.length === 0 ? (
                 <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                   No recent timetables found
@@ -424,49 +567,99 @@ export default function FacultyDashboard() {
           <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 shadow-md hover:shadow-xl border border-gray-100 dark:border-slate-700 transition-all duration-300">
             <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Quick Statistics</h3>
             <div className="space-y-5">
-              <div className="flex items-center justify-between p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-all duration-200 cursor-pointer group">
-                <span className="text-gray-700 dark:text-gray-300 font-medium group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Total Classes Scheduled</span>
-                <span className="font-bold text-gray-900 dark:text-white text-xl">
-                  {loading ? (
-                    <div className="animate-pulse bg-gray-300 dark:bg-gray-600 h-6 w-12 rounded"></div>
-                  ) : (
-                    stats.totalClassesScheduled
-                  )}
-                </span>
-              </div>
-              
-              <div className="flex items-center justify-between p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-all duration-200 cursor-pointer group">
-                <span className="text-gray-700 dark:text-gray-300 font-medium group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Conflict Resolution Rate</span>
-                <span className="font-bold text-green-600 dark:text-green-400 text-xl">
-                  {loading ? (
-                    <div className="animate-pulse bg-gray-300 dark:bg-gray-600 h-6 w-16 rounded"></div>
-                  ) : (
-                    `${stats.conflictResolutionRate}%`
-                  )}
-                </span>
-              </div>
-              
-              <div className="flex items-center justify-between p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-all duration-200 cursor-pointer group">
-                <span className="text-gray-700 dark:text-gray-300 font-medium group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Room Utilization</span>
-                <span className="font-bold text-blue-600 dark:text-blue-400 text-xl">
-                  {loading ? (
-                    <div className="animate-pulse bg-gray-300 dark:bg-gray-600 h-6 w-12 rounded"></div>
-                  ) : (
-                    `${stats.roomUtilization}%`
-                  )}
-                </span>
-              </div>
-              
-              <div className="flex items-center justify-between p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-all duration-200 cursor-pointer group">
-                <span className="text-gray-700 dark:text-gray-300 font-medium group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Faculty Satisfaction</span>
-                <span className="font-bold text-purple-600 dark:text-purple-400 text-xl">
-                  {loading ? (
-                    <div className="animate-pulse bg-gray-300 dark:bg-gray-600 h-6 w-12 rounded"></div>
-                  ) : (
-                    `${stats.facultySatisfaction}/5`
-                  )}
-                </span>
-              </div>
+              {isGeneral ? (
+                <>
+                  <div className="flex items-center justify-between p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-all duration-200 cursor-pointer group">
+                    <span className="text-gray-700 dark:text-gray-300 font-medium group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Total Assignments Created</span>
+                    <span className="font-bold text-gray-900 dark:text-white text-xl">
+                      {loading ? (
+                        <div className="animate-pulse bg-gray-300 dark:bg-gray-600 h-6 w-12 rounded"></div>
+                      ) : (
+                        0
+                      )}
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-all duration-200 cursor-pointer group">
+                    <span className="text-gray-700 dark:text-gray-300 font-medium group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Total Submissions</span>
+                    <span className="font-bold text-green-600 dark:text-green-400 text-xl">
+                      {loading ? (
+                        <div className="animate-pulse bg-gray-300 dark:bg-gray-600 h-6 w-16 rounded"></div>
+                      ) : (
+                        0
+                      )}
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-all duration-200 cursor-pointer group">
+                    <span className="text-gray-700 dark:text-gray-300 font-medium group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Pending Evaluations</span>
+                    <span className="font-bold text-blue-600 dark:text-blue-400 text-xl">
+                      {loading ? (
+                        <div className="animate-pulse bg-gray-300 dark:bg-gray-600 h-6 w-12 rounded"></div>
+                      ) : (
+                        0
+                      )}
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-all duration-200 cursor-pointer group">
+                    <span className="text-gray-700 dark:text-gray-300 font-medium group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Active Classes</span>
+                    <span className="font-bold text-purple-600 dark:text-purple-400 text-xl">
+                      {loading ? (
+                        <div className="animate-pulse bg-gray-300 dark:bg-gray-600 h-6 w-12 rounded"></div>
+                      ) : (
+                        0
+                      )}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-all duration-200 cursor-pointer group">
+                    <span className="text-gray-700 dark:text-gray-300 font-medium group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Total Classes Scheduled</span>
+                    <span className="font-bold text-gray-900 dark:text-white text-xl">
+                      {loading ? (
+                        <div className="animate-pulse bg-gray-300 dark:bg-gray-600 h-6 w-12 rounded"></div>
+                      ) : (
+                        stats.totalClassesScheduled
+                      )}
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-all duration-200 cursor-pointer group">
+                    <span className="text-gray-700 dark:text-gray-300 font-medium group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Conflict Resolution Rate</span>
+                    <span className="font-bold text-green-600 dark:text-green-400 text-xl">
+                      {loading ? (
+                        <div className="animate-pulse bg-gray-300 dark:bg-gray-600 h-6 w-16 rounded"></div>
+                      ) : (
+                        `${stats.conflictResolutionRate}%`
+                      )}
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-all duration-200 cursor-pointer group">
+                    <span className="text-gray-700 dark:text-gray-300 font-medium group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Room Utilization</span>
+                    <span className="font-bold text-blue-600 dark:text-blue-400 text-xl">
+                      {loading ? (
+                        <div className="animate-pulse bg-gray-300 dark:bg-gray-600 h-6 w-12 rounded"></div>
+                      ) : (
+                        `${stats.roomUtilization}%`
+                      )}
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-all duration-200 cursor-pointer group">
+                    <span className="text-gray-700 dark:text-gray-300 font-medium group-hover:text-gray-900 dark:group-hover:text-white transition-colors">Faculty Satisfaction</span>
+                    <span className="font-bold text-purple-600 dark:text-purple-400 text-xl">
+                      {loading ? (
+                        <div className="animate-pulse bg-gray-300 dark:bg-gray-600 h-6 w-12 rounded"></div>
+                      ) : (
+                        `${stats.facultySatisfaction}/5`
+                      )}
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
