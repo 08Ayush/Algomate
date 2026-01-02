@@ -326,22 +326,42 @@ export default function SuperAdminDashboard() {
             <p className="mt-2 text-gray-600">Manage colleges and college administrators</p>
           </div>
 
-          {/* Quick Navigation Cards */}
-          <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-6 rounded-lg shadow-lg">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold">Colleges</h3>
-                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          {/* Enterprise Management Quick Links */}
+          <div className="mb-8 grid grid-cols-1 md:grid-cols-4 gap-4">
+            <a href="/super-admin/demo-requests" className="bg-gradient-to-br from-amber-500 to-orange-600 text-white p-4 rounded-lg shadow-lg hover:shadow-xl transition-all hover:scale-[1.02]">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-lg font-bold">Demo Requests</h3>
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <p className="text-amber-100 text-sm">Manage institution demo requests</p>
+            </a>
+
+            <a href="/super-admin/registration-tokens" className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white p-4 rounded-lg shadow-lg hover:shadow-xl transition-all hover:scale-[1.02]">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-lg font-bold">Registration Tokens</h3>
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                </svg>
+              </div>
+              <p className="text-indigo-100 text-sm">Generate college registration tokens</p>
+            </a>
+
+            <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-4 rounded-lg shadow-lg">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-lg font-bold">Colleges</h3>
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
               </div>
               <p className="text-purple-100 text-sm">Total: {colleges.length} college{colleges.length !== 1 ? 's' : ''}</p>
             </div>
 
-            <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-6 rounded-lg shadow-lg">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold">Admins</h3>
-                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-4 rounded-lg shadow-lg">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-lg font-bold">Admins</h3>
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                 </svg>
               </div>

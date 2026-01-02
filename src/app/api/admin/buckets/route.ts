@@ -14,11 +14,35 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Extract user data from token
+    let userCollegeId: string | null = null;
+    let userRole: string | null = null;
+    try {
+      const token = authHeader.replace('Bearer ', '');
+      const userData = JSON.parse(Buffer.from(token, 'base64').toString());
+      userCollegeId = userData.college_id;
+      userRole = userData.role;
+    } catch (e) {
+      console.error('Failed to parse auth token:', e);
+    }
+
     const searchParams = request.nextUrl.searchParams;
-    const collegeId = searchParams.get('college_id');
+    let collegeId = searchParams.get('college_id');
     const courseId = searchParams.get('course_id');
     const departmentId = searchParams.get('department_id');
     const semester = searchParams.get('semester');
+
+    // Enforce college filtering for non-super-admin users
+    if (userRole !== 'super_admin' && userRole !== 'admin') {
+      // Use user's college_id if not provided in query params
+      if (!collegeId && userCollegeId) {
+        collegeId = userCollegeId;
+      }
+      // If still no college_id, return empty
+      if (!collegeId) {
+        return NextResponse.json({ buckets: [] });
+      }
+    }
 
     let query = supabaseAdmin
       .from('elective_buckets')
@@ -50,6 +74,9 @@ export async function GET(request: NextRequest) {
       if (batches && batches.length > 0) {
         const batchIds = batches.map(b => b.id);
         query = query.in('batch_id', batchIds);
+      } else {
+        // No batches for this college means no buckets should be returned
+        return NextResponse.json({ buckets: [] });
       }
     }
 

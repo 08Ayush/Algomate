@@ -266,10 +266,10 @@ export function Header() {
                 Sign In
               </Link>
               <Link 
-                href="/register"
+                href="/demo"
                 className="inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-primary to-blue-600 px-4 py-2 text-sm font-medium text-primary-foreground hover:from-primary/90 hover:to-blue-600/90 transition-all shadow-md hover:shadow-lg"
               >
-                Get Started Free
+                Request Demo
               </Link>
             </>
           )}

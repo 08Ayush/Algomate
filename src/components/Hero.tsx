@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowRight, Sparkles } from 'lucide-react';
+import { ArrowRight, Sparkles, CheckCircle, Play, Shield, Zap, Building2 } from 'lucide-react';
 
 export function Hero() {
   const stats = [
@@ -11,48 +11,101 @@ export function Hero() {
     { number: "99.9%", label: "System Uptime" }
   ];
 
+  const highlights = [
+    "NEP 2020 Compliant",
+    "AI-Powered Scheduling",
+    "Multi-Role Dashboards",
+    "Real-time Analytics"
+  ];
+
   return (
     <section className="relative py-20 lg:py-32 overflow-hidden">
       <div className="absolute inset-0 bg-grid-white/[0.02] bg-grid" />
+      
+      {/* Decorative elements */}
+      <div className="absolute top-20 left-10 w-72 h-72 bg-primary/10 rounded-full blur-3xl" />
+      <div className="absolute bottom-20 right-10 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl" />
+      
       <div className="container relative">
         <div className="mx-auto max-w-5xl text-center">
-          <div className="mb-6 inline-flex items-center rounded-full border border-border bg-card px-4 py-1.5 text-sm font-medium shadow-sm animate-pulse">
-            <Sparkles className="mr-2 h-4 w-4 text-primary" />
-            Next-Generation Smart Timetable Management System | NEP 2020 Compliant
-          </div>
-          <h1 className="mb-6 text-4xl font-bold tracking-tight sm:text-6xl lg:text-7xl">
-            Transform Your{" "}
-            <span className="bg-gradient-to-r from-primary via-purple-600 to-purple-600 bg-clip-text text-transparent">
-              Educational Institution
+          {/* Badge */}
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-2 text-sm font-medium">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
             </span>
-            {" "}With Us
+            <span className="text-primary">Enterprise ERP for Education</span>
+            <span className="text-muted-foreground">|</span>
+            <span className="text-muted-foreground">Trusted by 500+ Institutions</span>
+          </div>
+          
+          {/* Main Heading */}
+          <h1 className="mb-6 text-4xl font-bold tracking-tight sm:text-6xl lg:text-7xl">
+            The Complete{" "}
+            <span className="bg-gradient-to-r from-primary via-purple-600 to-purple-600 bg-clip-text text-transparent">
+              Academic Management
+            </span>
+            {" "}Platform
           </h1>
-          <p className="mb-8 text-xl text-muted-foreground sm:text-2xl max-w-3xl mx-auto">
-            The most advanced Smart Timetable Scheduling System with full NEP 2020 Policy compliance. 
-            Powered by AI automation, designed for excellence, built for the future of education.
+          
+          <p className="mb-6 text-xl text-muted-foreground sm:text-2xl max-w-3xl mx-auto">
+            Streamline timetables, manage faculty workloads, track attendance, and automate 
+            administrative tasks — all in one powerful, NEP 2020 compliant ERP system.
           </p>
+
+          {/* Quick Highlights */}
+          <div className="flex flex-wrap justify-center gap-3 mb-8">
+            {highlights.map((item, index) => (
+              <div 
+                key={index}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-card border border-border rounded-full text-sm"
+              >
+                <CheckCircle className="h-4 w-4 text-green-500" />
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* CTA Buttons */}
           <div className="flex flex-col items-center justify-center gap-4 sm:flex-row mb-12">
             <Link 
-              href="/register"
-              className="w-full sm:w-auto inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-primary to-blue-600 px-6 py-3 text-lg font-semibold text-primary-foreground hover:from-primary/90 hover:to-blue-600/90 transition-all shadow-lg hover:shadow-xl"
+              href="/demo"
+              className="group w-full sm:w-auto inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-primary to-purple-600 px-8 py-4 text-lg font-semibold text-white hover:from-primary/90 hover:to-purple-600/90 transition-all shadow-lg hover:shadow-xl hover:shadow-primary/25"
             >
-              Start Your Free Trial Today
-              <ArrowRight className="ml-2 h-5 w-5" />
+              <Building2 className="mr-2 h-5 w-5" />
+              Schedule a Free Demo
+              <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
             </Link>
             <Link 
               href="/login"
-              className="w-full sm:w-auto inline-flex items-center justify-center rounded-lg border-2 border-border bg-background px-6 py-3 text-lg font-semibold hover:bg-accent transition-colors"
+              className="group w-full sm:w-auto inline-flex items-center justify-center rounded-xl border-2 border-border bg-background px-8 py-4 text-lg font-semibold hover:bg-accent transition-colors"
             >
-              Access Dashboard
-              <ArrowRight className="ml-2 h-4 w-4" />
+              <Shield className="mr-2 h-5 w-5 text-muted-foreground" />
+              Institution Login
             </Link>
+          </div>
+
+          {/* Trust indicators */}
+          <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-muted-foreground mb-16">
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-yellow-500" />
+              <span>AI-Powered Scheduling</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Shield className="h-4 w-4 text-green-500" />
+              <span>Enterprise Security</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-blue-500" />
+              <span>24/7 Support</span>
+            </div>
           </div>
           
           {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mt-16">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             {stats.map((stat, index) => (
-              <div key={index} className="text-center">
-                <div className="text-3xl md:text-4xl font-bold text-primary mb-1">
+              <div key={index} className="text-center p-4 rounded-xl bg-card/50 backdrop-blur-sm border border-border/50">
+                <div className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent mb-1">
                   {stat.number}
                 </div>
                 <div className="text-sm text-muted-foreground">
