@@ -2,8 +2,28 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Header } from '@/components/Header';
-import { Eye, EyeOff } from 'lucide-react';
+import { motion } from 'framer-motion';
+import {
+  Shield,
+  Building2,
+  Calendar,
+  Settings,
+  Users,
+  BarChart3,
+  LogOut,
+  Plus,
+  Edit,
+  Trash2,
+  Menu,
+  Bell,
+  GraduationCap,
+  Key,
+  ClipboardList,
+  RefreshCw,
+  X,
+  Eye,
+  EyeOff
+} from 'lucide-react';
 
 interface College {
   id: string;
@@ -45,13 +65,15 @@ interface CollegeAdmin {
 
 export default function SuperAdminDashboard() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'colleges' | 'admins'>('colleges');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('colleges');
   const [colleges, setColleges] = useState<College[]>([]);
   const [admins, setAdmins] = useState<CollegeAdmin[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   // College form state
   const [showCollegeForm, setShowCollegeForm] = useState(false);
@@ -86,8 +108,12 @@ export default function SuperAdminDashboard() {
     is_active: true
   });
 
+  const notifications = [
+    { id: 1, title: 'New College Added', message: 'Engineering College has been successfully added', time: '5 mins ago', type: 'success', read: false },
+    { id: 2, title: 'Admin Request', message: 'New admin requested access', time: '1 hour ago', type: 'info', read: false },
+  ];
+
   useEffect(() => {
-    // Check if user is super admin
     const userData = localStorage.getItem('user');
     if (!userData) {
       router.push('/login');
@@ -106,23 +132,18 @@ export default function SuperAdminDashboard() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      
-      // Fetch all data in parallel for faster loading
       const [collegeResponse, adminResponse] = await Promise.all([
         fetch('/api/super-admin/colleges'),
         fetch('/api/super-admin/college-admins')
       ]);
 
-      // Process responses in parallel
       const [collegeData, adminData] = await Promise.all([
         collegeResponse.ok ? collegeResponse.json() : Promise.resolve({ colleges: [] }),
         adminResponse.ok ? adminResponse.json() : Promise.resolve({ admins: [] })
       ]);
 
-      // Update state
       setColleges(collegeData.colleges || []);
       setAdmins(adminData.admins || []);
-
     } catch (error: any) {
       setError('Failed to fetch data');
       console.error('Fetch error:', error);
@@ -137,10 +158,10 @@ export default function SuperAdminDashboard() {
     setSuccessMessage('');
 
     try {
-      const url = editingCollege 
-        ? `/api/super-admin/colleges/${editingCollege.id}` 
+      const url = editingCollege
+        ? `/api/super-admin/colleges/${editingCollege.id}`
         : '/api/super-admin/colleges';
-      
+
       const response = await fetch(url, {
         method: editingCollege ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -152,19 +173,9 @@ export default function SuperAdminDashboard() {
         setShowCollegeForm(false);
         setEditingCollege(null);
         setCollegeForm({
-          name: '',
-          code: '',
-          address: '',
-          city: '',
-          state: '',
-          country: 'India',
-          pincode: '',
-          phone: '',
-          email: '',
-          website: '',
-          academic_year: '2025-26',
-          semester_system: 'semester',
-          is_active: true
+          name: '', code: '', address: '', city: '', state: '', country: 'India',
+          pincode: '', phone: '', email: '', website: '', academic_year: '2025-26',
+          semester_system: 'semester', is_active: true
         });
         fetchData();
         setTimeout(() => setSuccessMessage(''), 5000);
@@ -178,10 +189,7 @@ export default function SuperAdminDashboard() {
   };
 
   const handleCollegeDelete = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete "${name}"? This will delete all associated data including departments, users, and timetables. This action cannot be undone.`)) return;
-
-    setError('');
-    setSuccessMessage('');
+    if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
 
     try {
       const response = await fetch(`/api/super-admin/colleges/${id}`, {
@@ -197,8 +205,7 @@ export default function SuperAdminDashboard() {
         setError(data.error || 'Failed to delete college');
       }
     } catch (error) {
-      console.error('Delete error:', error);
-      setError('Failed to delete college. Please try again.');
+      setError('Failed to delete college');
     }
   };
 
@@ -208,10 +215,10 @@ export default function SuperAdminDashboard() {
     setSuccessMessage('');
 
     try {
-      const url = editingAdmin 
-        ? `/api/super-admin/college-admins/${editingAdmin.id}` 
+      const url = editingAdmin
+        ? `/api/super-admin/college-admins/${editingAdmin.id}`
         : '/api/super-admin/college-admins';
-      
+
       const response = await fetch(url, {
         method: editingAdmin ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -223,14 +230,8 @@ export default function SuperAdminDashboard() {
         setShowAdminForm(false);
         setEditingAdmin(null);
         setAdminForm({
-          first_name: '',
-          last_name: '',
-          email: '',
-          phone: '',
-          college_id: '',
-          college_uid: '',
-          password: '',
-          is_active: true
+          first_name: '', last_name: '', email: '', phone: '',
+          college_id: '', college_uid: '', password: '', is_active: true
         });
         fetchData();
         setTimeout(() => setSuccessMessage(''), 5000);
@@ -244,10 +245,7 @@ export default function SuperAdminDashboard() {
   };
 
   const handleAdminDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this college admin? This action cannot be undone.')) return;
-
-    setError('');
-    setSuccessMessage('');
+    if (!confirm('Are you sure you want to delete this college admin?')) return;
 
     try {
       const response = await fetch(`/api/super-admin/college-admins/${id}`, {
@@ -263,27 +261,18 @@ export default function SuperAdminDashboard() {
         setError(data.error || 'Failed to delete college admin');
       }
     } catch (error) {
-      console.error('Delete error:', error);
-      setError('Failed to delete college admin. Please try again.');
+      setError('Failed to delete college admin');
     }
   };
 
   const startEditCollege = (college: College) => {
     setEditingCollege(college);
     setCollegeForm({
-      name: college.name,
-      code: college.code,
-      address: college.address || '',
-      city: college.city || '',
-      state: college.state || '',
-      country: college.country,
-      pincode: college.pincode || '',
-      phone: college.phone || '',
-      email: college.email || '',
-      website: college.website || '',
-      academic_year: college.academic_year,
-      semester_system: college.semester_system,
-      is_active: college.is_active
+      name: college.name, code: college.code, address: college.address || '',
+      city: college.city || '', state: college.state || '', country: college.country,
+      pincode: college.pincode || '', phone: college.phone || '', email: college.email || '',
+      website: college.website || '', academic_year: college.academic_year,
+      semester_system: college.semester_system, is_active: college.is_active
     });
     setShowCollegeForm(true);
   };
@@ -291,14 +280,9 @@ export default function SuperAdminDashboard() {
   const startEditAdmin = (admin: CollegeAdmin) => {
     setEditingAdmin(admin);
     setAdminForm({
-      first_name: admin.first_name,
-      last_name: admin.last_name,
-      email: admin.email,
-      phone: admin.phone || '',
-      college_id: admin.college_id || admin.college?.id || '', // Fetch from database
-      college_uid: admin.college_uid,
-      password: '',
-      is_active: admin.is_active
+      first_name: admin.first_name, last_name: admin.last_name, email: admin.email,
+      phone: admin.phone || '', college_id: admin.college_id || admin.college?.id || '',
+      college_uid: admin.college_uid, password: '', is_active: admin.is_active
     });
     setShowAdminForm(true);
   };
@@ -308,570 +292,632 @@ export default function SuperAdminDashboard() {
     router.push('/');
   };
 
+  const stats = [
+    { icon: <Building2 size={32} />, label: 'Total Colleges', value: colleges.length, color: '#2563A3' },
+    { icon: <Users size={32} />, label: 'Total Admins', value: admins.length, color: '#5FB3B3' },
+    { icon: <Calendar size={32} />, label: 'Active Calendars', value: colleges.length, color: '#B8E5E5' },
+    { icon: <BarChart3 size={32} />, label: 'System Health', value: '99%', color: '#10B981' },
+  ];
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#EEF7FF] to-[#B8E5E5]">
+        <div className="text-xl font-semibold text-[#2563A3]">Loading...</div>
       </div>
     );
   }
 
   return (
-    <>
-      <Header />
-      <div className="pt-20 pb-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">Super Admin Dashboard</h1>
-            <p className="mt-2 text-gray-600">Manage colleges and college administrators</p>
+    <div className="min-h-screen bg-gradient-to-br from-[#EEF7FF] to-[#B8E5E5]">
+      {/* Floating Background Shapes */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-20 left-10 w-64 h-64 bg-[#B8E5E5] rounded-full opacity-20 blur-3xl animate-[float_6s_ease-in-out_infinite]" />
+        <div className="absolute top-40 right-20 w-80 h-80 bg-[#5FB3B3] rounded-full opacity-20 blur-3xl animate-[float_8s_ease-in-out_infinite_1s]" />
+        <div className="absolute bottom-20 left-1/3 w-72 h-72 bg-[#2563A3] rounded-full opacity-20 blur-3xl animate-[float_7s_ease-in-out_infinite_2s]" />
+      </div>
+
+      {/* Top Header */}
+      <header className="fixed top-0 left-0 right-0 h-[70px] bg-gradient-to-r from-[#2563A3] to-[#5FB3B3] shadow-[0_4px_20px_rgba(0,0,0,0.15)] flex justify-between items-center px-8 z-[1000]">
+        <div className="flex items-center gap-3">
+          <GraduationCap size={40} className="text-white" />
+          <h1 className="text-white text-[22px] font-bold">Academic Compass</h1>
+        </div>
+        <div className="flex items-center gap-6">
+          <div className="relative">
+            <button
+              onClick={() => setShowNotifications(!showNotifications)}
+              className="bg-white/20 hover:bg-white/30 border-none rounded-xl p-2.5 cursor-pointer flex items-center transition-all relative"
+            >
+              <Bell size={20} className="text-white" />
+              <span className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-[18px] h-[18px] text-[11px] font-bold flex items-center justify-center">
+                {notifications.filter(n => !n.read).length}
+              </span>
+            </button>
           </div>
-
-          {/* Enterprise Management Quick Links */}
-          <div className="mb-8 grid grid-cols-1 md:grid-cols-4 gap-4">
-            <a href="/super-admin/demo-requests" className="bg-gradient-to-br from-amber-500 to-orange-600 text-white p-4 rounded-lg shadow-lg hover:shadow-xl transition-all hover:scale-[1.02]">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-lg font-bold">Demo Requests</h3>
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <p className="text-amber-100 text-sm">Manage institution demo requests</p>
-            </a>
-
-            <a href="/super-admin/registration-tokens" className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white p-4 rounded-lg shadow-lg hover:shadow-xl transition-all hover:scale-[1.02]">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-lg font-bold">Registration Tokens</h3>
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                </svg>
-              </div>
-              <p className="text-indigo-100 text-sm">Generate college registration tokens</p>
-            </a>
-
-            <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-4 rounded-lg shadow-lg">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-lg font-bold">Colleges</h3>
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-              </div>
-              <p className="text-purple-100 text-sm">Total: {colleges.length} college{colleges.length !== 1 ? 's' : ''}</p>
-            </div>
-
-            <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-4 rounded-lg shadow-lg">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-lg font-bold">Admins</h3>
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-              </div>
-              <p className="text-green-100 text-sm">Total: {admins.length} college admin{admins.length !== 1 ? 's' : ''}</p>
+          <div className="flex items-center gap-3">
+            <img
+              src="https://ui-avatars.com/api/?name=Super+Admin&background=B8E5E5&color=1e293b"
+              alt="User"
+              className="w-[42px] h-[42px] rounded-full border-2 border-white"
+            />
+            <div>
+              <p className="text-white text-sm font-semibold m-0">Super Admin</p>
             </div>
           </div>
+        </div>
+      </header>
 
-          {error && (
-            <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative">
-              {error}
-              <button 
-                onClick={() => setError('')}
-                className="absolute top-3 right-3 text-red-500 hover:text-red-700 text-xl font-bold"
+      {/* Sidebar */}
+      <motion.aside
+        className="fixed left-0 top-[70px] h-[calc(100vh-70px)] bg-white/80 backdrop-blur-md shadow-lg flex flex-col z-[100]"
+        initial={{ x: -100, opacity: 0 }}
+        animate={{
+          width: sidebarOpen ? '280px' : '90px',
+          opacity: 1,
+          x: 0
+        }}
+        transition={{ duration: 0.3 }}
+        onMouseEnter={() => setSidebarOpen(true)}
+        onMouseLeave={() => setSidebarOpen(false)}
+      >
+        <div className="relative p-6 flex items-center justify-center border-b-2 border-[#2563A3]/20">
+          <Shield size={32} className="text-[#2563A3]" style={{ marginRight: sidebarOpen ? '12px' : '0' }} />
+          {sidebarOpen && <h2 className="text-xl font-bold text-[#2563A3]">Super Admin</h2>}
+        </div>
+
+        <nav className="flex-1 flex flex-col gap-2 p-4">
+          <button
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-[15px] transition-all ${activeTab === 'colleges'
+              ? 'bg-gradient-to-r from-[#2563A3] to-[#5FB3B3] text-white'
+              : 'text-[#2563A3] hover:bg-[#B8E5E5] hover:translate-x-1'
+              }`}
+            onClick={() => setActiveTab('colleges')}
+            style={{ justifyContent: sidebarOpen ? 'flex-start' : 'center' }}
+          >
+            <Building2 size={20} />
+            {sidebarOpen && <span>Colleges</span>}
+          </button>
+
+          <button
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-[15px] transition-all ${activeTab === 'collegeAdmins'
+              ? 'bg-gradient-to-r from-[#2563A3] to-[#5FB3B3] text-white'
+              : 'text-[#2563A3] hover:bg-[#B8E5E5] hover:translate-x-1'
+              }`}
+            onClick={() => setActiveTab('collegeAdmins')}
+            style={{ justifyContent: sidebarOpen ? 'flex-start' : 'center' }}
+          >
+            <Users size={20} />
+            {sidebarOpen && <span>College Admins</span>}
+          </button>
+
+          <button
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-[15px] transition-all ${activeTab === 'settings'
+              ? 'bg-gradient-to-r from-[#2563A3] to-[#5FB3B3] text-white'
+              : 'text-[#2563A3] hover:bg-[#B8E5E5] hover:translate-x-1'
+              }`}
+            onClick={() => setActiveTab('settings')}
+            style={{ justifyContent: sidebarOpen ? 'flex-start' : 'center' }}
+          >
+            <Settings size={20} />
+            {sidebarOpen && <span>Settings</span>}
+          </button>
+
+          <button
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl font-semibold text-[15px] transition-all ${activeTab === 'analytics'
+              ? 'bg-gradient-to-r from-[#2563A3] to-[#5FB3B3] text-white'
+              : 'text-[#2563A3] hover:bg-[#B8E5E5] hover:translate-x-1'
+              }`}
+            onClick={() => setActiveTab('analytics')}
+            style={{ justifyContent: sidebarOpen ? 'flex-start' : 'center' }}
+          >
+            <BarChart3 size={20} />
+            {sidebarOpen && <span>Analytics</span>}
+          </button>
+        </nav>
+
+        <button
+          className="flex items-center gap-3 px-4 py-3 m-4 rounded-xl font-semibold text-[15px] border-2 border-red-400 bg-white text-red-500 hover:bg-red-50 hover:translate-x-1 transition-all"
+          onClick={handleLogout}
+          style={{ justifyContent: sidebarOpen ? 'flex-start' : 'center' }}
+        >
+          <LogOut size={20} />
+          {sidebarOpen && <span>Logout</span>}
+        </button>
+      </motion.aside>
+
+      {/* Main Content */}
+      <main
+        className="pt-[70px] transition-all duration-300 pb-20 min-h-screen"
+        style={{
+          marginLeft: sidebarOpen ? '280px' : '90px',
+          width: sidebarOpen ? 'calc(100% - 280px)' : 'calc(100% - 90px)'
+        }}
+      >
+        <div className="p-8">
+          {/* Header */}
+          <motion.div
+            className="mb-8"
+            initial={{ y: -50, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.5 }}
+          >
+            <h1 className="text-4xl font-bold text-[#2563A3] mb-2">Super Admin Dashboard</h1>
+            <p className="text-slate-600 text-lg">Welcome back! Manage your entire academic system.</p>
+          </motion.div>
+
+          {/* Stats Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {stats.map((stat, index) => (
+              <motion.div
+                key={index}
+                className="flex items-center gap-5 p-6 bg-white/80 backdrop-blur-md rounded-2xl shadow-lg hover:shadow-xl transition-all"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1 }}
+                whileHover={{ scale: 1.05, y: -4 }}
               >
-                ×
-              </button>
+                <div
+                  className="w-16 h-16 rounded-2xl flex items-center justify-center text-white flex-shrink-0"
+                  style={{ background: stat.color }}
+                >
+                  {stat.icon}
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-slate-600 mb-1">{stat.label}</p>
+                  <h3 className="text-3xl font-bold text-[#2563A3]">{stat.value}</h3>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Messages */}
+          {error && (
+            <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg relative">
+              {error}
+              <button onClick={() => setError('')} className="absolute top-3 right-3 text-red-500 hover:text-red-700 text-xl font-bold">×</button>
             </div>
           )}
 
           {successMessage && (
-            <div className="mb-6 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded relative">
+            <div className="mb-6 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg relative">
               {successMessage}
-              <button 
-                onClick={() => setSuccessMessage('')}
-                className="absolute top-3 right-3 text-green-500 hover:text-green-700 text-xl font-bold"
-              >
-                ×
-              </button>
+              <button onClick={() => setSuccessMessage('')} className="absolute top-3 right-3 text-green-500 hover:text-green-700 text-xl font-bold">×</button>
             </div>
           )}
 
-          {/* Tab Navigation */}
-          <div className="mb-6">
-            <div className="border-b border-gray-200">
-              <nav className="-mb-px flex space-x-8">
-                <button
-                  onClick={() => setActiveTab('colleges')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === 'colleges'
-                      ? 'border-indigo-500 text-indigo-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  Colleges ({colleges.length})
-                </button>
-                <button
-                  onClick={() => setActiveTab('admins')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === 'admins'
-                      ? 'border-indigo-500 text-indigo-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  College Admins ({admins.length})
-                </button>
-              </nav>
-            </div>
-          </div>
-
-          {/* Colleges Tab */}
-          {activeTab === 'colleges' && (
-            <div>
-              <div className="mb-4 flex justify-between items-center">
-                <h2 className="text-xl font-semibold">Colleges</h2>
-                <button
-                  onClick={() => setShowCollegeForm(true)}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
-                >
-                  Add College
-                </button>
-              </div>
-
-              {/* College Form Modal */}
-              {showCollegeForm && (
-                <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-                  <div className="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
-                    <h3 className="text-lg font-medium text-gray-900 mb-4">
-                      {editingCollege ? 'Edit College' : 'Add New College'}
-                    </h3>
-                    <form onSubmit={handleCollegeSubmit}>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">College Name *</label>
-                          <input
-                            type="text"
-                            required
-                            value={collegeForm.name}
-                            onChange={(e) => setCollegeForm({...collegeForm, name: e.target.value})}
-                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            aria-label="College Name"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">College Code *</label>
-                          <input
-                            type="text"
-                            required
-                            value={collegeForm.code}
-                            onChange={(e) => setCollegeForm({...collegeForm, code: e.target.value})}
-                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            aria-label="College Code"
-                          />
-                        </div>
-                        <div className="col-span-2">
-                          <label className="block text-sm font-medium text-gray-700">Address</label>
-                          <textarea
-                            value={collegeForm.address}
-                            onChange={(e) => setCollegeForm({...collegeForm, address: e.target.value})}
-                            rows={2}
-                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            aria-label="College Address"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">City</label>
-                          <input
-                            type="text"
-                            value={collegeForm.city}
-                            onChange={(e) => setCollegeForm({...collegeForm, city: e.target.value})}
-                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            aria-label="College City"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">State</label>
-                          <input
-                            type="text"
-                            value={collegeForm.state}
-                            onChange={(e) => setCollegeForm({...collegeForm, state: e.target.value})}
-                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            aria-label="College State"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Pincode</label>
-                          <input
-                            type="text"
-                            value={collegeForm.pincode}
-                            onChange={(e) => setCollegeForm({...collegeForm, pincode: e.target.value})}
-                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            aria-label="College Pincode"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Phone</label>
-                          <input
-                            type="tel"
-                            value={collegeForm.phone}
-                            onChange={(e) => setCollegeForm({...collegeForm, phone: e.target.value})}
-                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            aria-label="College Phone"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Email</label>
-                          <input
-                            type="email"
-                            value={collegeForm.email}
-                            onChange={(e) => setCollegeForm({...collegeForm, email: e.target.value})}
-                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            aria-label="College Email"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Website</label>
-                          <input
-                            type="url"
-                            value={collegeForm.website}
-                            onChange={(e) => setCollegeForm({...collegeForm, website: e.target.value})}
-                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            aria-label="College Website"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Academic Year</label>
-                          <input
-                            type="text"
-                            value={collegeForm.academic_year}
-                            onChange={(e) => setCollegeForm({...collegeForm, academic_year: e.target.value})}
-                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            aria-label="College Academic Year"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Semester System</label>
-                          <select
-                            value={collegeForm.semester_system}
-                            onChange={(e) => setCollegeForm({...collegeForm, semester_system: e.target.value as any})}
-                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            aria-label="College Semester System"
-                          >
-                            <option value="semester">Semester</option>
-                            <option value="trimester">Trimester</option>
-                            <option value="quarter">Quarter</option>
-                          </select>
-                        </div>
-                        <div className="flex items-center">
-                          <input
-                            type="checkbox"
-                            id="college_is_active"
-                            checked={collegeForm.is_active}
-                            onChange={(e) => setCollegeForm({...collegeForm, is_active: e.target.checked})}
-                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                          />
-                          <label htmlFor="college_is_active" className="ml-2 block text-sm text-gray-900">
-                            Active
-                          </label>
-                        </div>
-                      </div>
-                      <div className="mt-6 flex justify-end space-x-3">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowCollegeForm(false);
-                            setEditingCollege(null);
-                          }}
-                          className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="submit"
-                          className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700"
-                        >
-                          {editingCollege ? 'Update' : 'Create'}
-                        </button>
-                      </div>
-                    </form>
+          {/* Content Area */}
+          <motion.div
+            className="bg-white/80 backdrop-blur-md rounded-2xl shadow-lg p-6"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 }}
+          >
+            {activeTab === 'colleges' && (
+              <div>
+                <div className="flex justify-between items-center mb-6 pb-4 border-b-2 border-[#2563A3]/10">
+                  <div>
+                    <h2 className="text-2xl font-bold text-[#2563A3]">Colleges</h2>
+                    <p className="text-slate-600 text-sm mt-1">Manage all registered colleges</p>
                   </div>
+                  <button
+                    onClick={() => setShowCollegeForm(true)}
+                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#2563A3] to-[#5FB3B3] text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all hover:scale-105"
+                  >
+                    <Plus size={20} />
+                    Add College
+                  </button>
                 </div>
-              )}
 
-              {/* College List */}
-              <div className="bg-white shadow overflow-hidden sm:rounded-md">
-                <ul className="divide-y divide-gray-200">
+                {/* College List */}
+                <div className="space-y-4">
                   {colleges.map((college) => (
-                    <li key={college.id}>
-                      <div className="px-4 py-4 sm:px-6">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center">
-                              <p className="text-lg font-medium text-indigo-600 truncate">
-                                {college.name}
-                              </p>
-                              <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                {college.code}
-                              </span>
-                              <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                college.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                              }`}>
-                                {college.is_active ? 'Active' : 'Inactive'}
-                              </span>
-                            </div>
-                            <div className="mt-2 text-sm text-gray-600 space-y-1">
-                              {college.city && college.state && (
-                                <p>📍 {college.city}, {college.state}</p>
-                              )}
-                              {college.email && <p>✉️ {college.email}</p>}
-                              {college.phone && <p>📞 {college.phone}</p>}
-                              <p>🗓️ Academic Year: {college.academic_year} | System: {college.semester_system}</p>
-                              {college._count && (
-                                <p>👥 {college._count.departments} Departments | {college._count.users} Users</p>
-                              )}
-                            </div>
+                    <div key={college.id} className="p-5 bg-white rounded-xl border-2 border-slate-100 hover:border-[#2563A3]/30 transition-all">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <p className="text-lg font-bold text-[#2563A3]">{college.name}</p>
+                            <span className="px-3 py-1 bg-slate-100 text-slate-800 rounded-full text-xs font-semibold">{college.code}</span>
+                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${college.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                              {college.is_active ? 'Active' : 'Inactive'}
+                            </span>
                           </div>
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => startEditCollege(college)}
-                              className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleCollegeDelete(college.id, college.name)}
-                              className="text-red-600 hover:text-red-900 text-sm font-medium"
-                            >
-                              Delete
-                            </button>
+                          <div className="text-sm text-slate-600 space-y-1">
+                            {college.city && college.state && <p>📍 {college.city}, {college.state}</p>}
+                            {college.email && <p>✉️ {college.email}</p>}
+                            {college.phone && <p>📞 {college.phone}</p>}
+                            <p>🗓️ Academic Year: {college.academic_year} | System: {college.semester_system}</p>
+                            {college._count && <p>👥 {college._count.departments} Departments | {college._count.users} Users</p>}
                           </div>
                         </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => startEditCollege(college)}
+                            className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                          >
+                            <Edit size={18} />
+                          </button>
+                          <button
+                            onClick={() => handleCollegeDelete(college.id, college.name)}
+                            className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
                       </div>
-                    </li>
+                    </div>
                   ))}
                   {colleges.length === 0 && (
-                    <li className="px-4 py-8 text-center text-gray-500">
+                    <div className="text-center py-12 text-slate-500">
                       No colleges registered yet. Click "Add College" to create one.
-                    </li>
+                    </div>
                   )}
-                </ul>
-              </div>
-            </div>
-          )}
-
-          {/* College Admins Tab */}
-          {activeTab === 'admins' && (
-            <div>
-              <div className="mb-4 flex justify-between items-center">
-                <h2 className="text-xl font-semibold">College Administrators</h2>
-                <button
-                  onClick={() => setShowAdminForm(true)}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
-                >
-                  Add College Admin
-                </button>
-              </div>
-
-              {/* Admin Form Modal */}
-              {showAdminForm && (
-                <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-                  <div className="relative top-20 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
-                    <h3 className="text-lg font-medium text-gray-900 mb-4">
-                      {editingAdmin ? 'Edit College Admin' : 'Add New College Admin'}
-                    </h3>
-                    <form onSubmit={handleAdminSubmit}>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">First Name *</label>
-                          <input
-                            type="text"
-                            required
-                            value={adminForm.first_name}
-                            onChange={(e) => setAdminForm({...adminForm, first_name: e.target.value})}
-                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            aria-label="Admin First Name"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Last Name *</label>
-                          <input
-                            type="text"
-                            required
-                            value={adminForm.last_name}
-                            onChange={(e) => setAdminForm({...adminForm, last_name: e.target.value})}
-                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            aria-label="Admin Last Name"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Email *</label>
-                          <input
-                            type="email"
-                            required
-                            value={adminForm.email}
-                            onChange={(e) => setAdminForm({...adminForm, email: e.target.value})}
-                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            aria-label="Admin Email"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Phone</label>
-                          <input
-                            type="tel"
-                            value={adminForm.phone}
-                            onChange={(e) => setAdminForm({...adminForm, phone: e.target.value})}
-                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            aria-label="Admin Phone"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">College *</label>
-                          <select
-                            required
-                            value={adminForm.college_id}
-                            onChange={(e) => setAdminForm({...adminForm, college_id: e.target.value})}
-                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            aria-label="Admin College"
-                          >
-                            <option value="">Select College</option>
-                            {colleges.map((college) => (
-                              <option key={college.id} value={college.id}>
-                                {college.name} ({college.code})
-                              </option>
-                            ))}
-                          </select>
-                          {editingAdmin && (
-                            <p className="mt-1 text-xs text-gray-500">Current college from database</p>
-                          )}
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">College UID *</label>
-                          <input
-                            type="text"
-                            required
-                            value={adminForm.college_uid}
-                            onChange={(e) => setAdminForm({...adminForm, college_uid: e.target.value})}
-                            className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            aria-label="Admin College UID"
-                          />
-                        </div>
-                        <div className="col-span-2">
-                          <label className="block text-sm font-medium text-gray-700">
-                            Password {!editingAdmin && '*'}
-                          </label>
-                          <div className="relative">
-                            <input
-                              type={showPassword ? "text" : "password"}
-                              required={!editingAdmin}
-                              value={adminForm.password}
-                              onChange={(e) => setAdminForm({...adminForm, password: e.target.value})}
-                              placeholder={editingAdmin ? 'Leave blank to keep current password' : 'Enter new password'}
-                              className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 pr-10"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setShowPassword(!showPassword)}
-                              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none mt-0.5"
-                              tabIndex={-1}
-                            >
-                              {showPassword ? (
-                                <EyeOff className="h-5 w-5" />
-                              ) : (
-                                <Eye className="h-5 w-5" />
-                              )}
-                            </button>
-                          </div>
-                          {editingAdmin && (
-                            <p className="mt-1 text-xs text-gray-500">
-                              💡 Leave blank to keep the current password, or enter a new password to change it
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex items-center">
-                          <input
-                            type="checkbox"
-                            id="admin_is_active"
-                            checked={adminForm.is_active}
-                            onChange={(e) => setAdminForm({...adminForm, is_active: e.target.checked})}
-                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                          />
-                          <label htmlFor="admin_is_active" className="ml-2 block text-sm text-gray-900">
-                            Active
-                          </label>
-                        </div>
-                      </div>
-                      <div className="mt-6 flex justify-end space-x-3">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowAdminForm(false);
-                            setEditingAdmin(null);
-                          }}
-                          className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="submit"
-                          className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700"
-                        >
-                          {editingAdmin ? 'Update' : 'Create'}
-                        </button>
-                      </div>
-                    </form>
-                  </div>
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* Admin List */}
-              <div className="bg-white shadow overflow-hidden sm:rounded-md">
-                <ul className="divide-y divide-gray-200">
+            {activeTab === 'collegeAdmins' && (
+              <div>
+                <div className="flex justify-between items-center mb-6 pb-4 border-b-2 border-[#2563A3]/10">
+                  <div>
+                    <h2 className="text-2xl font-bold text-[#2563A3]">College Administrators</h2>
+                    <p className="text-slate-600 text-sm mt-1">Manage college admin accounts</p>
+                  </div>
+                  <button
+                    onClick={() => setShowAdminForm(true)}
+                    className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#2563A3] to-[#5FB3B3] text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all hover:scale-105"
+                  >
+                    <Plus size={20} />
+                    Add Admin
+                  </button>
+                </div>
+
+                {/* Admin List */}
+                <div className="space-y-4">
                   {admins.map((admin) => (
-                    <li key={admin.id}>
-                      <div className="px-4 py-4 sm:px-6">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center">
-                              <p className="text-sm font-medium text-indigo-600 truncate">
-                                {admin.first_name} {admin.last_name}
-                              </p>
-                              <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                admin.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                              }`}>
-                                {admin.is_active ? 'Active' : 'Inactive'}
-                              </span>
-                            </div>
-                            <p className="mt-1 text-sm text-gray-600">{admin.email}</p>
-                            <p className="text-sm text-gray-600">
-                              {admin.college.name} ({admin.college.code})
-                            </p>
-                            <p className="text-xs text-gray-500">UID: {admin.college_uid}</p>
+                    <div key={admin.id} className="p-5 bg-white rounded-xl border-2 border-slate-100 hover:border-[#2563A3]/30 transition-all">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <p className="text-lg font-bold text-[#2563A3]">{admin.first_name} {admin.last_name}</p>
+                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${admin.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                              {admin.is_active ? 'Active' : 'Inactive'}
+                            </span>
                           </div>
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => startEditAdmin(admin)}
-                              className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleAdminDelete(admin.id)}
-                              className="text-red-600 hover:text-red-900 text-sm font-medium"
-                            >
-                              Delete
-                            </button>
+                          <div className="text-sm text-slate-600 space-y-1">
+                            <p>✉️ {admin.email}</p>
+                            {admin.phone && <p>📞 {admin.phone}</p>}
+                            <p>🏛️ {admin.college?.name} ({admin.college?.code})</p>
+                            <p>🆔 UID: {admin.college_uid}</p>
                           </div>
                         </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => startEditAdmin(admin)}
+                            className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                          >
+                            <Edit size={18} />
+                          </button>
+                          <button
+                            onClick={() => handleAdminDelete(admin.id)}
+                            className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
                       </div>
-                    </li>
+                    </div>
                   ))}
                   {admins.length === 0 && (
-                    <li className="px-4 py-8 text-center text-gray-500">
-                      No college admins created yet. Click "Add College Admin" to create one.
-                    </li>
+                    <div className="text-center py-12 text-slate-500">
+                      No college admins registered yet. Click "Add Admin" to create one.
+                    </div>
                   )}
-                </ul>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+
+            {activeTab === 'settings' && (
+              <div>
+                <h2 className="text-2xl font-bold text-[#2563A3] mb-6">Global Settings</h2>
+                <div className="space-y-4">
+                  <div className="p-6 bg-white rounded-xl border-2 border-slate-100">
+                    <h3 className="text-lg font-bold text-[#2563A3] mb-2">System Configuration</h3>
+                    <p className="text-slate-600 text-sm">Configure global system settings</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'analytics' && (
+              <div>
+                <h2 className="text-2xl font-bold text-[#2563A3] mb-6">System Analytics</h2>
+                <div className="space-y-4">
+                  <div className="p-6 bg-white rounded-xl border-2 border-slate-100">
+                    <h3 className="text-lg font-bold text-[#2563A3] mb-2">Usage Statistics</h3>
+                    <p className="text-slate-600 text-sm">View system usage and performance metrics</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </motion.div>
         </div>
-      </div>
-    </>
+      </main>
+
+      {/* College Form Modal */}
+      {showCollegeForm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[2000] p-4 overflow-y-auto">
+          <motion.div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-8"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+          >
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-2xl font-bold text-[#2563A3]">
+                {editingCollege ? 'Edit College' : 'Add New College'}
+              </h3>
+            </div>
+            <form onSubmit={handleCollegeSubmit} className="p-6">
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">College Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={collegeForm.name}
+                    onChange={(e) => setCollegeForm({ ...collegeForm, name: e.target.value })}
+                    className="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-[#2563A3] focus:outline-none transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">College Code *</label>
+                  <input
+                    type="text"
+                    required
+                    value={collegeForm.code}
+                    onChange={(e) => setCollegeForm({ ...collegeForm, code: e.target.value })}
+                    className="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-[#2563A3] focus:outline-none transition-colors"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Address</label>
+                  <textarea
+                    value={collegeForm.address}
+                    onChange={(e) => setCollegeForm({ ...collegeForm, address: e.target.value })}
+                    rows={2}
+                    className="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-[#2563A3] focus:outline-none transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">City</label>
+                  <input
+                    type="text"
+                    value={collegeForm.city}
+                    onChange={(e) => setCollegeForm({ ...collegeForm, city: e.target.value })}
+                    className="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-[#2563A3] focus:outline-none transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">State</label>
+                  <input
+                    type="text"
+                    value={collegeForm.state}
+                    onChange={(e) => setCollegeForm({ ...collegeForm, state: e.target.value })}
+                    className="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-[#2563A3] focus:outline-none transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Phone</label>
+                  <input
+                    type="tel"
+                    value={collegeForm.phone}
+                    onChange={(e) => setCollegeForm({ ...collegeForm, phone: e.target.value })}
+                    className="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-[#2563A3] focus:outline-none transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Email</label>
+                  <input
+                    type="email"
+                    value={collegeForm.email}
+                    onChange={(e) => setCollegeForm({ ...collegeForm, email: e.target.value })}
+                    className="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-[#2563A3] focus:outline-none transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Academic Year</label>
+                  <input
+                    type="text"
+                    value={collegeForm.academic_year}
+                    onChange={(e) => setCollegeForm({ ...collegeForm, academic_year: e.target.value })}
+                    className="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-[#2563A3] focus:outline-none transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Semester System</label>
+                  <select
+                    value={collegeForm.semester_system}
+                    onChange={(e) => setCollegeForm({ ...collegeForm, semester_system: e.target.value as any })}
+                    className="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-[#2563A3] focus:outline-none transition-colors"
+                  >
+                    <option value="semester">Semester</option>
+                    <option value="trimester">Trimester</option>
+                    <option value="quarter">Quarter</option>
+                  </select>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="college_is_active"
+                    checked={collegeForm.is_active}
+                    onChange={(e) => setCollegeForm({ ...collegeForm, is_active: e.target.checked })}
+                    className="w-4 h-4 text-[#2563A3] focus:ring-[#2563A3] border-slate-300 rounded"
+                  />
+                  <label htmlFor="college_is_active" className="ml-2 text-sm font-semibold text-slate-700">Active</label>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCollegeForm(false);
+                    setEditingCollege(null);
+                  }}
+                  className="px-6 py-3 border-2 border-slate-300 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-3 bg-gradient-to-r from-[#2563A3] to-[#5FB3B3] text-white rounded-xl text-sm font-semibold hover:shadow-lg transition-all"
+                >
+                  {editingCollege ? 'Update' : 'Create'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Admin Form Modal */}
+      {showAdminForm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[2000] p-4 overflow-y-auto">
+          <motion.div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-8"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+          >
+            <div className="p-6 border-b border-slate-200">
+              <h3 className="text-2xl font-bold text-[#2563A3]">
+                {editingAdmin ? 'Edit College Admin' : 'Add New College Admin'}
+              </h3>
+            </div>
+            <form onSubmit={handleAdminSubmit} className="p-6">
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">First Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={adminForm.first_name}
+                    onChange={(e) => setAdminForm({ ...adminForm, first_name: e.target.value })}
+                    className="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-[#2563A3] focus:outline-none transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Last Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={adminForm.last_name}
+                    onChange={(e) => setAdminForm({ ...adminForm, last_name: e.target.value })}
+                    className="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-[#2563A3] focus:outline-none transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Email *</label>
+                  <input
+                    type="email"
+                    required
+                    value={adminForm.email}
+                    onChange={(e) => setAdminForm({ ...adminForm, email: e.target.value })}
+                    className="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-[#2563A3] focus:outline-none transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Phone</label>
+                  <input
+                    type="tel"
+                    value={adminForm.phone}
+                    onChange={(e) => setAdminForm({ ...adminForm, phone: e.target.value })}
+                    className="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-[#2563A3] focus:outline-none transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">College *</label>
+                  <select
+                    required
+                    value={adminForm.college_id}
+                    onChange={(e) => setAdminForm({ ...adminForm, college_id: e.target.value })}
+                    className="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-[#2563A3] focus:outline-none transition-colors"
+                  >
+                    <option value="">Select College</option>
+                    {colleges.map((college) => (
+                      <option key={college.id} value={college.id}>
+                        {college.name} ({college.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">College UID *</label>
+                  <input
+                    type="text"
+                    required
+                    value={adminForm.college_uid}
+                    onChange={(e) => setAdminForm({ ...adminForm, college_uid: e.target.value })}
+                    className="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-[#2563A3] focus:outline-none transition-colors"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    Password {!editingAdmin && '*'}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      required={!editingAdmin}
+                      value={adminForm.password}
+                      onChange={(e) => setAdminForm({ ...adminForm, password: e.target.value })}
+                      placeholder={editingAdmin ? 'Leave blank to keep current password' : 'Enter new password'}
+                      className="w-full px-4 py-3 pr-12 rounded-lg border-2 border-slate-200 focus:border-[#2563A3] focus:outline-none transition-colors"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"
+                    >
+                      {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
+                  </div>
+                  {editingAdmin && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      💡 Leave blank to keep the current password
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="admin_is_active"
+                    checked={adminForm.is_active}
+                    onChange={(e) => setAdminForm({ ...adminForm, is_active: e.target.checked })}
+                    className="w-4 h-4 text-[#2563A3] focus:ring-[#2563A3] border-slate-300 rounded"
+                  />
+                  <label htmlFor="admin_is_active" className="ml-2 text-sm font-semibold text-slate-700">Active</label>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAdminForm(false);
+                    setEditingAdmin(null);
+                  }}
+                  className="px-6 py-3 border-2 border-slate-300 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-3 bg-gradient-to-r from-[#2563A3] to-[#5FB3B3] text-white rounded-xl text-sm font-semibold hover:shadow-lg transition-all"
+                >
+                  {editingAdmin ? 'Update' : 'Create'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+    </div>
   );
 }

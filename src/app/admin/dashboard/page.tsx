@@ -370,12 +370,12 @@ export default function AdminDashboard() {
     }
 
     setUserRole(user.role);
-    
+
     // Set default tab for super_admin to faculty
     if (user.role === 'super_admin') {
       setActiveTab('faculty');
     }
-    
+
     fetchColleges(user);
   }, [router]);
 
@@ -451,12 +451,12 @@ export default function AdminDashboard() {
     setSelectedCollege(college);
     setCollegeDropdownOpen(false);
     setCollegeSearchQuery('');
-    
+
     // Save preference for super admin
     if (userRole === 'super_admin') {
       localStorage.setItem('selected_college_id', college.id);
     }
-    
+
     // Refresh data for selected college
     fetchData(college.id);
   };
@@ -470,17 +470,17 @@ export default function AdminDashboard() {
   const fetchData = async (collegeId?: string) => {
     try {
       setLoading(true);
-      
+
       // Get user data for authentication
       const userData = localStorage.getItem('user');
       if (!userData) {
         router.push('/login');
         return;
       }
-      
+
       // Create authentication token (base64 encoded user data)
       let userDataObj = JSON.parse(userData);
-      
+
       // Fix: Add college_id if missing (for existing users)
       if (!userDataObj.college_id && userDataObj.departments?.id) {
         // Try to get college_id from department
@@ -491,7 +491,7 @@ export default function AdminDashboard() {
           localStorage.setItem('user', JSON.stringify(userDataObj));
         }
       }
-      
+
       const authToken = Buffer.from(JSON.stringify(userDataObj)).toString('base64');
       const headers = {
         'Authorization': `Bearer ${authToken}`,
@@ -501,7 +501,7 @@ export default function AdminDashboard() {
       // Use provided collegeId or user's college_id
       const targetCollegeId = collegeId || userDataObj.college_id;
       const queryParam = targetCollegeId ? `?college_id=${targetCollegeId}` : '';
-      
+
       // Fetch all data in parallel for faster loading
       const [deptResponse, facultyResponse, classroomResponse, batchResponse, bucketResponse, subjectResponse, courseResponse, studentResponse] = await Promise.all([
         fetch(`/api/admin/departments${queryParam}`, { headers }),
@@ -515,9 +515,9 @@ export default function AdminDashboard() {
       ]);
 
       // Check for auth errors
-      if (deptResponse.status === 401 || facultyResponse.status === 401 || classroomResponse.status === 401 || 
-          batchResponse.status === 401 || bucketResponse.status === 401 || subjectResponse.status === 401 || 
-          courseResponse.status === 401 || studentResponse.status === 401) {
+      if (deptResponse.status === 401 || facultyResponse.status === 401 || classroomResponse.status === 401 ||
+        batchResponse.status === 401 || bucketResponse.status === 401 || subjectResponse.status === 401 ||
+        courseResponse.status === 401 || studentResponse.status === 401) {
         router.push('/login?message=Session expired');
         return;
       }
@@ -556,7 +556,7 @@ export default function AdminDashboard() {
     e.preventDefault();
     setSubmittingDept(true);
     setError('');
-    
+
     try {
       // Get authentication token
       const userData = localStorage.getItem('user');
@@ -564,15 +564,15 @@ export default function AdminDashboard() {
         router.push('/login');
         return;
       }
-      
+
       const authToken = Buffer.from(userData).toString('base64');
-      const url = editingDept 
-        ? `/api/admin/departments/${editingDept.id}` 
+      const url = editingDept
+        ? `/api/admin/departments/${editingDept.id}`
         : '/api/admin/departments';
-      
+
       const response = await fetch(url, {
         method: editingDept ? 'PUT' : 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`
         },
@@ -582,7 +582,7 @@ export default function AdminDashboard() {
       if (response.ok) {
         const data = await response.json();
         const dept = data.department;
-        
+
         // Optimistic update
         if (editingDept) {
           setDepartments(prev => prev.map(d => d.id === dept.id ? dept : d));
@@ -591,7 +591,7 @@ export default function AdminDashboard() {
           setDepartments(prev => [...prev, dept]);
           setSuccessMessage('Department created successfully');
         }
-        
+
         setShowDeptForm(false);
         setEditingDept(null);
         setDeptForm({ name: '', code: '', description: '' });
@@ -617,7 +617,7 @@ export default function AdminDashboard() {
         router.push('/login');
         return;
       }
-      
+
       const authToken = Buffer.from(userData).toString('base64');
       const response = await fetch(`/api/admin/departments/${id}`, {
         method: 'DELETE',
@@ -641,7 +641,7 @@ export default function AdminDashboard() {
     e.preventDefault();
     setSubmittingFaculty(true);
     setError('');
-    
+
     try {
       // Get authentication token
       const userData = localStorage.getItem('user');
@@ -649,15 +649,15 @@ export default function AdminDashboard() {
         router.push('/login');
         return;
       }
-      
+
       const authToken = Buffer.from(userData).toString('base64');
-      const url = editingFaculty 
-        ? `/api/admin/faculty/${editingFaculty.id}` 
+      const url = editingFaculty
+        ? `/api/admin/faculty/${editingFaculty.id}`
         : '/api/admin/faculty';
-      
+
       const response = await fetch(url, {
         method: editingFaculty ? 'PUT' : 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`
         },
@@ -667,7 +667,7 @@ export default function AdminDashboard() {
       if (response.ok) {
         const data = await response.json();
         const fac = data.faculty;
-        
+
         // Optimistic update
         if (editingFaculty) {
           setFaculty(prev => prev.map(f => f.id === fac.id ? fac : f));
@@ -676,7 +676,7 @@ export default function AdminDashboard() {
           setFaculty(prev => [...prev, fac]);
           setSuccessMessage('Faculty created successfully');
         }
-        
+
         setShowFacultyForm(false);
         setEditingFaculty(null);
         setFacultyForm({
@@ -715,7 +715,7 @@ export default function AdminDashboard() {
         router.push('/login');
         return;
       }
-      
+
       const authToken = Buffer.from(userData).toString('base64');
       const response = await fetch(`/api/admin/faculty/${id}`, {
         method: 'DELETE',
@@ -769,7 +769,7 @@ export default function AdminDashboard() {
     e.preventDefault();
     setSubmittingClassroom(true);
     setError('');
-    
+
     try {
       // Get authentication token
       const userData = localStorage.getItem('user');
@@ -777,15 +777,15 @@ export default function AdminDashboard() {
         router.push('/login');
         return;
       }
-      
+
       const authToken = Buffer.from(userData).toString('base64');
-      const url = editingClassroom 
-        ? `/api/admin/classrooms/${editingClassroom.id}` 
+      const url = editingClassroom
+        ? `/api/admin/classrooms/${editingClassroom.id}`
         : '/api/admin/classrooms';
-      
+
       const response = await fetch(url, {
         method: editingClassroom ? 'PUT' : 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`
         },
@@ -795,7 +795,7 @@ export default function AdminDashboard() {
       if (response.ok) {
         const data = await response.json();
         const classroom = data.classroom;
-        
+
         // Optimistic update
         if (editingClassroom) {
           setClassrooms(prev => prev.map(c => c.id === classroom.id ? classroom : c));
@@ -804,7 +804,7 @@ export default function AdminDashboard() {
           setClassrooms(prev => [...prev, classroom]);
           setSuccessMessage('Classroom created successfully');
         }
-        
+
         setShowClassroomForm(false);
         setEditingClassroom(null);
         setClassroomForm({
@@ -846,7 +846,7 @@ export default function AdminDashboard() {
         router.push('/login');
         return;
       }
-      
+
       const authToken = Buffer.from(userData).toString('base64');
       const response = await fetch(`/api/admin/classrooms/${id}`, {
         method: 'DELETE',
@@ -891,17 +891,17 @@ export default function AdminDashboard() {
   // Batch handlers
   const handleBatchCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       const userData = localStorage.getItem('user');
       if (!userData) {
         router.push('/login');
         return;
       }
-      
+
       const parsedUser = JSON.parse(userData);
       const token = btoa(JSON.stringify({ id: parsedUser.id, role: parsedUser.role, department_id: parsedUser.department_id }));
-      
+
       const response = await fetch('/api/batches/create', {
         method: 'POST',
         headers: {
@@ -947,10 +947,10 @@ export default function AdminDashboard() {
         router.push('/login');
         return;
       }
-      
+
       const parsedUser = JSON.parse(userData);
       const token = btoa(JSON.stringify({ id: parsedUser.id, role: parsedUser.role, department_id: parsedUser.department_id }));
-      
+
       const response = await fetch(`/api/admin/batches?id=${id}`, {
         method: 'DELETE',
         headers: {
@@ -977,22 +977,22 @@ export default function AdminDashboard() {
     e.preventDefault();
     setSubmittingSubject(true);
     setError('');
-    
+
     try {
       const userData = localStorage.getItem('user');
       if (!userData) {
         router.push('/login');
         return;
       }
-      
+
       const authToken = Buffer.from(userData).toString('base64');
-      const url = editingSubject 
-        ? `/api/admin/subjects/${editingSubject.id}` 
+      const url = editingSubject
+        ? `/api/admin/subjects/${editingSubject.id}`
         : '/api/admin/subjects';
-      
+
       const response = await fetch(url, {
         method: editingSubject ? 'PUT' : 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`
         },
@@ -1002,7 +1002,7 @@ export default function AdminDashboard() {
       if (response.ok) {
         const data = await response.json();
         const subject = data.subject;
-        
+
         // Optimistic update
         if (editingSubject) {
           setSubjects(prev => prev.map(s => s.id === subject.id ? subject : s));
@@ -1011,7 +1011,7 @@ export default function AdminDashboard() {
           setSubjects(prev => [...prev, subject]);
           setSuccessMessage('Subject created successfully');
         }
-        
+
         setShowSubjectForm(false);
         setEditingSubject(null);
         setSubjectForm({
@@ -1049,7 +1049,7 @@ export default function AdminDashboard() {
         router.push('/login');
         return;
       }
-      
+
       const authToken = Buffer.from(userData).toString('base64');
       const response = await fetch(`/api/admin/subjects/${id}`, {
         method: 'DELETE',
@@ -1094,22 +1094,22 @@ export default function AdminDashboard() {
     e.preventDefault();
     setSubmittingCourse(true);
     setError('');
-    
+
     try {
       const userData = localStorage.getItem('user');
       if (!userData) {
         router.push('/login');
         return;
       }
-      
+
       const authToken = Buffer.from(userData).toString('base64');
-      const url = editingCourse 
-        ? `/api/admin/courses/${editingCourse.id}` 
+      const url = editingCourse
+        ? `/api/admin/courses/${editingCourse.id}`
         : '/api/admin/courses';
-      
+
       const response = await fetch(url, {
         method: editingCourse ? 'PUT' : 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`
         },
@@ -1119,7 +1119,7 @@ export default function AdminDashboard() {
       if (response.ok) {
         const data = await response.json();
         const course = data.course;
-        
+
         // Optimistic update
         if (editingCourse) {
           setCourses(prev => prev.map(c => c.id === course.id ? course : c));
@@ -1128,7 +1128,7 @@ export default function AdminDashboard() {
           setCourses(prev => [...prev, course]);
           setSuccessMessage('Course created successfully');
         }
-        
+
         setShowCourseForm(false);
         setEditingCourse(null);
         setCourseForm({
@@ -1159,7 +1159,7 @@ export default function AdminDashboard() {
         router.push('/login');
         return;
       }
-      
+
       const authToken = Buffer.from(userData).toString('base64');
       const response = await fetch(`/api/admin/courses/${id}`, {
         method: 'DELETE',
@@ -1196,32 +1196,32 @@ export default function AdminDashboard() {
   // Student handlers
   const handleStudentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Validate course selection
     if (!studentForm.course_id) {
       setError('Course selection is required');
       setTimeout(() => setError(''), 3000);
       return;
     }
-    
+
     setSubmittingStudent(true);
     setError('');
-    
+
     try {
       const userData = localStorage.getItem('user');
       if (!userData) {
         router.push('/login');
         return;
       }
-      
+
       const authToken = Buffer.from(userData).toString('base64');
-      const url = editingStudent 
-        ? `/api/admin/students/${editingStudent.id}` 
+      const url = editingStudent
+        ? `/api/admin/students/${editingStudent.id}`
         : '/api/admin/students';
-      
+
       const response = await fetch(url, {
         method: editingStudent ? 'PUT' : 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`
         },
@@ -1231,7 +1231,7 @@ export default function AdminDashboard() {
       if (response.ok) {
         const data = await response.json();
         const student = data.student;
-        
+
         // Optimistic update
         if (editingStudent) {
           setStudents(prev => prev.map(s => s.id === student.id ? student : s));
@@ -1240,7 +1240,7 @@ export default function AdminDashboard() {
           setStudents(prev => [...prev, student]);
           setSuccessMessage('Student created successfully');
         }
-        
+
         setShowStudentForm(false);
         setEditingStudent(null);
         setStudentForm({
@@ -1278,7 +1278,7 @@ export default function AdminDashboard() {
         router.push('/login');
         return;
       }
-      
+
       const authToken = Buffer.from(userData).toString('base64');
       const response = await fetch(`/api/admin/students/${id}`, {
         method: 'DELETE',
@@ -1322,50 +1322,50 @@ export default function AdminDashboard() {
   // Bucket handlers
   const handleBucketSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!bucketForm.batch_id) {
       setError('Batch selection is required');
       setTimeout(() => setError(''), 3000);
       return;
     }
-    
+
     if (!bucketForm.bucket_name.trim()) {
       setError('Bucket name is required');
       setTimeout(() => setError(''), 3000);
       return;
     }
-    
+
     if (selectedSubjectsForBucket.length === 0 && !editingBucket) {
       if (!confirm('No subjects selected. Create bucket without subjects?')) {
         return;
       }
     }
-    
+
     setSubmittingBucket(true);
     setError('');
-    
+
     try {
       const userData = localStorage.getItem('user');
       if (!userData) {
         router.push('/login');
         return;
       }
-      
+
       const authToken = Buffer.from(userData).toString('base64');
-      const url = editingBucket 
-        ? `/api/admin/buckets/${editingBucket.id}` 
+      const url = editingBucket
+        ? `/api/admin/buckets/${editingBucket.id}`
         : '/api/admin/buckets';
-      
+
       const payload = {
         ...bucketForm,
         subject_ids: selectedSubjectsForBucket
       };
-      
+
       console.log('Submitting bucket:', payload);
-      
+
       const response = await fetch(url, {
         method: editingBucket ? 'PUT' : 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`
         },
@@ -1375,9 +1375,9 @@ export default function AdminDashboard() {
       if (response.ok) {
         const data = await response.json();
         const bucket = data.bucket;
-        
+
         console.log('Bucket saved successfully:', bucket);
-        
+
         // Optimistic update
         if (editingBucket) {
           setBuckets(prev => prev.map(b => b.id === bucket.id ? bucket : b));
@@ -1386,7 +1386,7 @@ export default function AdminDashboard() {
           setBuckets(prev => [...prev, bucket]);
           setSuccessMessage('Bucket created successfully');
         }
-        
+
         setShowBucketForm(false);
         setEditingBucket(null);
         setBucketForm({
@@ -1419,7 +1419,7 @@ export default function AdminDashboard() {
         router.push('/login');
         return;
       }
-      
+
       const authToken = Buffer.from(userData).toString('base64');
       const response = await fetch(`/api/admin/buckets/${id}`, {
         method: 'DELETE',
@@ -1450,7 +1450,7 @@ export default function AdminDashboard() {
       max_selection: bucket.max_selection,
       is_common_slot: bucket.is_common_slot
     });
-    
+
     // Fetch subjects for this bucket
     try {
       const userData = localStorage.getItem('user');
@@ -1467,7 +1467,7 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error('Error fetching bucket subjects:', error);
     }
-    
+
     setShowBucketForm(true);
   };
 
@@ -1493,9 +1493,9 @@ export default function AdminDashboard() {
       f.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
       f.college_uid.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (f.departments?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     const matchesDepartment = departmentFilter === 'all' || f.department_id === departmentFilter;
-    
+
     return matchesSearch && matchesDepartment;
   });
 
@@ -1504,7 +1504,7 @@ export default function AdminDashboard() {
       (c.building || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (c.location_notes || '').toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     return matchesSearch;
   });
 
@@ -1513,9 +1513,9 @@ export default function AdminDashboard() {
       b.section.toLowerCase().includes(searchQuery.toLowerCase()) ||
       b.academic_year.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (b.departments?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     const matchesDepartment = departmentFilter === 'all' || b.department_id === departmentFilter;
-    
+
     return matchesSearch && matchesDepartment;
   });
 
@@ -1525,11 +1525,11 @@ export default function AdminDashboard() {
       s.subject_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (s.nep_category || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (s.departments?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     const matchesSemester = selectedSemester === 'all' || s.semester === selectedSemester;
     const matchesCourse = courseSemesterFilter === 'all' || s.course_id === courseSemesterFilter;
     const matchesDepartment = departmentFilter === 'all' || s.department_id === departmentFilter;
-    
+
     return matchesSearch && matchesSemester && matchesCourse && matchesDepartment;
   });
 
@@ -1546,10 +1546,10 @@ export default function AdminDashboard() {
       s.college_uid.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (s.student_id || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (s.departments?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     const matchesCourse = courseFilter === 'all' || s.course_id === courseFilter;
     const matchesDepartment = departmentFilter === 'all' || s.department_id === departmentFilter;
-    
+
     return matchesSearch && matchesCourse && matchesDepartment;
   });
 
@@ -1558,11 +1558,11 @@ export default function AdminDashboard() {
       (b.batches?.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (b.batches?.section || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (b.batches?.departments?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     const matchesCourse = bucketCourseFilter === 'all' || b.batches?.course_id === bucketCourseFilter;
     const matchesSemester = bucketSemesterFilter === 'all' || b.batches?.semester === parseInt(bucketSemesterFilter);
     const matchesDepartment = departmentFilter === 'all' || b.batches?.department_id === departmentFilter;
-    
+
     return matchesSearch && matchesCourse && matchesSemester && matchesDepartment;
   });
 
@@ -1591,7 +1591,7 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
-      
+
       <div className="pt-20 pb-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="mb-8 flex items-center justify-between">
@@ -1630,9 +1630,8 @@ export default function AdminDashboard() {
                         <button
                           key={college.id}
                           onClick={() => handleCollegeChange(college)}
-                          className={`w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${
-                            selectedCollege?.id === college.id ? 'bg-blue-50' : ''
-                          }`}
+                          className={`w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${selectedCollege?.id === college.id ? 'bg-blue-50' : ''
+                            }`}
                         >
                           <div className="font-medium text-gray-900">{college.name}</div>
                           <div className="text-sm text-gray-500">{college.code}</div>
@@ -1689,7 +1688,7 @@ export default function AdminDashboard() {
           {error && (
             <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative">
               {error}
-              <button 
+              <button
                 onClick={() => setError('')}
                 className="absolute top-3 right-3 text-red-500 hover:text-red-700 text-xl font-bold"
               >
@@ -1701,7 +1700,7 @@ export default function AdminDashboard() {
           {successMessage && (
             <div className="mb-6 bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded relative">
               {successMessage}
-              <button 
+              <button
                 onClick={() => setSuccessMessage('')}
                 className="absolute top-3 right-3 text-green-500 hover:text-green-700 text-xl font-bold"
               >
@@ -1717,22 +1716,20 @@ export default function AdminDashboard() {
                 {userRole !== 'super_admin' && (
                   <button
                     onClick={() => setActiveTab('departments')}
-                    className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                      activeTab === 'departments'
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
+                    className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'departments'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      }`}
                   >
                     Departments ({departments.length})
                   </button>
                 )}
                 <button
                   onClick={() => setActiveTab('faculty')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === 'faculty'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'faculty'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
                 >
                   {userRole === 'super_admin' ? 'College Admins' : 'Faculty'} ({faculty.length})
                 </button>
@@ -1740,61 +1737,55 @@ export default function AdminDashboard() {
                   <>
                     <button
                       onClick={() => setActiveTab('classrooms')}
-                      className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                        activeTab === 'classrooms'
-                          ? 'border-blue-500 text-blue-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      }`}
+                      className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'classrooms'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        }`}
                     >
                       Classrooms ({classrooms.length})
                     </button>
                     <button
                       onClick={() => setActiveTab('batches')}
-                      className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                        activeTab === 'batches'
-                          ? 'border-blue-500 text-blue-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      }`}
+                      className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'batches'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        }`}
                     >
                       Batches ({batches.length})
                     </button>
                     <button
                       onClick={() => setActiveTab('buckets')}
-                      className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                        activeTab === 'buckets'
-                          ? 'border-blue-500 text-blue-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      }`}
+                      className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'buckets'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        }`}
                     >
                       Buckets ({buckets.length})
                     </button>
                     <button
                       onClick={() => setActiveTab('subjects')}
-                      className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                        activeTab === 'subjects'
-                          ? 'border-blue-500 text-blue-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      }`}
+                      className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'subjects'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        }`}
                     >
                       Subjects ({subjects.length})
                     </button>
                     <button
                       onClick={() => setActiveTab('courses')}
-                      className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                        activeTab === 'courses'
-                          ? 'border-blue-500 text-blue-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      }`}
+                      className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'courses'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        }`}
                     >
                       Courses ({courses.length})
                     </button>
                     <button
                       onClick={() => setActiveTab('students')}
-                      className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                        activeTab === 'students'
-                          ? 'border-blue-500 text-blue-600'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      }`}
+                      className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'students'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        }`}
                     >
                       Students ({students.length})
                     </button>
@@ -1813,11 +1804,11 @@ export default function AdminDashboard() {
                   type="text"
                   placeholder={`Search ${activeTab}...`}
                   value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
             </div>
-          </div>
           ) : null}
 
           {/* Departments Tab */}
@@ -1852,7 +1843,7 @@ export default function AdminDashboard() {
                             type="text"
                             required
                             value={deptForm.name}
-                            onChange={(e) => setDeptForm({...deptForm, name: e.target.value})}
+                            onChange={(e) => setDeptForm({ ...deptForm, name: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Department Name"
                           />
@@ -1863,7 +1854,7 @@ export default function AdminDashboard() {
                             type="text"
                             required
                             value={deptForm.code}
-                            onChange={(e) => setDeptForm({...deptForm, code: e.target.value})}
+                            onChange={(e) => setDeptForm({ ...deptForm, code: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Department Code"
                           />
@@ -1872,7 +1863,7 @@ export default function AdminDashboard() {
                           <label className="block text-sm font-medium text-gray-700">Description</label>
                           <textarea
                             value={deptForm.description}
-                            onChange={(e) => setDeptForm({...deptForm, description: e.target.value})}
+                            onChange={(e) => setDeptForm({ ...deptForm, description: e.target.value })}
                             rows={3}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Department Description"
@@ -1919,43 +1910,43 @@ export default function AdminDashboard() {
                     </li>
                   ) : (
                     filteredDepartments.map((dept) => (
-                    <li key={dept.id}>
-                      <div className="px-4 py-4 sm:px-6">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center">
-                              <p className="text-sm font-medium text-indigo-600 truncate">
-                                {dept.name}
+                      <li key={dept.id}>
+                        <div className="px-4 py-4 sm:px-6">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center">
+                                <p className="text-sm font-medium text-indigo-600 truncate">
+                                  {dept.name}
+                                </p>
+                                <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                  {dept.code}
+                                </span>
+                              </div>
+                              {dept.description && (
+                                <p className="mt-2 text-sm text-gray-600">{dept.description}</p>
+                              )}
+                              <p className="mt-2 text-xs text-gray-500">
+                                Created: {new Date(dept.created_at).toLocaleDateString()}
                               </p>
-                              <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                {dept.code}
-                              </span>
                             </div>
-                            {dept.description && (
-                              <p className="mt-2 text-sm text-gray-600">{dept.description}</p>
-                            )}
-                            <p className="mt-2 text-xs text-gray-500">
-                              Created: {new Date(dept.created_at).toLocaleDateString()}
-                            </p>
-                          </div>
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => startEditDept(dept)}
-                              className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeptDelete(dept.id)}
-                              className="text-red-600 hover:text-red-900 text-sm font-medium"
-                            >
-                              Delete
-                            </button>
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => startEditDept(dept)}
+                                className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeptDelete(dept.id)}
+                                className="text-red-600 hover:text-red-900 text-sm font-medium"
+                              >
+                                Delete
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </li>
-                  )))}
+                      </li>
+                    )))}
                 </ul>
               </div>
             </div>
@@ -2018,7 +2009,7 @@ export default function AdminDashboard() {
                             type="text"
                             required
                             value={facultyForm.first_name}
-                            onChange={(e) => setFacultyForm({...facultyForm, first_name: e.target.value})}
+                            onChange={(e) => setFacultyForm({ ...facultyForm, first_name: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Faculty First Name"
                           />
@@ -2029,7 +2020,7 @@ export default function AdminDashboard() {
                             type="text"
                             required
                             value={facultyForm.last_name}
-                            onChange={(e) => setFacultyForm({...facultyForm, last_name: e.target.value})}
+                            onChange={(e) => setFacultyForm({ ...facultyForm, last_name: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Faculty Last Name"
                           />
@@ -2040,7 +2031,7 @@ export default function AdminDashboard() {
                             type="email"
                             required
                             value={facultyForm.email}
-                            onChange={(e) => setFacultyForm({...facultyForm, email: e.target.value})}
+                            onChange={(e) => setFacultyForm({ ...facultyForm, email: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Faculty Email"
                           />
@@ -2050,7 +2041,7 @@ export default function AdminDashboard() {
                           <input
                             type="tel"
                             value={facultyForm.phone}
-                            onChange={(e) => setFacultyForm({...facultyForm, phone: e.target.value})}
+                            onChange={(e) => setFacultyForm({ ...facultyForm, phone: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Faculty Phone Number"
                           />
@@ -2059,7 +2050,7 @@ export default function AdminDashboard() {
                           <label className="block text-sm font-medium text-gray-700">Department <span className="text-gray-400">(Optional)</span></label>
                           <select
                             value={facultyForm.department_id}
-                            onChange={(e) => setFacultyForm({...facultyForm, department_id: e.target.value})}
+                            onChange={(e) => setFacultyForm({ ...facultyForm, department_id: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Faculty Department"
                           >
@@ -2075,7 +2066,7 @@ export default function AdminDashboard() {
                           <label className="block text-sm font-medium text-gray-700">Role</label>
                           <select
                             value={facultyForm.role}
-                            onChange={(e) => setFacultyForm({...facultyForm, role: e.target.value as 'admin' | 'college_admin' | 'faculty'})}
+                            onChange={(e) => setFacultyForm({ ...facultyForm, role: e.target.value as 'admin' | 'college_admin' | 'faculty' })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Faculty Role"
                           >
@@ -2088,7 +2079,7 @@ export default function AdminDashboard() {
                           <label className="block text-sm font-medium text-gray-700">Faculty Type</label>
                           <select
                             value={facultyForm.faculty_type}
-                            onChange={(e) => setFacultyForm({...facultyForm, faculty_type: e.target.value as 'creator' | 'publisher' | 'general' | 'guest'})}
+                            onChange={(e) => setFacultyForm({ ...facultyForm, faculty_type: e.target.value as 'creator' | 'publisher' | 'general' | 'guest' })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Faculty Type"
                           >
@@ -2103,7 +2094,7 @@ export default function AdminDashboard() {
                             <label className="block text-sm font-medium text-gray-700">College {facultyForm.role === 'college_admin' ? '*' : ''}</label>
                             <select
                               value={facultyForm.college_id}
-                              onChange={(e) => setFacultyForm({...facultyForm, college_id: e.target.value})}
+                              onChange={(e) => setFacultyForm({ ...facultyForm, college_id: e.target.value })}
                               required={facultyForm.role === 'college_admin'}
                               className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                               aria-label="Faculty College"
@@ -2125,7 +2116,7 @@ export default function AdminDashboard() {
                             type="checkbox"
                             id="is_active"
                             checked={facultyForm.is_active}
-                            onChange={(e) => setFacultyForm({...facultyForm, is_active: e.target.checked})}
+                            onChange={(e) => setFacultyForm({ ...facultyForm, is_active: e.target.checked })}
                             className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                           />
                           <label htmlFor="is_active" className="ml-2 block text-sm text-gray-900">
@@ -2173,58 +2164,56 @@ export default function AdminDashboard() {
                     </li>
                   ) : (
                     filteredFaculty.map((fac) => (
-                    <li key={fac.id}>
-                      <div className="px-4 py-4 sm:px-6">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center">
-                              <p className="text-sm font-medium text-indigo-600 truncate">
-                                {fac.first_name} {fac.last_name}
-                              </p>
-                              <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                fac.role === 'admin' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
-                              }`}>
-                                {fac.role}
-                              </span>
-                              <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                fac.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                              }`}>
-                                {fac.is_active ? 'Active' : 'Inactive'}
-                              </span>
-                            </div>
-                            <p className="mt-1 text-sm text-gray-600">{fac.email}</p>
-                            <p className="mt-1 text-sm text-gray-600">
-                              {fac.departments ? `${fac.departments.name} (${fac.departments.code})` : 'No Department Assigned'}
-                            </p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <p className="text-xs text-gray-500">
-                                {fac.college_uid} • {fac.faculty_type}
-                              </p>
-                              {fac.college_id && selectedCollege && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700">
-                                  🏛️ {selectedCollege.code}
+                      <li key={fac.id}>
+                        <div className="px-4 py-4 sm:px-6">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center">
+                                <p className="text-sm font-medium text-indigo-600 truncate">
+                                  {fac.first_name} {fac.last_name}
+                                </p>
+                                <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${fac.role === 'admin' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
+                                  }`}>
+                                  {fac.role}
                                 </span>
-                              )}
+                                <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${fac.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                                  }`}>
+                                  {fac.is_active ? 'Active' : 'Inactive'}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-sm text-gray-600">{fac.email}</p>
+                              <p className="mt-1 text-sm text-gray-600">
+                                {fac.departments ? `${fac.departments.name} (${fac.departments.code})` : 'No Department Assigned'}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <p className="text-xs text-gray-500">
+                                  {fac.college_uid} • {fac.faculty_type}
+                                </p>
+                                {fac.college_id && selectedCollege && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700">
+                                    🏛️ {selectedCollege.code}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => startEditFaculty(fac)}
-                              className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleFacultyDelete(fac.id)}
-                              className="text-red-600 hover:text-red-900 text-sm font-medium"
-                            >
-                              Delete
-                            </button>
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => startEditFaculty(fac)}
+                                className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleFacultyDelete(fac.id)}
+                                className="text-red-600 hover:text-red-900 text-sm font-medium"
+                              >
+                                Delete
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </li>
-                  )))}
+                      </li>
+                    )))}
                 </ul>
               </div>
             </div>
@@ -2293,7 +2282,7 @@ export default function AdminDashboard() {
                             type="text"
                             required
                             value={classroomForm.name}
-                            onChange={(e) => setClassroomForm({...classroomForm, name: e.target.value})}
+                            onChange={(e) => setClassroomForm({ ...classroomForm, name: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             placeholder="e.g., Room A101, Lab C301"
                             aria-label="Classroom Name"
@@ -2304,7 +2293,7 @@ export default function AdminDashboard() {
                           <input
                             type="text"
                             value={classroomForm.building}
-                            onChange={(e) => setClassroomForm({...classroomForm, building: e.target.value})}
+                            onChange={(e) => setClassroomForm({ ...classroomForm, building: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             placeholder="e.g., Academic Block A"
                             aria-label="Classroom Building"
@@ -2317,7 +2306,7 @@ export default function AdminDashboard() {
                             min="0"
                             max="20"
                             value={classroomForm.floor_number}
-                            onChange={(e) => setClassroomForm({...classroomForm, floor_number: parseInt(e.target.value) || 1})}
+                            onChange={(e) => setClassroomForm({ ...classroomForm, floor_number: parseInt(e.target.value) || 1 })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Classroom Floor Number"
                           />
@@ -2330,7 +2319,7 @@ export default function AdminDashboard() {
                             min="1"
                             max="500"
                             value={classroomForm.capacity}
-                            onChange={(e) => setClassroomForm({...classroomForm, capacity: parseInt(e.target.value) || 30})}
+                            onChange={(e) => setClassroomForm({ ...classroomForm, capacity: parseInt(e.target.value) || 30 })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Classroom Capacity"
                           />
@@ -2340,7 +2329,7 @@ export default function AdminDashboard() {
                           <select
                             required
                             value={classroomForm.type}
-                            onChange={(e) => setClassroomForm({...classroomForm, type: e.target.value as any})}
+                            onChange={(e) => setClassroomForm({ ...classroomForm, type: e.target.value as any })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Classroom Type"
                           >
@@ -2358,7 +2347,7 @@ export default function AdminDashboard() {
                             min="1"
                             max="10"
                             value={classroomForm.classroom_priority}
-                            onChange={(e) => setClassroomForm({...classroomForm, classroom_priority: parseInt(e.target.value) || 5})}
+                            onChange={(e) => setClassroomForm({ ...classroomForm, classroom_priority: parseInt(e.target.value) || 5 })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Classroom Priority"
                           />
@@ -2374,7 +2363,7 @@ export default function AdminDashboard() {
                               type="checkbox"
                               id="has_projector"
                               checked={classroomForm.has_projector}
-                              onChange={(e) => setClassroomForm({...classroomForm, has_projector: e.target.checked})}
+                              onChange={(e) => setClassroomForm({ ...classroomForm, has_projector: e.target.checked })}
                               className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                             />
                             <label htmlFor="has_projector" className="ml-2 block text-sm text-gray-900">
@@ -2386,7 +2375,7 @@ export default function AdminDashboard() {
                               type="checkbox"
                               id="has_ac"
                               checked={classroomForm.has_ac}
-                              onChange={(e) => setClassroomForm({...classroomForm, has_ac: e.target.checked})}
+                              onChange={(e) => setClassroomForm({ ...classroomForm, has_ac: e.target.checked })}
                               className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                             />
                             <label htmlFor="has_ac" className="ml-2 block text-sm text-gray-900">
@@ -2398,7 +2387,7 @@ export default function AdminDashboard() {
                               type="checkbox"
                               id="has_computers"
                               checked={classroomForm.has_computers}
-                              onChange={(e) => setClassroomForm({...classroomForm, has_computers: e.target.checked})}
+                              onChange={(e) => setClassroomForm({ ...classroomForm, has_computers: e.target.checked })}
                               className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                             />
                             <label htmlFor="has_computers" className="ml-2 block text-sm text-gray-900">
@@ -2410,7 +2399,7 @@ export default function AdminDashboard() {
                               type="checkbox"
                               id="has_lab_equipment"
                               checked={classroomForm.has_lab_equipment}
-                              onChange={(e) => setClassroomForm({...classroomForm, has_lab_equipment: e.target.checked})}
+                              onChange={(e) => setClassroomForm({ ...classroomForm, has_lab_equipment: e.target.checked })}
                               className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                             />
                             <label htmlFor="has_lab_equipment" className="ml-2 block text-sm text-gray-900">
@@ -2422,7 +2411,7 @@ export default function AdminDashboard() {
                               type="checkbox"
                               id="is_smart_classroom"
                               checked={classroomForm.is_smart_classroom}
-                              onChange={(e) => setClassroomForm({...classroomForm, is_smart_classroom: e.target.checked})}
+                              onChange={(e) => setClassroomForm({ ...classroomForm, is_smart_classroom: e.target.checked })}
                               className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                             />
                             <label htmlFor="is_smart_classroom" className="ml-2 block text-sm text-gray-900">
@@ -2434,7 +2423,7 @@ export default function AdminDashboard() {
                               type="checkbox"
                               id="is_available"
                               checked={classroomForm.is_available}
-                              onChange={(e) => setClassroomForm({...classroomForm, is_available: e.target.checked})}
+                              onChange={(e) => setClassroomForm({ ...classroomForm, is_available: e.target.checked })}
                               className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                             />
                             <label htmlFor="is_available" className="ml-2 block text-sm text-gray-900">
@@ -2448,7 +2437,7 @@ export default function AdminDashboard() {
                         <label className="block text-sm font-medium text-gray-700">Location Notes</label>
                         <textarea
                           value={classroomForm.location_notes}
-                          onChange={(e) => setClassroomForm({...classroomForm, location_notes: e.target.value})}
+                          onChange={(e) => setClassroomForm({ ...classroomForm, location_notes: e.target.value })}
                           rows={2}
                           className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                           placeholder="Additional location information..."
@@ -2495,88 +2484,86 @@ export default function AdminDashboard() {
                     </li>
                   ) : (
                     filteredClassrooms.map((classroom) => (
-                    <li key={classroom.id}>
-                      <div className="px-4 py-4 sm:px-6">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center">
-                              <p className="text-sm font-medium text-indigo-600 truncate">
-                                {classroom.name}
+                      <li key={classroom.id}>
+                        <div className="px-4 py-4 sm:px-6">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center">
+                                <p className="text-sm font-medium text-indigo-600 truncate">
+                                  {classroom.name}
+                                </p>
+                                <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${classroom.type === 'Lab' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                                  }`}>
+                                  {classroom.type}
+                                </span>
+                                <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                  {classroom.capacity} seats
+                                </span>
+                                <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${classroom.is_available ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                  }`}>
+                                  {classroom.is_available ? 'Available' : 'Unavailable'}
+                                </span>
+                              </div>
+                              <div className="mt-2 flex items-center text-sm text-gray-600">
+                                {classroom.building && (
+                                  <span className="mr-4">📍 {classroom.building}</span>
+                                )}
+                                {classroom.floor_number && (
+                                  <span className="mr-4">🏢 Floor {classroom.floor_number}</span>
+                                )}
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {classroom.has_projector && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
+                                    📽️ Projector
+                                  </span>
+                                )}
+                                {classroom.has_ac && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
+                                    ❄️ AC
+                                  </span>
+                                )}
+                                {classroom.has_computers && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700">
+                                    💻 Computers
+                                  </span>
+                                )}
+                                {classroom.has_lab_equipment && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-50 text-purple-700">
+                                    🔬 Lab Equipment
+                                  </span>
+                                )}
+                                {classroom.is_smart_classroom && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-50 text-yellow-700">
+                                    🧠 Smart Room
+                                  </span>
+                                )}
+                              </div>
+                              {classroom.location_notes && (
+                                <p className="mt-2 text-sm text-gray-600">{classroom.location_notes}</p>
+                              )}
+                              <p className="mt-2 text-xs text-gray-500">
+                                Priority: {classroom.classroom_priority}/10 • Created: {new Date(classroom.created_at).toLocaleDateString()}
                               </p>
-                              <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                classroom.type === 'Lab' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
-                              }`}>
-                                {classroom.type}
-                              </span>
-                              <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                {classroom.capacity} seats
-                              </span>
-                              <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                classroom.is_available ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                              }`}>
-                                {classroom.is_available ? 'Available' : 'Unavailable'}
-                              </span>
                             </div>
-                            <div className="mt-2 flex items-center text-sm text-gray-600">
-                              {classroom.building && (
-                                <span className="mr-4">📍 {classroom.building}</span>
-                              )}
-                              {classroom.floor_number && (
-                                <span className="mr-4">🏢 Floor {classroom.floor_number}</span>
-                              )}
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => startEditClassroom(classroom)}
+                                className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleClassroomDelete(classroom.id)}
+                                className="text-red-600 hover:text-red-900 text-sm font-medium"
+                              >
+                                Delete
+                              </button>
                             </div>
-                            <div className="mt-2 flex flex-wrap gap-1">
-                              {classroom.has_projector && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
-                                  📽️ Projector
-                                </span>
-                              )}
-                              {classroom.has_ac && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
-                                  ❄️ AC
-                                </span>
-                              )}
-                              {classroom.has_computers && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700">
-                                  💻 Computers
-                                </span>
-                              )}
-                              {classroom.has_lab_equipment && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-50 text-purple-700">
-                                  🔬 Lab Equipment
-                                </span>
-                              )}
-                              {classroom.is_smart_classroom && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-50 text-yellow-700">
-                                  🧠 Smart Room
-                                </span>
-                              )}
-                            </div>
-                            {classroom.location_notes && (
-                              <p className="mt-2 text-sm text-gray-600">{classroom.location_notes}</p>
-                            )}
-                            <p className="mt-2 text-xs text-gray-500">
-                              Priority: {classroom.classroom_priority}/10 • Created: {new Date(classroom.created_at).toLocaleDateString()}
-                            </p>
-                          </div>
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => startEditClassroom(classroom)}
-                              className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleClassroomDelete(classroom.id)}
-                              className="text-red-600 hover:text-red-900 text-sm font-medium"
-                            >
-                              Delete
-                            </button>
                           </div>
                         </div>
-                      </div>
-                    </li>
-                  )))}
+                      </li>
+                    )))}
                 </ul>
                 {classrooms.length === 0 && (
                   <div className="text-center py-12">
@@ -2752,8 +2739,8 @@ export default function AdminDashboard() {
 
                       <div className="bg-blue-50 p-3 rounded-lg">
                         <p className="text-sm text-blue-900">
-                          <strong>Batch Name Preview:</strong> {batchForm.department_id && batchForm.semester ? 
-                            `${departments.find(d => d.id === batchForm.department_id)?.code || 'DEPT'} Batch ${batchForm.admission_year} - Sem ${batchForm.semester} (${batchForm.academic_year})` 
+                          <strong>Batch Name Preview:</strong> {batchForm.department_id && batchForm.semester ?
+                            `${departments.find(d => d.id === batchForm.department_id)?.code || 'DEPT'} Batch ${batchForm.admission_year} - Sem ${batchForm.semester} (${batchForm.academic_year})`
                             : 'Select department and semester to preview name'}
                         </p>
                       </div>
@@ -2787,76 +2774,75 @@ export default function AdminDashboard() {
                     </li>
                   ) : (
                     filteredBatches.map((batch) => (
-                    <li key={batch.id}>
-                      <div className="px-4 py-4 sm:px-6">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <h3 className="text-lg font-medium text-gray-900">{batch.name}</h3>
-                                <p className="text-sm text-gray-500 mt-1">
-                                  <span className="font-medium">ID:</span> {batch.id}
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                  batch.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                }`}>
-                                  {batch.is_active ? 'Active' : 'Inactive'}
-                                </span>
-                              </div>
-                            </div>
-                            
-                            <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
-                              <div>
-                                <span className="font-medium">Department:</span><br/>
-                                {batch.departments?.name || 'N/A'} ({batch.departments?.code || 'N/A'})
-                              </div>
-                              <div>
-                                <span className="font-medium">Semester:</span><br/>
-                                Semester {batch.semester}
-                              </div>
-                              <div>
-                                <span className="font-medium">Section:</span><br/>
-                                {batch.section}
-                              </div>
-                              <div>
-                                <span className="font-medium">Strength:</span><br/>
-                                {batch.actual_strength}/{batch.expected_strength}
-                              </div>
-                            </div>
-                            
-                            <div className="mt-2 text-sm text-gray-600">
-                              <span className="font-medium">Academic Year:</span> {batch.academic_year}
-                              <span className="ml-4 font-medium">Created:</span> {new Date(batch.created_at).toLocaleDateString()}
-                            </div>
-
-                            <div className="mt-3 p-3 bg-blue-50 rounded-lg">
-                              <h4 className="text-sm font-medium text-blue-900 mb-2">NEP 2020 Data Flow:</h4>
-                              <div className="text-xs text-blue-800">
-                                <div className="flex items-center space-x-2">
-                                  <span className="bg-blue-100 px-2 py-1 rounded">Batch ID: {batch.id}</span>
-                                  <span>→</span>
-                                  <span className="bg-green-100 px-2 py-1 rounded">Elective Buckets</span>
-                                  <span>→</span>
-                                  <span className="bg-yellow-100 px-2 py-1 rounded">Subjects (via course_group_id)</span>
+                      <li key={batch.id}>
+                        <div className="px-4 py-4 sm:px-6">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <h3 className="text-lg font-medium text-gray-900">{batch.name}</h3>
+                                  <p className="text-sm text-gray-500 mt-1">
+                                    <span className="font-medium">ID:</span> {batch.id}
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${batch.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                    }`}>
+                                    {batch.is_active ? 'Active' : 'Inactive'}
+                                  </span>
                                 </div>
                               </div>
-                            </div>
 
-                            <div className="mt-4 flex justify-end">
-                              <button
-                                onClick={() => handleBatchDelete(batch.id, batch.name)}
-                                className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors"
-                              >
-                                Delete Batch
-                              </button>
+                              <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
+                                <div>
+                                  <span className="font-medium">Department:</span><br />
+                                  {batch.departments?.name || 'N/A'} ({batch.departments?.code || 'N/A'})
+                                </div>
+                                <div>
+                                  <span className="font-medium">Semester:</span><br />
+                                  Semester {batch.semester}
+                                </div>
+                                <div>
+                                  <span className="font-medium">Section:</span><br />
+                                  {batch.section}
+                                </div>
+                                <div>
+                                  <span className="font-medium">Strength:</span><br />
+                                  {batch.actual_strength}/{batch.expected_strength}
+                                </div>
+                              </div>
+
+                              <div className="mt-2 text-sm text-gray-600">
+                                <span className="font-medium">Academic Year:</span> {batch.academic_year}
+                                <span className="ml-4 font-medium">Created:</span> {new Date(batch.created_at).toLocaleDateString()}
+                              </div>
+
+                              <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+                                <h4 className="text-sm font-medium text-blue-900 mb-2">NEP 2020 Data Flow:</h4>
+                                <div className="text-xs text-blue-800">
+                                  <div className="flex items-center space-x-2">
+                                    <span className="bg-blue-100 px-2 py-1 rounded">Batch ID: {batch.id}</span>
+                                    <span>→</span>
+                                    <span className="bg-green-100 px-2 py-1 rounded">Elective Buckets</span>
+                                    <span>→</span>
+                                    <span className="bg-yellow-100 px-2 py-1 rounded">Subjects (via course_group_id)</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="mt-4 flex justify-end">
+                                <button
+                                  onClick={() => handleBatchDelete(batch.id, batch.name)}
+                                  className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors"
+                                >
+                                  Delete Batch
+                                </button>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    </li>
-                  )))}
+                      </li>
+                    )))}
                 </ul>
                 {batches.length === 0 && (
                   <div className="text-center py-12">
@@ -2946,7 +2932,7 @@ export default function AdminDashboard() {
                           <label className="block text-sm font-medium text-gray-700">Batch *</label>
                           <select
                             value={bucketForm.batch_id}
-                            onChange={(e) => setBucketForm({...bucketForm, batch_id: e.target.value})}
+                            onChange={(e) => setBucketForm({ ...bucketForm, batch_id: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             required
                             disabled={!!editingBucket}
@@ -2961,8 +2947,8 @@ export default function AdminDashboard() {
                           </select>
                           {bucketForm.batch_id && batches.find(b => b.id === bucketForm.batch_id) && (
                             <p className="mt-1 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
-                              ✓ Selected: {batches.find(b => b.id === bucketForm.batch_id)?.name} - 
-                              Sem {batches.find(b => b.id === bucketForm.batch_id)?.semester} 
+                              ✓ Selected: {batches.find(b => b.id === bucketForm.batch_id)?.name} -
+                              Sem {batches.find(b => b.id === bucketForm.batch_id)?.semester}
                               ({batches.find(b => b.id === bucketForm.batch_id)?.departments?.code})
                             </p>
                           )}
@@ -2973,7 +2959,7 @@ export default function AdminDashboard() {
                           <input
                             type="text"
                             value={bucketForm.bucket_name}
-                            onChange={(e) => setBucketForm({...bucketForm, bucket_name: e.target.value})}
+                            onChange={(e) => setBucketForm({ ...bucketForm, bucket_name: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             placeholder="e.g., Open Elective 1"
                             required
@@ -2988,7 +2974,7 @@ export default function AdminDashboard() {
                               type="number"
                               min="1"
                               value={bucketForm.min_selection}
-                              onChange={(e) => setBucketForm({...bucketForm, min_selection: parseInt(e.target.value)})}
+                              onChange={(e) => setBucketForm({ ...bucketForm, min_selection: parseInt(e.target.value) })}
                               className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                               aria-label="Minimum Subject Selection"
                             />
@@ -3000,7 +2986,7 @@ export default function AdminDashboard() {
                               type="number"
                               min="1"
                               value={bucketForm.max_selection}
-                              onChange={(e) => setBucketForm({...bucketForm, max_selection: parseInt(e.target.value)})}
+                              onChange={(e) => setBucketForm({ ...bucketForm, max_selection: parseInt(e.target.value) })}
                               className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                               aria-label="Maximum Subject Selection"
                             />
@@ -3012,7 +2998,7 @@ export default function AdminDashboard() {
                             type="checkbox"
                             id="is_common_slot"
                             checked={bucketForm.is_common_slot}
-                            onChange={(e) => setBucketForm({...bucketForm, is_common_slot: e.target.checked})}
+                            onChange={(e) => setBucketForm({ ...bucketForm, is_common_slot: e.target.checked })}
                             className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                           />
                           <label htmlFor="is_common_slot" className="ml-2 block text-sm text-gray-900">
@@ -3024,85 +3010,85 @@ export default function AdminDashboard() {
                         {bucketForm.batch_id ? (
                           <div className="border-t pt-4 mt-4">
                             <h4 className="text-sm font-semibold text-gray-900 mb-3">Add Subjects to Bucket</h4>
-                            
+
                             {/* Subject Filters */}
                             <div className="grid grid-cols-3 gap-2 mb-3">
-                            <select
-                              value={bucketSubjectFilter.course_id}
-                              onChange={(e) => setBucketSubjectFilter({...bucketSubjectFilter, course_id: e.target.value})}
-                              className="text-xs px-2 py-1.5 border border-gray-300 rounded bg-white text-gray-900"
-                              aria-label="Filter Bucket Subjects by Course"
-                            >
-                              <option value="">All Courses</option>
-                              {courses.map(course => (
-                                <option key={course.id} value={course.id}>{course.code}</option>
-                              ))}
-                            </select>
-                            <select
-                              value={bucketSubjectFilter.department_id}
-                              onChange={(e) => setBucketSubjectFilter({...bucketSubjectFilter, department_id: e.target.value})}
-                              className="text-xs px-2 py-1.5 border border-gray-300 rounded bg-white text-gray-900"
-                              aria-label="Filter Bucket Subjects by Department"
-                            >
-                              <option value="">All Depts</option>
-                              {departments.map(dept => (
-                                <option key={dept.id} value={dept.id}>{dept.code}</option>
-                              ))}
-                            </select>
-                            <select
-                              value={bucketSubjectFilter.semester}
-                              onChange={(e) => setBucketSubjectFilter({...bucketSubjectFilter, semester: e.target.value})}
-                              className="text-xs px-2 py-1.5 border border-gray-300 rounded bg-white text-gray-900"
-                              aria-label="Filter Bucket Subjects by Semester"
-                            >
-                              <option value="">All Sems</option>
-                              {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
-                                <option key={sem} value={sem}>Sem {sem}</option>
-                              ))}
-                            </select>
-                          </div>
+                              <select
+                                value={bucketSubjectFilter.course_id}
+                                onChange={(e) => setBucketSubjectFilter({ ...bucketSubjectFilter, course_id: e.target.value })}
+                                className="text-xs px-2 py-1.5 border border-gray-300 rounded bg-white text-gray-900"
+                                aria-label="Filter Bucket Subjects by Course"
+                              >
+                                <option value="">All Courses</option>
+                                {courses.map(course => (
+                                  <option key={course.id} value={course.id}>{course.code}</option>
+                                ))}
+                              </select>
+                              <select
+                                value={bucketSubjectFilter.department_id}
+                                onChange={(e) => setBucketSubjectFilter({ ...bucketSubjectFilter, department_id: e.target.value })}
+                                className="text-xs px-2 py-1.5 border border-gray-300 rounded bg-white text-gray-900"
+                                aria-label="Filter Bucket Subjects by Department"
+                              >
+                                <option value="">All Depts</option>
+                                {departments.map(dept => (
+                                  <option key={dept.id} value={dept.id}>{dept.code}</option>
+                                ))}
+                              </select>
+                              <select
+                                value={bucketSubjectFilter.semester}
+                                onChange={(e) => setBucketSubjectFilter({ ...bucketSubjectFilter, semester: e.target.value })}
+                                className="text-xs px-2 py-1.5 border border-gray-300 rounded bg-white text-gray-900"
+                                aria-label="Filter Bucket Subjects by Semester"
+                              >
+                                <option value="">All Sems</option>
+                                {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
+                                  <option key={sem} value={sem}>Sem {sem}</option>
+                                ))}
+                              </select>
+                            </div>
 
-                          {/* Available Subjects */}
-                          <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-md">
-                            {availableSubjectsForBucket.length === 0 ? (
-                              <div className="p-3 text-xs text-gray-500 text-center">
-                                No subjects available with selected filters
-                              </div>
-                            ) : (
-                              availableSubjectsForBucket.map(subject => (
-                                <label
-                                  key={subject.id}
-                                  className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0"
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedSubjectsForBucket.includes(subject.id)}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        setSelectedSubjectsForBucket([...selectedSubjectsForBucket, subject.id]);
-                                      } else {
-                                        setSelectedSubjectsForBucket(selectedSubjectsForBucket.filter(id => id !== subject.id));
-                                      }
-                                    }}
-                                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                                  />
-                                  <span className="ml-2 text-sm text-gray-900">
-                                    <span className="font-medium">{subject.code}</span> - {subject.name}
-                                    <span className="text-xs text-gray-500 ml-1">
-                                      ({subject.subject_type}, {subject.credits_per_week} hrs)
+                            {/* Available Subjects */}
+                            <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-md">
+                              {availableSubjectsForBucket.length === 0 ? (
+                                <div className="p-3 text-xs text-gray-500 text-center">
+                                  No subjects available with selected filters
+                                </div>
+                              ) : (
+                                availableSubjectsForBucket.map(subject => (
+                                  <label
+                                    key={subject.id}
+                                    className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedSubjectsForBucket.includes(subject.id)}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setSelectedSubjectsForBucket([...selectedSubjectsForBucket, subject.id]);
+                                        } else {
+                                          setSelectedSubjectsForBucket(selectedSubjectsForBucket.filter(id => id !== subject.id));
+                                        }
+                                      }}
+                                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                    />
+                                    <span className="ml-2 text-sm text-gray-900">
+                                      <span className="font-medium">{subject.code}</span> - {subject.name}
+                                      <span className="text-xs text-gray-500 ml-1">
+                                        ({subject.subject_type}, {subject.credits_per_week} hrs)
+                                      </span>
                                     </span>
-                                  </span>
-                                </label>
-                              ))
+                                  </label>
+                                ))
+                              )}
+                            </div>
+
+                            {selectedSubjectsForBucket.length > 0 && (
+                              <div className="mt-2 text-xs text-gray-600">
+                                {selectedSubjectsForBucket.length} subject(s) selected
+                              </div>
                             )}
                           </div>
-                          
-                          {selectedSubjectsForBucket.length > 0 && (
-                            <div className="mt-2 text-xs text-gray-600">
-                              {selectedSubjectsForBucket.length} subject(s) selected
-                            </div>
-                          )}
-                        </div>
                         ) : (
                           <div className="border-t pt-4 mt-4">
                             <div className="text-center py-6 text-gray-500">
@@ -3336,7 +3322,7 @@ export default function AdminDashboard() {
                           <select
                             required
                             value={subjectForm.course_id}
-                            onChange={(e) => setSubjectForm({...subjectForm, course_id: e.target.value})}
+                            onChange={(e) => setSubjectForm({ ...subjectForm, course_id: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Subject Course"
                           >
@@ -3353,7 +3339,7 @@ export default function AdminDashboard() {
                           <label className="block text-sm font-medium text-gray-700">Department (Optional)</label>
                           <select
                             value={subjectForm.department_id}
-                            onChange={(e) => setSubjectForm({...subjectForm, department_id: e.target.value})}
+                            onChange={(e) => setSubjectForm({ ...subjectForm, department_id: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Subject Department"
                           >
@@ -3372,7 +3358,7 @@ export default function AdminDashboard() {
                             type="text"
                             required
                             value={subjectForm.code}
-                            onChange={(e) => setSubjectForm({...subjectForm, code: e.target.value.toUpperCase()})}
+                            onChange={(e) => setSubjectForm({ ...subjectForm, code: e.target.value.toUpperCase() })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             placeholder="e.g., CS101, MATH201"
                             aria-label="Subject Code"
@@ -3385,7 +3371,7 @@ export default function AdminDashboard() {
                             type="text"
                             required
                             value={subjectForm.name}
-                            onChange={(e) => setSubjectForm({...subjectForm, name: e.target.value})}
+                            onChange={(e) => setSubjectForm({ ...subjectForm, name: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             placeholder="e.g., Data Structures"
                             aria-label="Subject Name"
@@ -3400,7 +3386,7 @@ export default function AdminDashboard() {
                             min="1"
                             max="10"
                             value={subjectForm.credits_per_week}
-                            onChange={(e) => setSubjectForm({...subjectForm, credits_per_week: parseInt(e.target.value) || 1})}
+                            onChange={(e) => setSubjectForm({ ...subjectForm, credits_per_week: parseInt(e.target.value) || 1 })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Subject Credits Per Week"
                           />
@@ -3411,7 +3397,7 @@ export default function AdminDashboard() {
                           <select
                             required
                             value={subjectForm.semester}
-                            onChange={(e) => setSubjectForm({...subjectForm, semester: parseInt(e.target.value)})}
+                            onChange={(e) => setSubjectForm({ ...subjectForm, semester: parseInt(e.target.value) })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Subject Semester"
                           >
@@ -3425,7 +3411,7 @@ export default function AdminDashboard() {
                           <label className="block text-sm font-medium text-gray-700">Description</label>
                           <textarea
                             value={subjectForm.description}
-                            onChange={(e) => setSubjectForm({...subjectForm, description: e.target.value})}
+                            onChange={(e) => setSubjectForm({ ...subjectForm, description: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             rows={3}
                             placeholder="Subject description (optional)"
@@ -3437,7 +3423,7 @@ export default function AdminDashboard() {
                           <select
                             required
                             value={subjectForm.subject_type}
-                            onChange={(e) => setSubjectForm({...subjectForm, subject_type: e.target.value as any})}
+                            onChange={(e) => setSubjectForm({ ...subjectForm, subject_type: e.target.value as any })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Subject Type"
                           >
@@ -3452,7 +3438,7 @@ export default function AdminDashboard() {
                           <label className="block text-sm font-medium text-gray-700">NEP Category</label>
                           <select
                             value={subjectForm.nep_category}
-                            onChange={(e) => setSubjectForm({...subjectForm, nep_category: e.target.value as any})}
+                            onChange={(e) => setSubjectForm({ ...subjectForm, nep_category: e.target.value as any })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Subject NEP Category"
                           >
@@ -3473,20 +3459,20 @@ export default function AdminDashboard() {
                               type="checkbox"
                               id="requires_lab"
                               checked={subjectForm.requires_lab}
-                              onChange={(e) => setSubjectForm({...subjectForm, requires_lab: e.target.checked})}
+                              onChange={(e) => setSubjectForm({ ...subjectForm, requires_lab: e.target.checked })}
                               className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                             />
                             <label htmlFor="requires_lab" className="ml-2 block text-sm text-gray-900">
                               Requires Lab
                             </label>
                           </div>
-                          
+
                           <div className="flex items-center">
                             <input
                               type="checkbox"
                               id="requires_projector"
                               checked={subjectForm.requires_projector}
-                              onChange={(e) => setSubjectForm({...subjectForm, requires_projector: e.target.checked})}
+                              onChange={(e) => setSubjectForm({ ...subjectForm, requires_projector: e.target.checked })}
                               className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                             />
                             <label htmlFor="requires_projector" className="ml-2 block text-sm text-gray-900">
@@ -3500,7 +3486,7 @@ export default function AdminDashboard() {
                             type="checkbox"
                             id="subject_is_active"
                             checked={subjectForm.is_active}
-                            onChange={(e) => setSubjectForm({...subjectForm, is_active: e.target.checked})}
+                            onChange={(e) => setSubjectForm({ ...subjectForm, is_active: e.target.checked })}
                             className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                           />
                           <label htmlFor="subject_is_active" className="ml-2 block text-sm text-gray-900">
@@ -3549,77 +3535,74 @@ export default function AdminDashboard() {
                     </li>
                   ) : (
                     filteredSubjects.map((subject) => (
-                    <li key={subject.id}>
-                      <div className="px-4 py-4 sm:px-6">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center">
-                              <p className="text-sm font-medium text-indigo-600 truncate">
-                                {subject.code}
-                              </p>
-                              <span className="ml-2 text-sm text-gray-900">
-                                {subject.name}
-                              </span>
-                              <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                subject.subject_type === 'LAB' ? 'bg-purple-100 text-purple-800' : 
-                                subject.subject_type === 'PRACTICAL' ? 'bg-green-100 text-green-800' :
-                                subject.subject_type === 'TUTORIAL' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-blue-100 text-blue-800'
-                              }`}>
-                                {subject.subject_type}
-                              </span>
-                              {subject.nep_category && (
-                                <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                  subject.nep_category === 'MAJOR' ? 'bg-indigo-100 text-indigo-800' :
-                                  subject.nep_category === 'MINOR' ? 'bg-pink-100 text-pink-800' :
-                                  subject.nep_category === 'CORE' ? 'bg-cyan-100 text-cyan-800' :
-                                  subject.nep_category === 'MULTIDISCIPLINARY' ? 'bg-teal-100 text-teal-800' :
-                                  subject.nep_category === 'AEC' ? 'bg-orange-100 text-orange-800' :
-                                  subject.nep_category === 'VAC' ? 'bg-lime-100 text-lime-800' :
-                                  subject.nep_category === 'PEDAGOGY' ? 'bg-amber-100 text-amber-800' :
-                                  'bg-rose-100 text-rose-800'
-                                }`}>
-                                  {subject.nep_category}
+                      <li key={subject.id}>
+                        <div className="px-4 py-4 sm:px-6">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center">
+                                <p className="text-sm font-medium text-indigo-600 truncate">
+                                  {subject.code}
+                                </p>
+                                <span className="ml-2 text-sm text-gray-900">
+                                  {subject.name}
                                 </span>
-                              )}
-                              <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                subject.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                              }`}>
-                                {subject.is_active ? 'Active' : 'Inactive'}
-                              </span>
+                                <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${subject.subject_type === 'LAB' ? 'bg-purple-100 text-purple-800' :
+                                  subject.subject_type === 'PRACTICAL' ? 'bg-green-100 text-green-800' :
+                                    subject.subject_type === 'TUTORIAL' ? 'bg-yellow-100 text-yellow-800' :
+                                      'bg-blue-100 text-blue-800'
+                                  }`}>
+                                  {subject.subject_type}
+                                </span>
+                                {subject.nep_category && (
+                                  <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${subject.nep_category === 'MAJOR' ? 'bg-indigo-100 text-indigo-800' :
+                                    subject.nep_category === 'MINOR' ? 'bg-pink-100 text-pink-800' :
+                                      subject.nep_category === 'CORE' ? 'bg-cyan-100 text-cyan-800' :
+                                        subject.nep_category === 'MULTIDISCIPLINARY' ? 'bg-teal-100 text-teal-800' :
+                                          subject.nep_category === 'AEC' ? 'bg-orange-100 text-orange-800' :
+                                            subject.nep_category === 'VAC' ? 'bg-lime-100 text-lime-800' :
+                                              subject.nep_category === 'PEDAGOGY' ? 'bg-amber-100 text-amber-800' :
+                                                'bg-rose-100 text-rose-800'
+                                    }`}>
+                                    {subject.nep_category}
+                                  </span>
+                                )}
+                                <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${subject.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                  }`}>
+                                  {subject.is_active ? 'Active' : 'Inactive'}
+                                </span>
+                              </div>
+                              <div className="mt-2 flex items-center text-sm text-gray-600">
+                                <span className="mr-4">📚 {subject.credits_per_week} Credits/Week</span>
+                                <span className="mr-4">📅 Semester {subject.semester}</span>
+                                {subject.departments && (
+                                  <span className="mr-4">🏢 {subject.departments.name}</span>
+                                )}
+                                {subject.course_id && courses.find(c => c.id === subject.course_id) && (
+                                  <span className="mr-4">🎓 {courses.find(c => c.id === subject.course_id)?.code}</span>
+                                )}
+                              </div>
+                              <p className="mt-2 text-xs text-gray-500">
+                                Created: {new Date(subject.created_at).toLocaleDateString()}
+                              </p>
                             </div>
-                            <div className="mt-2 flex items-center text-sm text-gray-600">
-                              <span className="mr-4">📚 {subject.credits_per_week} Credits/Week</span>
-                              <span className="mr-4">📅 Semester {subject.semester}</span>
-                              {subject.departments && (
-                                <span className="mr-4">🏢 {subject.departments.name}</span>
-                              )}
-                              {subject.course_id && courses.find(c => c.id === subject.course_id) && (
-                                <span className="mr-4">🎓 {courses.find(c => c.id === subject.course_id)?.code}</span>
-                              )}
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => startEditSubject(subject)}
+                                className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleSubjectDelete(subject.id)}
+                                className="text-red-600 hover:text-red-900 text-sm font-medium"
+                              >
+                                Delete
+                              </button>
                             </div>
-                            <p className="mt-2 text-xs text-gray-500">
-                              Created: {new Date(subject.created_at).toLocaleDateString()}
-                            </p>
-                          </div>
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => startEditSubject(subject)}
-                              className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleSubjectDelete(subject.id)}
-                              className="text-red-600 hover:text-red-900 text-sm font-medium"
-                            >
-                              Delete
-                            </button>
                           </div>
                         </div>
-                      </div>
-                    </li>
-                  )))}
+                      </li>
+                    )))}
                 </ul>
                 {subjects.length === 0 && (
                   <div className="text-center py-12">
@@ -3668,7 +3651,7 @@ export default function AdminDashboard() {
                             type="text"
                             required
                             value={courseForm.title}
-                            onChange={(e) => setCourseForm({...courseForm, title: e.target.value})}
+                            onChange={(e) => setCourseForm({ ...courseForm, title: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             placeholder="e.g., Bachelor of Education"
                           />
@@ -3680,7 +3663,7 @@ export default function AdminDashboard() {
                             type="text"
                             required
                             value={courseForm.code}
-                            onChange={(e) => setCourseForm({...courseForm, code: e.target.value.toUpperCase()})}
+                            onChange={(e) => setCourseForm({ ...courseForm, code: e.target.value.toUpperCase() })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             placeholder="e.g., B.Ed, M.Ed, ITEP"
                           />
@@ -3690,7 +3673,7 @@ export default function AdminDashboard() {
                           <label className="block text-sm font-medium text-gray-700">Nature of Course</label>
                           <select
                             value={courseForm.nature_of_course}
-                            onChange={(e) => setCourseForm({...courseForm, nature_of_course: e.target.value})}
+                            onChange={(e) => setCourseForm({ ...courseForm, nature_of_course: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Course Nature"
                           >
@@ -3710,7 +3693,7 @@ export default function AdminDashboard() {
                             required
                             min="0"
                             value={courseForm.intake}
-                            onChange={(e) => setCourseForm({...courseForm, intake: parseInt(e.target.value) || 0})}
+                            onChange={(e) => setCourseForm({ ...courseForm, intake: parseInt(e.target.value) || 0 })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             placeholder="e.g., 50, 100"
                           />
@@ -3723,7 +3706,7 @@ export default function AdminDashboard() {
                             min="1"
                             max="10"
                             value={courseForm.duration_years}
-                            onChange={(e) => setCourseForm({...courseForm, duration_years: parseInt(e.target.value) || 4})}
+                            onChange={(e) => setCourseForm({ ...courseForm, duration_years: parseInt(e.target.value) || 4 })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             placeholder="e.g., 2, 4"
                           />
@@ -3770,65 +3753,65 @@ export default function AdminDashboard() {
                     </li>
                   ) : (
                     filteredCourses.map((course) => (
-                    <li key={course.id}>
-                      <div className="px-4 py-4 sm:px-6">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center">
-                              <p className="text-lg font-semibold text-indigo-600 truncate">
-                                {course.title}
-                              </p>
-                              <span className="ml-3 inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-                                {course.code}
-                              </span>
-                              {course.nature_of_course && (
-                                <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                  {course.nature_of_course}
+                      <li key={course.id}>
+                        <div className="px-4 py-4 sm:px-6">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center">
+                                <p className="text-lg font-semibold text-indigo-600 truncate">
+                                  {course.title}
+                                </p>
+                                <span className="ml-3 inline-flex items-center px-3 py-0.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                                  {course.code}
                                 </span>
-                              )}
-                            </div>
-                            <div className="mt-2 flex items-center text-sm text-gray-600 space-x-4">
-                              <span className="flex items-center">
-                                <svg className="mr-1.5 h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                                  <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
-                                </svg>
-                                Intake: {course.intake} students
-                              </span>
-                              {course.duration_years && (
+                                {course.nature_of_course && (
+                                  <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    {course.nature_of_course}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="mt-2 flex items-center text-sm text-gray-600 space-x-4">
                                 <span className="flex items-center">
                                   <svg className="mr-1.5 h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                                    <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
                                   </svg>
-                                  Duration: {course.duration_years} {course.duration_years === 1 ? 'year' : 'years'}
+                                  Intake: {course.intake} students
                                 </span>
-                              )}
+                                {course.duration_years && (
+                                  <span className="flex items-center">
+                                    <svg className="mr-1.5 h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+                                    </svg>
+                                    Duration: {course.duration_years} {course.duration_years === 1 ? 'year' : 'years'}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="mt-2 text-xs text-gray-500">
+                                Created: {new Date(course.created_at).toLocaleDateString('en-US', {
+                                  year: 'numeric',
+                                  month: 'long',
+                                  day: 'numeric'
+                                })}
+                              </p>
                             </div>
-                            <p className="mt-2 text-xs text-gray-500">
-                              Created: {new Date(course.created_at).toLocaleDateString('en-US', { 
-                                year: 'numeric', 
-                                month: 'long', 
-                                day: 'numeric' 
-                              })}
-                            </p>
-                          </div>
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => startEditCourse(course)}
-                              className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleCourseDelete(course.id)}
-                              className="text-red-600 hover:text-red-900 text-sm font-medium"
-                            >
-                              Delete
-                            </button>
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => startEditCourse(course)}
+                                className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleCourseDelete(course.id)}
+                                className="text-red-600 hover:text-red-900 text-sm font-medium"
+                              >
+                                Delete
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </li>
-                  )))}
+                      </li>
+                    )))}
                 </ul>
                 {courses.length === 0 && (
                   <div className="text-center py-12">
@@ -3937,7 +3920,7 @@ export default function AdminDashboard() {
                             type="text"
                             required
                             value={studentForm.first_name}
-                            onChange={(e) => setStudentForm({...studentForm, first_name: e.target.value})}
+                            onChange={(e) => setStudentForm({ ...studentForm, first_name: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Student First Name"
                           />
@@ -3949,7 +3932,7 @@ export default function AdminDashboard() {
                             type="text"
                             required
                             value={studentForm.last_name}
-                            onChange={(e) => setStudentForm({...studentForm, last_name: e.target.value})}
+                            onChange={(e) => setStudentForm({ ...studentForm, last_name: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Student Last Name"
                           />
@@ -3961,7 +3944,7 @@ export default function AdminDashboard() {
                             type="email"
                             required
                             value={studentForm.email}
-                            onChange={(e) => setStudentForm({...studentForm, email: e.target.value})}
+                            onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Student Email"
                           />
@@ -3972,7 +3955,7 @@ export default function AdminDashboard() {
                           <input
                             type="text"
                             value={studentForm.student_id}
-                            onChange={(e) => setStudentForm({...studentForm, student_id: e.target.value})}
+                            onChange={(e) => setStudentForm({ ...studentForm, student_id: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             placeholder="e.g., STU001"
                             aria-label="Student ID Number"
@@ -3984,7 +3967,7 @@ export default function AdminDashboard() {
                           <input
                             type="tel"
                             value={studentForm.phone}
-                            onChange={(e) => setStudentForm({...studentForm, phone: e.target.value})}
+                            onChange={(e) => setStudentForm({ ...studentForm, phone: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Student Phone Number"
                           />
@@ -3995,7 +3978,7 @@ export default function AdminDashboard() {
                           <select
                             required
                             value={studentForm.current_semester}
-                            onChange={(e) => setStudentForm({...studentForm, current_semester: parseInt(e.target.value)})}
+                            onChange={(e) => setStudentForm({ ...studentForm, current_semester: parseInt(e.target.value) })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             disabled={!studentForm.course_id}
                             aria-label="Student Current Semester"
@@ -4015,7 +3998,7 @@ export default function AdminDashboard() {
                             type="number"
                             required
                             value={studentForm.admission_year}
-                            onChange={(e) => setStudentForm({...studentForm, admission_year: parseInt(e.target.value)})}
+                            onChange={(e) => setStudentForm({ ...studentForm, admission_year: parseInt(e.target.value) })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             placeholder="e.g., 2024"
                             min="2000"
@@ -4034,7 +4017,7 @@ export default function AdminDashboard() {
                               const maxSemesters = getMaxSemestersForCourse(newCourseId);
                               // Reset semester to 1 if current semester exceeds max for new course
                               const newSemester = studentForm.current_semester > maxSemesters ? 1 : studentForm.current_semester;
-                              setStudentForm({...studentForm, course_id: newCourseId, current_semester: newSemester});
+                              setStudentForm({ ...studentForm, course_id: newCourseId, current_semester: newSemester });
                             }}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Student Course"
@@ -4053,7 +4036,7 @@ export default function AdminDashboard() {
                           <select
                             required
                             value={studentForm.department_id}
-                            onChange={(e) => setStudentForm({...studentForm, department_id: e.target.value})}
+                            onChange={(e) => setStudentForm({ ...studentForm, department_id: e.target.value })}
                             className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                             aria-label="Student Department"
                           >
@@ -4075,7 +4058,7 @@ export default function AdminDashboard() {
                               type={showPassword ? "text" : "password"}
                               required={!editingStudent}
                               value={studentForm.password}
-                              onChange={(e) => setStudentForm({...studentForm, password: e.target.value})}
+                              onChange={(e) => setStudentForm({ ...studentForm, password: e.target.value })}
                               placeholder={editingStudent ? 'Leave blank to keep current password' : 'Enter new password'}
                               className="mt-1 block w-full rounded-md border-gray-300 bg-white text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500 pr-10"
                             />
@@ -4104,7 +4087,7 @@ export default function AdminDashboard() {
                             type="checkbox"
                             id="student_is_active"
                             checked={studentForm.is_active}
-                            onChange={(e) => setStudentForm({...studentForm, is_active: e.target.checked})}
+                            onChange={(e) => setStudentForm({ ...studentForm, is_active: e.target.checked })}
                             className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                           />
                           <label htmlFor="student_is_active" className="ml-2 block text-sm text-gray-900">

@@ -102,7 +102,9 @@ export function Header() {
   };
 
   const getInitials = (firstName: string, lastName: string) => {
-    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+    const first = firstName?.charAt(0) || '';
+    const last = lastName?.charAt(0) || '';
+    return `${first}${last}`.toUpperCase() || 'U';
   };
 
   // Close dropdowns when clicking outside
@@ -199,12 +201,12 @@ export function Header() {
                             const Icon = getRoleIcon(user.role);
                             return <Icon className="h-3 w-3" />;
                           })()}
-                          {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                          {user.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'User'}
                         </span>
                         {user.faculty_type && (
                           <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-indigo-500 text-white">
                             <Crown className="h-3 w-3" />
-                            {user.faculty_type.charAt(0).toUpperCase() + user.faculty_type.slice(1)}
+                            {user.faculty_type ? user.faculty_type.charAt(0).toUpperCase() + user.faculty_type.slice(1) : ''}
                           </span>
                         )}
                       </div>

@@ -20,6 +20,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dotenv": "^17.2.3",
+    "framer-motion": "^12.24.10",
     "handlebars": "^4.7.8",
     "html-to-text": "^9.0.5",
     "jsonwebtoken": "^9.0.2",

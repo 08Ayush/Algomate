@@ -48,6 +48,7 @@ next-env.d.ts
 
 # Reference folder (not to be pushed)
 /refrance/
+/referal/pages/
 
 # Scripts with credentials (security)
 /scripts/fix-batches-permissions.js
