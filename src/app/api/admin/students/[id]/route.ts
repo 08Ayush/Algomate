@@ -4,9 +4,11 @@ import bcrypt from 'bcryptjs';
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
+    
     // Get auth header
     const authHeader = request.headers.get('authorization');
     
@@ -48,7 +50,7 @@ export async function PUT(
 
     // Hash new password if provided
     if (password && password.trim() !== '') {
-      console.log(`Updating password for student ${params.id}`);
+      console.log(`Updating password for student ${id}`);
       updateData.password_hash = await bcrypt.hash(password, 10);
     }
 
@@ -56,7 +58,7 @@ export async function PUT(
     const { data: updatedStudent, error } = await supabase
       .from('users')
       .update(updateData)
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('college_id', decodedUser.college_id)
       .eq('role', 'student')
       .select()
@@ -71,7 +73,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Student not found' }, { status: 404 });
     }
 
-    console.log(`Successfully updated student ${params.id}. Password changed: ${!!password}`);
+    console.log(`Successfully updated student ${id}. Password changed: ${!!password}`);
     return NextResponse.json({ student: updatedStudent });
   } catch (error) {
     console.error('Error in PUT /api/admin/students/[id]:', error);
@@ -81,9 +83,11 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
+    
     // Get auth header
     const authHeader = request.headers.get('authorization');
     
@@ -105,7 +109,7 @@ export async function DELETE(
     const { error } = await supabase
       .from('users')
       .delete()
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('college_id', decodedUser.college_id)
       .eq('role', 'student');
 

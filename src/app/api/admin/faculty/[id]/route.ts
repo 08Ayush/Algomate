@@ -70,6 +70,15 @@ export async function PUT(
       is_active 
     } = await request.json();
 
+    // Map creator/publisher role to faculty role with appropriate faculty_type
+    let actualRole = role;
+    let actualFacultyType = faculty_type || 'general';
+    
+    if (role === 'creator' || role === 'publisher') {
+      actualRole = 'faculty';
+      actualFacultyType = role;
+    }
+
     // Validate required fields
     if (!first_name || !last_name || !email || !department_id) {
       return NextResponse.json(
@@ -141,8 +150,8 @@ export async function PUT(
         last_name,
         email,
         phone: phone || null,
-        role,
-        faculty_type: faculty_type || 'general',
+        role: actualRole,
+        faculty_type: actualFacultyType,
         department_id,
         college_id: user.college_id,  // Maintain user's college_id
         is_active: is_active !== undefined ? is_active : true
@@ -173,9 +182,18 @@ export async function PUT(
       );
     }
 
+    // Map faculty_type back to role for display (reverse the mapping)
+    const displayFaculty = {
+      ...updatedFaculty,
+      role: (updatedFaculty.role === 'faculty' && 
+             (updatedFaculty.faculty_type === 'creator' || updatedFaculty.faculty_type === 'publisher'))
+        ? updatedFaculty.faculty_type
+        : updatedFaculty.role
+    };
+
     return NextResponse.json({
       message: 'Faculty updated successfully',
-      faculty: updatedFaculty
+      faculty: displayFaculty
     });
 
   } catch (error: any) {

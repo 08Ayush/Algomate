@@ -1,694 +1,388 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { 
-  Search, Filter, Calendar, Mail, Phone, Building2, Users, 
-  Clock, CheckCircle, XCircle, Send, Eye, ChevronDown, 
-  RefreshCw, ArrowLeft, MessageSquare, ExternalLink
+import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import {
+  ClipboardList,
+  Search,
+  RefreshCw,
+  Eye,
+  X,
+  Mail,
+  Phone,
+  Building2,
+  Users,
+  Clock,
+  CheckCircle2,
+  Filter
 } from 'lucide-react';
+import toast from 'react-hot-toast';
+import SuperAdminLayout from '@/components/super-admin/SuperAdminLayout';
 
 interface DemoRequest {
   id: string;
-  institution_name: string;
-  institution_type: string;
-  website?: string;
-  student_count: string;
-  faculty_count?: string;
-  contact_name: string;
+  institution: string;
+  type: string;
+  contact: string;
   designation?: string;
   email: string;
   phone: string;
-  city: string;
-  state: string;
-  country: string;
-  current_system?: string;
-  challenges?: string[];
-  preferred_date?: string;
-  preferred_time?: string;
-  additional_notes?: string;
-  status: 'pending' | 'contacted' | 'demo_scheduled' | 'demo_completed' | 'approved' | 'registered' | 'rejected';
-  demo_scheduled_at?: string;
-  demo_completed_at?: string;
-  follow_up_notes?: string;
-  created_at: string;
-  updated_at: string;
+  students: string;
+  faculty: string;
+  location: string;
+  status: string;
+  requested: string;
 }
 
-const statusConfig = {
-  pending: { label: 'Pending', color: 'bg-yellow-100 text-yellow-800', icon: Clock },
-  contacted: { label: 'Contacted', color: 'bg-blue-100 text-blue-800', icon: MessageSquare },
-  demo_scheduled: { label: 'Demo Scheduled', color: 'bg-purple-100 text-purple-800', icon: Calendar },
-  demo_completed: { label: 'Demo Completed', color: 'bg-indigo-100 text-indigo-800', icon: CheckCircle },
-  approved: { label: 'Approved', color: 'bg-green-100 text-green-800', icon: CheckCircle },
-  registered: { label: 'Registered', color: 'bg-emerald-100 text-emerald-800', icon: Building2 },
-  rejected: { label: 'Rejected', color: 'bg-red-100 text-red-800', icon: XCircle },
-};
-
-const institutionTypes = [
-  'University', 'College', 'School', 'Polytechnic', 'ITI', 
-  'Management Institute', 'Engineering College', 'Medical College', 'Other'
-];
-
-export default function DemoRequestsPage() {
-  const router = useRouter();
+const DemoRequestsPage: React.FC = () => {
   const [requests, setRequests] = useState<DemoRequest[]>([]);
-  const [filteredRequests, setFilteredRequests] = useState<DemoRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
-  
-  // Filters
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [typeFilter, setTypeFilter] = useState<string>('all');
-  
-  // Selected request for detail view
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [showViewModal, setShowViewModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<DemoRequest | null>(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
-  
-  // Update form
-  const [showUpdateForm, setShowUpdateForm] = useState(false);
-  const [updateForm, setUpdateForm] = useState({
-    status: '',
-    demo_scheduled_at: '',
-    follow_up_notes: ''
-  });
+  const [selectedStatus, setSelectedStatus] = useState('');
+  const [followUpNotes, setFollowUpNotes] = useState('');
 
   useEffect(() => {
-    // Check if user is super admin
-    const userData = localStorage.getItem('user');
-    if (!userData) {
-      router.push('/login');
-      return;
-    }
+    fetchRequests();
+  }, []);
 
-    const user = JSON.parse(userData);
-    if (user.role !== 'super_admin') {
-      router.push('/login?message=Access denied. Super admin only.');
-      return;
-    }
-
-    fetchDemoRequests();
-  }, [router]);
-
-  // Filter requests when filters change
-  useEffect(() => {
-    let filtered = [...requests];
-    
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(r => 
-        r.institution_name.toLowerCase().includes(query) ||
-        r.contact_name.toLowerCase().includes(query) ||
-        r.email.toLowerCase().includes(query) ||
-        r.city.toLowerCase().includes(query)
-      );
-    }
-    
-    // Status filter
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(r => r.status === statusFilter);
-    }
-    
-    // Type filter
-    if (typeFilter !== 'all') {
-      filtered = filtered.filter(r => r.institution_type === typeFilter);
-    }
-    
-    setFilteredRequests(filtered);
-  }, [requests, searchQuery, statusFilter, typeFilter]);
-
-  const fetchDemoRequests = async () => {
+  const fetchRequests = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/super-admin/demo-requests');
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch demo requests');
+      const res = await fetch('/api/super-admin/demo-requests');
+      if (res.ok) {
+        const data = await res.json();
+        const mapped = (data.requests || []).map((r: any) => ({
+          id: r.id,
+          institution: r.institution_name,
+          type: r.institution_type,
+          contact: r.contact_name,
+          designation: r.designation,
+          email: r.email,
+          phone: r.phone,
+          students: r.student_count,
+          faculty: r.faculty_count || 'N/A',
+          location: `${r.city}, ${r.state}`,
+          status: r.status || 'pending',
+          requested: new Date(r.created_at).toLocaleDateString()
+        }));
+        setRequests(mapped);
       }
-      
-      const data = await response.json();
-      setRequests(data.requests || []);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (error) {
+      toast.error('Failed to fetch demo requests');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleUpdateRequest = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleViewRequest = (request: DemoRequest) => {
+    setSelectedRequest(request);
+    setSelectedStatus(request.status);
+    setFollowUpNotes('');
+    setShowViewModal(true);
+  };
+
+  const handleUpdateStatus = async () => {
     if (!selectedRequest) return;
 
     try {
-      const response = await fetch(`/api/super-admin/demo-requests/${selectedRequest.id}`, {
+      const res = await fetch(`/api/super-admin/demo-requests/${selectedRequest.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updateForm)
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to update request');
-      }
-
-      setSuccessMessage('Demo request updated successfully');
-      setShowUpdateForm(false);
-      setShowDetailModal(false);
-      fetchDemoRequests();
-      
-      setTimeout(() => setSuccessMessage(''), 3000);
-    } catch (err: any) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
-    }
-  };
-
-  const handleGenerateToken = async (request: DemoRequest) => {
-    try {
-      const response = await fetch('/api/college/validate-token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          demoRequestId: request.id,
-          email: request.email,
-          institutionName: request.institution_name,
-          expiresInDays: 7
+          status: selectedStatus,
+          follow_up_notes: followUpNotes || undefined
         })
       });
 
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to generate token');
+      if (res.ok) {
+        toast.success(`Status updated to ${selectedStatus}`);
+        // Update local state
+        setRequests(prev => prev.map(r =>
+          r.id === selectedRequest.id ? { ...r, status: selectedStatus } : r
+        ));
+        setSelectedRequest({ ...selectedRequest, status: selectedStatus });
+      } else {
+        const err = await res.json();
+        toast.error(err.error || 'Failed to update status');
       }
-
-      // Copy registration URL to clipboard
-      await navigator.clipboard.writeText(data.registrationUrl);
-      setSuccessMessage(`Token generated! Registration URL copied to clipboard.\n\nURL: ${data.registrationUrl}\n\nExpires: ${new Date(data.expiresAt).toLocaleString()}`);
-      
-      // Update status to approved
-      await fetch(`/api/super-admin/demo-requests/${request.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'approved' })
-      });
-      
-      fetchDemoRequests();
-    } catch (err: any) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
+    } catch (e) {
+      toast.error('Error updating status');
     }
   };
 
-  const openDetailModal = (request: DemoRequest) => {
-    setSelectedRequest(request);
-    setUpdateForm({
-      status: request.status,
-      demo_scheduled_at: request.demo_scheduled_at ? new Date(request.demo_scheduled_at).toISOString().slice(0, 16) : '',
-      follow_up_notes: request.follow_up_notes || ''
-    });
-    setShowDetailModal(true);
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending': return 'bg-yellow-100 text-yellow-700';
+      case 'contacted': return 'bg-blue-100 text-blue-700';
+      case 'demo_scheduled': return 'bg-purple-100 text-purple-700';
+      case 'demo_completed': return 'bg-indigo-100 text-indigo-700';
+      case 'approved': return 'bg-green-100 text-green-700';
+      case 'registered': return 'bg-emerald-100 text-emerald-700';
+      case 'rejected': return 'bg-red-100 text-red-700';
+      default: return 'bg-gray-100 text-gray-700';
+    }
   };
 
-  const getStatusBadge = (status: DemoRequest['status']) => {
-    const config = statusConfig[status];
-    const Icon = config.icon;
-    return (
-      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${config.color}`}>
-        <Icon className="w-3 h-3" />
-        {config.label}
-      </span>
-    );
+  const formatStatus = (status: string) => {
+    return status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  // Stats
-  const stats = {
-    total: requests.length,
-    pending: requests.filter(r => r.status === 'pending').length,
-    scheduled: requests.filter(r => r.status === 'demo_scheduled').length,
-    approved: requests.filter(r => r.status === 'approved' || r.status === 'registered').length,
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <RefreshCw className="w-8 h-8 animate-spin text-indigo-600" />
-          <p className="text-gray-600">Loading demo requests...</p>
-        </div>
-      </div>
-    );
-  }
+  const filteredRequests = requests.filter(r => {
+    const matchesSearch = r.institution.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.contact.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || r.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link href="/super-admin/dashboard" className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                <ArrowLeft className="w-5 h-5" />
-              </Link>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">Demo Requests</h1>
-                <p className="text-sm text-gray-500">Manage institution demo requests</p>
-              </div>
-            </div>
-            <button
-              onClick={fetchDemoRequests}
-              className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Refresh
-            </button>
+    <SuperAdminLayout activeTab="demoRequests">
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">Demo Requests</h1>
+            <p className="text-gray-600">Manage and respond to demo requests</p>
           </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        {/* Alerts */}
-        {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-            {error}
-          </div>
-        )}
-        {successMessage && (
-          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700 whitespace-pre-line">
-            {successMessage}
-          </div>
-        )}
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white rounded-xl p-4 border shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-indigo-100 rounded-lg">
-                <Building2 className="w-5 h-5 text-indigo-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-                <p className="text-sm text-gray-500">Total Requests</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl p-4 border shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-yellow-100 rounded-lg">
-                <Clock className="w-5 h-5 text-yellow-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.pending}</p>
-                <p className="text-sm text-gray-500">Pending</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl p-4 border shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <Calendar className="w-5 h-5 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.scheduled}</p>
-                <p className="text-sm text-gray-500">Demos Scheduled</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl p-4 border shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <CheckCircle className="w-5 h-5 text-green-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.approved}</p>
-                <p className="text-sm text-gray-500">Approved</p>
-              </div>
-            </div>
-          </div>
+          <button
+            onClick={fetchRequests}
+            className="flex items-center gap-2 px-5 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 transition-all"
+          >
+            <RefreshCw size={16} />
+            Refresh
+          </button>
         </div>
 
         {/* Filters */}
-        <div className="bg-white rounded-xl border shadow-sm p-4 mb-6">
+        <div className="bg-white rounded-2xl shadow-lg p-6">
           <div className="flex flex-col md:flex-row gap-4">
-            {/* Search */}
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <div className="relative flex-1">
+              <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by institution, contact, email, city..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="Search by institution or contact..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none"
               />
             </div>
-            
-            {/* Status Filter */}
-            <div className="relative">
+            <div className="flex items-center gap-2">
+              <Filter size={16} className="text-gray-400" />
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="appearance-none pl-4 pr-10 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                className="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none"
               >
                 <option value="all">All Status</option>
-                {Object.entries(statusConfig).map(([key, { label }]) => (
-                  <option key={key} value={key}>{label}</option>
-                ))}
+                <option value="pending">Pending</option>
+                <option value="contacted">Contacted</option>
+                <option value="demo_scheduled">Demo Scheduled</option>
+                <option value="demo_completed">Demo Completed</option>
+                <option value="approved">Approved</option>
+                <option value="registered">Registered</option>
+                <option value="rejected">Rejected</option>
               </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-            </div>
-            
-            {/* Type Filter */}
-            <div className="relative">
-              <select
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
-                className="appearance-none pl-4 pr-10 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
-              >
-                <option value="all">All Types</option>
-                {institutionTypes.map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             </div>
           </div>
         </div>
 
         {/* Requests Table */}
-        <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Institution</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Contact</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Location</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Requested</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {filteredRequests.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
-                      {requests.length === 0 ? 'No demo requests yet' : 'No requests match your filters'}
+        <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Institution</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Contact</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Location</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Status</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Requested</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {loading ? (
+                <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-500">Loading...</td></tr>
+              ) : filteredRequests.length === 0 ? (
+                <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-500">No demo requests found</td></tr>
+              ) : (
+                filteredRequests.map((request) => (
+                  <tr key={request.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-[#5A67D8]/10 flex items-center justify-center">
+                          <Building2 size={20} className="text-[#5A67D8]" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-900">{request.institution}</p>
+                          <p className="text-sm text-gray-500">{request.type}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="font-medium text-gray-900">{request.contact}</p>
+                      <p className="text-sm text-gray-500">{request.email}</p>
+                    </td>
+                    <td className="px-6 py-4 text-gray-600">{request.location}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${getStatusColor(request.status)}`}>
+                        {formatStatus(request.status)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-gray-600">{request.requested}</td>
+                    <td className="px-6 py-4">
+                      <button
+                        onClick={() => handleViewRequest(request)}
+                        className="p-2 text-[#4D869C] hover:bg-[#4D869C]/10 rounded-lg transition-colors"
+                      >
+                        <Eye size={16} />
+                      </button>
                     </td>
                   </tr>
-                ) : (
-                  filteredRequests.map((request) => (
-                    <tr key={request.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        <div>
-                          <p className="font-medium text-gray-900">{request.institution_name}</p>
-                          <p className="text-sm text-gray-500">{request.institution_type}</p>
-                          <p className="text-xs text-gray-400">{request.student_count} students</p>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div>
-                          <p className="font-medium text-gray-900">{request.contact_name}</p>
-                          <p className="text-sm text-gray-500">{request.email}</p>
-                          <p className="text-sm text-gray-500">{request.phone}</p>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="text-gray-900">{request.city}</p>
-                        <p className="text-sm text-gray-500">{request.state}</p>
-                      </td>
-                      <td className="px-4 py-3">
-                        {getStatusBadge(request.status)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="text-sm text-gray-600">{formatDate(request.created_at)}</p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => openDetailModal(request)}
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                            title="View Details"
-                          >
-                            <Eye className="w-4 h-4 text-gray-600" />
-                          </button>
-                          {(request.status === 'demo_completed' || request.status === 'approved') && (
-                            <button
-                              onClick={() => handleGenerateToken(request)}
-                              className="p-2 hover:bg-indigo-100 rounded-lg transition-colors"
-                              title="Generate Registration Token"
-                            >
-                              <Send className="w-4 h-4 text-indigo-600" />
-                            </button>
-                          )}
-                          <a
-                            href={`mailto:${request.email}`}
-                            className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                            title="Send Email"
-                          >
-                            <Mail className="w-4 h-4 text-blue-600" />
-                          </a>
-                          <a
-                            href={`tel:${request.phone}`}
-                            className="p-2 hover:bg-green-100 rounded-lg transition-colors"
-                            title="Call"
-                          >
-                            <Phone className="w-4 h-4 text-green-600" />
-                          </a>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-      </main>
 
-      {/* Detail Modal */}
-      {showDetailModal && selectedRequest && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b sticky top-0 bg-white">
-              <div className="flex items-center justify-between">
+        {/* View Request Modal */}
+        {showViewModal && selectedRequest && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[2000] p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col"
+            >
+              {/* Header */}
+              <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-start bg-gray-50/50">
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900">{selectedRequest.institution_name}</h2>
-                  <p className="text-sm text-gray-500">{selectedRequest.institution_type}</p>
+                  <h3 className="text-xl font-bold text-gray-900">{selectedRequest.institution}</h3>
+                  <p className="text-sm text-gray-500">{selectedRequest.type}</p>
                 </div>
-                <button
-                  onClick={() => setShowDetailModal(false)}
-                  className="p-2 hover:bg-gray-100 rounded-lg"
-                >
-                  <XCircle className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {/* Status Badge */}
-              <div className="flex items-center justify-between">
-                {getStatusBadge(selectedRequest.status)}
-                <p className="text-sm text-gray-500">Requested: {formatDate(selectedRequest.created_at)}</p>
-              </div>
-
-              {/* Institution Details */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                    <Building2 className="w-4 h-4" /> Institution Details
-                  </h3>
-                  <div className="space-y-2 text-sm">
-                    <p><span className="text-gray-500">Type:</span> {selectedRequest.institution_type}</p>
-                    <p><span className="text-gray-500">Students:</span> {selectedRequest.student_count}</p>
-                    {selectedRequest.faculty_count && (
-                      <p><span className="text-gray-500">Faculty:</span> {selectedRequest.faculty_count}</p>
-                    )}
-                    {selectedRequest.website && (
-                      <p>
-                        <span className="text-gray-500">Website:</span>{' '}
-                        <a href={selectedRequest.website} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline inline-flex items-center gap-1">
-                          {selectedRequest.website} <ExternalLink className="w-3 h-3" />
-                        </a>
-                      </p>
-                    )}
-                    <p><span className="text-gray-500">Location:</span> {selectedRequest.city}, {selectedRequest.state}</p>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                    <Users className="w-4 h-4" /> Contact Person
-                  </h3>
-                  <div className="space-y-2 text-sm">
-                    <p><span className="text-gray-500">Name:</span> {selectedRequest.contact_name}</p>
-                    {selectedRequest.designation && (
-                      <p><span className="text-gray-500">Designation:</span> {selectedRequest.designation}</p>
-                    )}
-                    <p><span className="text-gray-500">Email:</span> {selectedRequest.email}</p>
-                    <p><span className="text-gray-500">Phone:</span> {selectedRequest.phone}</p>
-                  </div>
+                <div className="flex items-center gap-4">
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${getStatusColor(selectedRequest.status)}`}>
+                    {formatStatus(selectedRequest.status)}
+                  </span>
+                  <button onClick={() => setShowViewModal(false)} className="text-gray-400 hover:text-gray-600">
+                    <X size={24} />
+                  </button>
                 </div>
               </div>
 
-              {/* Requirements */}
-              {(selectedRequest.current_system || selectedRequest.challenges?.length) && (
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-gray-900">Requirements</h3>
-                  {selectedRequest.current_system && (
-                    <p className="text-sm"><span className="text-gray-500">Current System:</span> {selectedRequest.current_system}</p>
-                  )}
-                  {selectedRequest.challenges && selectedRequest.challenges.length > 0 && (
-                    <div>
-                      <p className="text-sm text-gray-500 mb-2">Challenges:</p>
-                      <div className="flex flex-wrap gap-2">
-                        {selectedRequest.challenges.map((challenge, idx) => (
-                          <span key={idx} className="px-3 py-1 bg-gray-100 rounded-full text-sm">
-                            {challenge}
-                          </span>
-                        ))}
+              <div className="p-6 overflow-y-auto">
+                <div className="flex justify-between items-center mb-6 text-xs text-gray-400">
+                  <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-100 flex items-center gap-1">
+                    <Clock size={12} /> Requested: {selectedRequest.requested}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-8 mb-8">
+                  {/* Institution Details */}
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
+                      <Building2 size={16} className="text-gray-400" /> Institution Details
+                    </h4>
+                    <div className="space-y-3 text-sm">
+                      <div>
+                        <p className="text-gray-500 text-xs mb-0.5">Type</p>
+                        <p className="font-medium text-gray-900">{selectedRequest.type}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500 text-xs mb-0.5">Students</p>
+                        <p className="font-medium text-gray-900">{selectedRequest.students}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500 text-xs mb-0.5">Faculty</p>
+                        <p className="font-medium text-gray-900">{selectedRequest.faculty}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500 text-xs mb-0.5">Location</p>
+                        <p className="font-medium text-gray-900">{selectedRequest.location}</p>
                       </div>
                     </div>
-                  )}
-                </div>
-              )}
-
-              {/* Preferred Demo Time */}
-              {(selectedRequest.preferred_date || selectedRequest.preferred_time) && (
-                <div className="space-y-2">
-                  <h3 className="font-semibold text-gray-900">Preferred Demo Time</h3>
-                  <p className="text-sm">
-                    {selectedRequest.preferred_date && new Date(selectedRequest.preferred_date).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                    {selectedRequest.preferred_time && ` at ${selectedRequest.preferred_time}`}
-                  </p>
-                </div>
-              )}
-
-              {/* Additional Notes */}
-              {selectedRequest.additional_notes && (
-                <div className="space-y-2">
-                  <h3 className="font-semibold text-gray-900">Additional Notes</h3>
-                  <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">{selectedRequest.additional_notes}</p>
-                </div>
-              )}
-
-              {/* Follow-up Notes */}
-              {selectedRequest.follow_up_notes && (
-                <div className="space-y-2">
-                  <h3 className="font-semibold text-gray-900">Follow-up Notes</h3>
-                  <p className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">{selectedRequest.follow_up_notes}</p>
-                </div>
-              )}
-
-              {/* Update Form */}
-              {!showUpdateForm ? (
-                <button
-                  onClick={() => setShowUpdateForm(true)}
-                  className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-indigo-300 hover:text-indigo-600 transition-colors"
-                >
-                  Update Status
-                </button>
-              ) : (
-                <form onSubmit={handleUpdateRequest} className="space-y-4 bg-gray-50 p-4 rounded-lg">
-                  <h3 className="font-semibold text-gray-900">Update Request</h3>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                    <select
-                      value={updateForm.status}
-                      onChange={(e) => setUpdateForm({...updateForm, status: e.target.value})}
-                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
-                    >
-                      {Object.entries(statusConfig).map(([key, { label }]) => (
-                        <option key={key} value={key}>{label}</option>
-                      ))}
-                    </select>
                   </div>
 
-                  {updateForm.status === 'demo_scheduled' && (
+                  {/* Contact Person */}
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
+                      <Users size={16} className="text-gray-400" /> Contact Person
+                    </h4>
+                    <div className="space-y-3 text-sm">
+                      <div>
+                        <p className="text-gray-500 text-xs mb-0.5">Name</p>
+                        <p className="font-medium text-gray-900">{selectedRequest.contact}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500 text-xs mb-0.5">Designation</p>
+                        <p className="font-medium text-gray-900">{selectedRequest.designation || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500 text-xs mb-0.5">Email</p>
+                        <p className="font-medium text-blue-600">{selectedRequest.email}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-500 text-xs mb-0.5">Phone</p>
+                        <p className="font-medium text-gray-900">{selectedRequest.phone}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Update Status */}
+                <div className="bg-gray-50 rounded-xl p-4 mb-6 border border-gray-200">
+                  <h4 className="text-sm font-bold text-gray-800 mb-3">Update Request</h4>
+                  <div className="space-y-3">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Demo Scheduled At</label>
-                      <input
-                        type="datetime-local"
-                        value={updateForm.demo_scheduled_at}
-                        onChange={(e) => setUpdateForm({...updateForm, demo_scheduled_at: e.target.value})}
-                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Status</label>
+                      <select
+                        className="w-full p-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#4D869C] outline-none"
+                        value={selectedStatus}
+                        onChange={(e) => setSelectedStatus(e.target.value)}
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="contacted">Contacted</option>
+                        <option value="demo_scheduled">Demo Scheduled</option>
+                        <option value="demo_completed">Demo Completed</option>
+                        <option value="approved">Approved</option>
+                        <option value="registered">Registered</option>
+                        <option value="rejected">Rejected</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-600 mb-1">Follow-up Notes</label>
+                      <textarea
+                        className="w-full p-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#4D869C] outline-none resize-none h-20"
+                        placeholder="Add notes about your interaction..."
+                        value={followUpNotes}
+                        onChange={(e) => setFollowUpNotes(e.target.value)}
                       />
                     </div>
-                  )}
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Follow-up Notes</label>
-                    <textarea
-                      value={updateForm.follow_up_notes}
-                      onChange={(e) => setUpdateForm({...updateForm, follow_up_notes: e.target.value})}
-                      rows={3}
-                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
-                      placeholder="Add notes about your interaction..."
-                    />
-                  </div>
-
-                  <div className="flex gap-3">
                     <button
-                      type="submit"
-                      className="flex-1 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                      onClick={handleUpdateStatus}
+                      className="w-full py-2.5 bg-[#5A67D8] text-white font-bold rounded-lg shadow hover:bg-[#4C51BF] transition-all text-sm"
                     >
                       Save Changes
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowUpdateForm(false)}
-                      className="px-4 py-2 border rounded-lg hover:bg-gray-100 transition-colors"
-                    >
-                      Cancel
-                    </button>
                   </div>
-                </form>
-              )}
+                </div>
 
-              {/* Action Buttons */}
-              <div className="flex gap-3 pt-4 border-t">
-                {(selectedRequest.status === 'demo_completed' || selectedRequest.status === 'approved') && (
-                  <button
-                    onClick={() => handleGenerateToken(selectedRequest)}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                  >
-                    <Send className="w-4 h-4" />
-                    Generate Registration Token
-                  </button>
-                )}
-                <a
-                  href={`mailto:${selectedRequest.email}`}
-                  className="flex items-center justify-center gap-2 px-6 py-3 border rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  <Mail className="w-4 h-4" />
-                  Email
-                </a>
-                <a
-                  href={`tel:${selectedRequest.phone}`}
-                  className="flex items-center justify-center gap-2 px-6 py-3 border rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  <Phone className="w-4 h-4" />
-                  Call
-                </a>
+                <div className="flex gap-4">
+                  <a href={`mailto:${selectedRequest.email}`} className="flex-1 py-2.5 border border-gray-200 rounded-xl flex items-center justify-center gap-2 text-gray-600 hover:bg-gray-50 transition-colors font-medium text-sm">
+                    <Mail size={18} /> Email
+                  </a>
+                  <a href={`tel:${selectedRequest.phone}`} className="flex-1 py-2.5 border border-gray-200 rounded-xl flex items-center justify-center gap-2 text-gray-600 hover:bg-gray-50 transition-colors font-medium text-sm">
+                    <Phone size={18} /> Call
+                  </a>
+                </div>
               </div>
-            </div>
+            </motion.div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </SuperAdminLayout>
   );
-}
+};
+
+export default DemoRequestsPage;

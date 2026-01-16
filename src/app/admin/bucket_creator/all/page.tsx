@@ -286,6 +286,7 @@ export default function AllBucketsPage() {
                 value={selectedCourse}
                 onChange={(e) => setSelectedCourse(e.target.value)}
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                aria-label="Filter buckets by course"
               >
                 <option value="all">All Courses</option>
                 {uniqueCourses.map(courseId => {
@@ -303,6 +304,7 @@ export default function AllBucketsPage() {
                 value={selectedSemester}
                 onChange={(e) => setSelectedSemester(e.target.value)}
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                aria-label="Filter buckets by semester"
               >
                 <option value="all">All Semesters</option>
                 {uniqueSemesters.map(sem => (
@@ -317,6 +319,7 @@ export default function AllBucketsPage() {
                 value={selectedDepartment}
                 onChange={(e) => setSelectedDepartment(e.target.value)}
                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                aria-label="Filter buckets by department"
               >
                 <option value="all">All Departments</option>
                 {uniqueDepartments.map(deptId => {

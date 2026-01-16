@@ -13,8 +13,11 @@ import {
   Brain,
   CheckCircle2,
   UserCircle,
-  ArrowRight
+  ArrowRight,
+  Eye,
+  EyeOff
 } from 'lucide-react';
+import { Navigation } from '@/components/landing/Navigation';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -23,6 +26,8 @@ export default function LoginPage() {
     collegeUid: '',
     password: ''
   });
+
+  const [showPassword, setShowPassword] = useState(false);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
@@ -152,7 +157,8 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6 md:p-10 relative overflow-hidden bg-gradient-to-br from-[#EEF7FF] via-[#B8E5E5] to-white">
-      <div className="max-w-[1100px] w-full grid grid-cols-1 lg:grid-cols-2 gap-10 items-center bg-white rounded-[30px] p-8 md:p-16 shadow-[0_20px_60px_rgba(37,99,163,0.15)]">
+      <Navigation />
+      <div className="max-w-[1100px] w-full grid grid-cols-1 lg:grid-cols-2 gap-10 items-center bg-white rounded-[30px] p-8 md:p-16 shadow-[0_20px_60px_rgba(37,99,163,0.15)] mt-20">
 
         {/* Left Side - Illustration */}
         <motion.div
@@ -243,14 +249,21 @@ export default function LoginPage() {
               <div className="relative bg-gradient-to-br from-[#e6eef2] to-[#f2f7fa] rounded-full shadow-[inset_8px_8px_16px_rgba(190,210,220,0.5),inset_-6px_-6px_12px_rgba(255,255,255,0.9)] transition-all duration-300 focus-within:shadow-[inset_10px_10px_20px_rgba(190,210,220,0.6),inset_-6px_-6px_12px_rgba(255,255,255,0.95)]">
                 <Lock size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-[#8e9fb0] z-10" />
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   id="password"
                   name="password"
                   value={formData.password}
                   onChange={handleInputChange}
-                  className="w-full bg-transparent border-none outline-none text-[15px] text-[#2d3748] font-medium py-4 px-5 pl-14 rounded-full placeholder:text-[#a8b8c8] placeholder:font-normal"
+                  className="w-full bg-transparent border-none outline-none text-[15px] text-[#2d3748] font-medium py-4 px-5 pl-14 pr-12 rounded-full placeholder:text-[#a8b8c8] placeholder:font-normal"
                   placeholder="Password"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-5 top-1/2 -translate-y-1/2 text-[#8e9fb0] hover:text-[#2563A3] transition-colors z-10 focus:outline-none"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
               {errors.password && (
                 <p className="text-sm text-red-600 px-5">{errors.password}</p>

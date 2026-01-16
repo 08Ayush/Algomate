@@ -5,7 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase';
 export async function GET(request: NextRequest) {
   try {
     console.log('Fetching colleges from database...');
-    
+
     // First get all colleges
     const { data: colleges, error } = await supabaseAdmin
       .from('colleges')
@@ -117,6 +117,7 @@ export async function POST(request: NextRequest) {
     const { data: newCollege, error } = await supabaseAdmin
       .from('colleges')
       .insert({
+        id: crypto.randomUUID(),
         name,
         code,
         address,

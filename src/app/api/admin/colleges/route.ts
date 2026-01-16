@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
 
       const { data: college, error } = await supabase
         .from('colleges')
-        .select('id, name, code, address, contact_email, contact_phone')
+        .select('id, name, code, address, email, phone')
         .eq('id', user.college_id)
         .single();
 
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     // For super_admin and admin, return all colleges
     const { data: colleges, error } = await supabase
       .from('colleges')
-      .select('id, name, code, address, contact_email, contact_phone')
+      .select('id, name, code, address, email, phone')
       .order('name');
 
     if (error) {

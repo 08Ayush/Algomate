@@ -131,8 +131,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Map faculty_type back to role for display (reverse the mapping from POST/PUT)
+    const mappedFaculty = faculty?.map(f => {
+      // If role is 'faculty' and faculty_type is 'creator' or 'publisher', show that as the role
+      if (f.role === 'faculty' && (f.faculty_type === 'creator' || f.faculty_type === 'publisher')) {
+        return { ...f, role: f.faculty_type };
+      }
+      return f;
+    });
+
     return NextResponse.json({
-      faculty: faculty || []
+      faculty: mappedFaculty || []
     });
 
   } catch (error: any) {
@@ -166,6 +175,15 @@ export async function POST(request: NextRequest) {
       department_id, 
       is_active 
     } = await request.json();
+
+    // Map creator/publisher role to faculty role with appropriate faculty_type
+    let actualRole = role;
+    let actualFacultyType = faculty_type || 'general';
+    
+    if (role === 'creator' || role === 'publisher') {
+      actualRole = 'faculty';
+      actualFacultyType = role;
+    }
 
     // Validate required fields
     if (!first_name || !last_name || !email || !department_id) {
@@ -214,7 +232,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate college UID
-    const rolePrefix = role === 'admin' ? 'ADM' : 'FAC';
+    const rolePrefix = actualRole === 'admin' ? 'ADM' : 'FAC';
     const randomSuffix = Math.floor(Math.random() * 900000) + 100000;
     const college_uid = `${rolePrefix}${randomSuffix}`;
 
@@ -232,8 +250,8 @@ export async function POST(request: NextRequest) {
         phone: phone || null,
         college_uid,
         password_hash: passwordHash,
-        role,
-        faculty_type: faculty_type || 'general',
+        role: actualRole,
+        faculty_type: actualFacultyType,
         department_id,
         college_id: user.college_id,  // Use authenticated user's college_id
         is_active: is_active !== undefined ? is_active : true,
@@ -263,9 +281,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Map faculty_type back to role for display (reverse the mapping)
+    const displayFaculty = {
+      ...newFaculty,
+      role: (newFaculty.role === 'faculty' && 
+             (newFaculty.faculty_type === 'creator' || newFaculty.faculty_type === 'publisher'))
+        ? newFaculty.faculty_type
+        : newFaculty.role
+    };
+
     return NextResponse.json({
       message: 'Faculty created successfully',
-      faculty: newFaculty,
+      faculty: displayFaculty,
       defaultPassword: defaultPassword // Include in response for admin reference
     }, { status: 201 });
 

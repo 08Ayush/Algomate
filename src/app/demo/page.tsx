@@ -1,50 +1,59 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
+import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { Header } from '@/components/Header';
-import { 
-  Building2, 
-  Users, 
-  Mail, 
-  Phone, 
-  Globe, 
-  MapPin, 
-  CheckCircle2, 
-  ArrowRight,
-  GraduationCap,
-  Shield,
+import {
   Calendar,
   Clock,
-  Sparkles,
-  Star
+  User,
+  Mail,
+  Phone,
+  Building2,
+  CheckCircle2,
+  Video,
+  Users,
+  MapPin,
+  ArrowRight,
+  GraduationCap
 } from 'lucide-react';
+import { Navigation } from '@/components/landing/Navigation';
+import { useRouter } from 'next/navigation';
+import toast, { Toaster } from 'react-hot-toast';
 
-interface DemoFormData {
-  // Institution Details
-  institutionName: string;
-  institutionType: string;
-  website: string;
-  studentCount: string;
-  facultyCount: string;
-  
-  // Contact Person Details
-  contactName: string;
-  designation: string;
+interface FormData {
+  name: string;
   email: string;
   phone: string;
-  
-  // Address
-  city: string;
-  state: string;
-  country: string;
-  
-  // Requirements
-  currentSystem: string;
-  challenges: string[];
+  institution: string;
+  institutionType: string; // Required by API
+  studentCount: string;    // Required by API
+  city: string;            // Required by API
+  state: string;           // Required by API
+  role: string;
+  demoType: string;
   preferredDate: string;
   preferredTime: string;
-  additionalNotes: string;
+  message: string;
+}
+
+interface NavigationStep {
+  id: number;
+  title: string;
+  icon: React.ReactNode;
+}
+
+interface Benefit {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}
+
+interface DemoStep {
+  number: string;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
 }
 
 const institutionTypes = [
@@ -68,134 +77,67 @@ const studentCountRanges = [
   'More than 10,000'
 ];
 
-const challengeOptions = [
-  'Manual timetable scheduling',
-  'Faculty workload management',
-  'Classroom allocation',
-  'NEP 2020 compliance',
-  'Student attendance tracking',
-  'Resource optimization',
-  'Multi-campus management',
-  'Reporting & analytics'
-];
-
-const timeSlots = [
-  '09:00 AM - 10:00 AM',
-  '10:00 AM - 11:00 AM',
-  '11:00 AM - 12:00 PM',
-  '02:00 PM - 03:00 PM',
-  '03:00 PM - 04:00 PM',
-  '04:00 PM - 05:00 PM'
-];
-
 export default function DemoRequestPage() {
-  const [formData, setFormData] = useState<DemoFormData>({
-    institutionName: '',
-    institutionType: '',
-    website: '',
-    studentCount: '',
-    facultyCount: '',
-    contactName: '',
-    designation: '',
+  const router = useRouter();
+  const [activeStep, setActiveStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formData, setFormData] = useState<FormData>({
+    name: '',
     email: '',
     phone: '',
+    institution: '',
+    institutionType: '',
+    studentCount: '',
     city: '',
     state: '',
-    country: 'India',
-    currentSystem: '',
-    challenges: [],
+    role: '',
+    demoType: 'virtual',
     preferredDate: '',
     preferredTime: '',
-    additionalNotes: ''
+    message: ''
   });
-
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [currentStep, setCurrentStep] = useState(1);
-
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
-  ) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
-    }
-  };
-
-  const handleChallengeToggle = (challenge: string) => {
-    setFormData(prev => ({
-      ...prev,
-      challenges: prev.challenges.includes(challenge)
-        ? prev.challenges.filter(c => c !== challenge)
-        : [...prev.challenges, challenge]
-    }));
-  };
-
-  const validateStep = (step: number): boolean => {
-    const newErrors: Record<string, string> = {};
-
-    if (step === 1) {
-      if (!formData.institutionName.trim()) {
-        newErrors.institutionName = 'Institution name is required';
-      }
-      if (!formData.institutionType) {
-        newErrors.institutionType = 'Please select institution type';
-      }
-      if (!formData.studentCount) {
-        newErrors.studentCount = 'Please select student count range';
-      }
-    }
-
-    if (step === 2) {
-      if (!formData.contactName.trim()) {
-        newErrors.contactName = 'Contact person name is required';
-      }
-      if (!formData.email.trim()) {
-        newErrors.email = 'Email is required';
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-        newErrors.email = 'Please enter a valid email address';
-      }
-      if (!formData.phone.trim()) {
-        newErrors.phone = 'Phone number is required';
-      } else if (!/^[+]?[\d\s-]{10,}$/.test(formData.phone)) {
-        newErrors.phone = 'Please enter a valid phone number';
-      }
-      if (!formData.city.trim()) {
-        newErrors.city = 'City is required';
-      }
-      if (!formData.state.trim()) {
-        newErrors.state = 'State is required';
-      }
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleNext = () => {
-    if (validateStep(currentStep)) {
-      setCurrentStep(prev => Math.min(prev + 1, 3));
-    }
-  };
-
-  const handleBack = () => {
-    setCurrentStep(prev => Math.max(prev - 1, 1));
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!validateStep(currentStep)) return;
+
+    // Validation
+    const requiredFields = [
+      'name', 'email', 'phone', 'institution', 'institutionType',
+      'studentCount', 'city', 'state', 'preferredDate'
+    ];
+
+    const missingFields = requiredFields.filter(field => !formData[field as keyof FormData]);
+
+    if (missingFields.length > 0) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
 
     setIsSubmitting(true);
 
     try {
+      // Map new form data to API expected format
+      const apiPayload = {
+        institutionName: formData.institution,
+        institutionType: formData.institutionType,
+        studentCount: formData.studentCount,
+        contactName: formData.name,
+        designation: formData.role,
+        email: formData.email,
+        phone: formData.phone,
+        city: formData.city,
+        state: formData.state,
+        country: 'India',
+        challenges: [], // Not in new UI explicitly, sending empty or could add back
+        preferredDate: formData.preferredDate,
+        preferredTime: formData.preferredTime,
+        additionalNotes: formData.message
+      };
+
       const response = await fetch('/api/demo-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(apiPayload)
       });
 
       if (!response.ok) {
@@ -203,689 +145,705 @@ export default function DemoRequestPage() {
         throw new Error(data.error || 'Failed to submit request');
       }
 
-      setIsSuccess(true);
+      // Show success message
+      toast.success('Demo request submitted successfully! We\'ll contact you shortly.');
+
+      // Reset form
+      setFormData({
+        name: '',
+        email: '',
+        phone: '',
+        institution: '',
+        institutionType: '',
+        studentCount: '',
+        city: '',
+        state: '',
+        role: '',
+        demoType: 'virtual',
+        preferredDate: '',
+        preferredTime: '',
+        message: ''
+      });
+
+      setActiveStep(1);
+
+      // Optional: Redirect to home after delay
+      setTimeout(() => router.push('/'), 3000);
+
     } catch (error: any) {
-      setErrors({ submit: error.message || 'Failed to submit. Please try again.' });
+      toast.error(error.message || 'Failed to submit. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const features = [
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
+  };
+
+  const isStepComplete = (step: number): boolean => {
+    switch (step) {
+      case 1:
+        return !!formData.institution && !!formData.institutionType && !!formData.studentCount && !!formData.role;
+      case 2:
+        return !!formData.name && !!formData.email && !!formData.phone && !!formData.city && !!formData.state;
+      case 3:
+        return !!formData.demoType && !!formData.preferredDate;
+      default:
+        return false;
+    }
+  };
+
+  const navigationSteps: NavigationStep[] = [
+    { id: 1, title: 'Institution', icon: <Building2 size={20} /> },
+    { id: 2, title: 'Contact', icon: <User size={20} /> },
+    { id: 3, title: 'Requirements', icon: <Calendar size={20} /> }
+  ];
+
+  const benefits: Benefit[] = [
     {
-      icon: GraduationCap,
-      title: 'NEP 2020 Compliant',
-      description: 'Full support for MAJOR/MINOR elective system'
+      icon: <Video size={32} />,
+      title: 'Personalized Walkthrough',
+      description: 'Get a customized demo tailored to your institution\'s specific needs and requirements.'
     },
     {
-      icon: Shield,
-      title: 'Enterprise Security',
-      description: 'Role-based access control & data encryption'
+      icon: <Users size={32} />,
+      title: 'Expert Guidance',
+      description: 'Learn from our experienced team who understand academic administration challenges.'
     },
     {
-      icon: Calendar,
-      title: 'AI-Powered Scheduling',
-      description: 'Intelligent conflict-free timetable generation'
+      icon: <CheckCircle2 size={32} />,
+      title: 'Q&A Session',
+      description: 'Ask questions and get immediate answers about features, pricing, and implementation.'
     },
     {
-      icon: Users,
-      title: 'Multi-Role Support',
-      description: 'Admin, Faculty, Student dashboards'
+      icon: <MapPin size={32} />,
+      title: 'Flexible Options',
+      description: 'Choose between virtual demos or on-site visits based on your convenience.'
     }
   ];
 
-  if (isSuccess) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
-        <Header />
-        <div className="pt-24 pb-12 px-4 sm:px-6 lg:px-8">
-          <div className="max-w-2xl mx-auto text-center">
-            <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
-              <CheckCircle2 className="h-10 w-10 text-green-600 dark:text-green-400" />
-            </div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
-              Demo Request Submitted Successfully!
-            </h1>
-            <p className="text-lg text-gray-600 dark:text-gray-300 mb-8">
-              Thank you for your interest in Academic Compass ERP. Our team will review your request 
-              and contact you within <span className="font-semibold text-primary">24-48 hours</span> to 
-              schedule your personalized demo.
-            </p>
-            
-            <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-xl p-6 border border-gray-200 dark:border-gray-700 mb-8">
-              <h3 className="font-semibold text-gray-900 dark:text-white mb-4">What happens next?</h3>
-              <div className="space-y-4 text-left">
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <span className="text-xs font-bold text-primary">1</span>
-                  </div>
-                  <p className="text-gray-600 dark:text-gray-300">
-                    Our team will review your institution's requirements
-                  </p>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <span className="text-xs font-bold text-primary">2</span>
-                  </div>
-                  <p className="text-gray-600 dark:text-gray-300">
-                    We'll reach out to confirm your preferred demo date and time
-                  </p>
-                </div>
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <span className="text-xs font-bold text-primary">3</span>
-                  </div>
-                  <p className="text-gray-600 dark:text-gray-300">
-                    You'll receive demo credentials to explore the platform
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link 
-                href="/"
-                className="inline-flex items-center justify-center px-6 py-3 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors"
-              >
-                Back to Home
-              </Link>
-              <Link 
-                href="/login"
-                className="inline-flex items-center justify-center px-6 py-3 border border-gray-300 dark:border-gray-600 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-              >
-                Already have credentials? Sign In
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const demoSteps: DemoStep[] = [
+    {
+      number: '01',
+      title: 'Schedule Your Demo',
+      description: 'Choose your preferred date and time slot that works best for you and your team.',
+      icon: <Calendar size={32} />
+    },
+    {
+      number: '02',
+      title: 'Confirmation & Preparation',
+      description: 'Receive email confirmation with meeting link and preparation materials for the demo.',
+      icon: <Mail size={32} />
+    },
+    {
+      number: '03',
+      title: 'Live Demo Session',
+      description: 'Join the personalized walkthrough with our expert and explore key features.',
+      icon: <Video size={32} />
+    },
+    {
+      number: '04',
+      title: 'Q&A Discussion',
+      description: 'Ask questions, discuss your needs, and learn how we can help your institution.',
+      icon: <Users size={32} />
+    },
+    {
+      number: '05',
+      title: 'Customized Proposal',
+      description: 'Receive a tailored implementation plan and pricing designed for your requirements.',
+      icon: <CheckCircle2 size={32} />
+    }
+  ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
-      <Header />
-      
-      <div className="pt-20 pb-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-6xl mx-auto">
-          {/* Hero Section */}
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-full text-sm font-medium mb-4">
-              <Sparkles className="h-4 w-4" />
-              Enterprise ERP for Educational Institutions
-            </div>
-            <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 dark:text-white mb-4">
-              Schedule Your Free Demo
-            </h1>
-            <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-              Experience how Academic Compass can transform your institution's 
-              academic management with a personalized demo
-            </p>
-          </div>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50">
+      <Toaster position="top-center" />
+      <Navigation />
 
-          <div className="grid lg:grid-cols-5 gap-8">
-            {/* Left Side - Benefits */}
-            <div className="lg:col-span-2 space-y-6">
-              <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-2xl p-6 border border-gray-200 dark:border-gray-700">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                  <Star className="h-5 w-5 text-yellow-500" />
-                  Why Choose Academic Compass?
-                </h3>
-                <div className="space-y-4">
-                  {features.map((feature, index) => (
-                    <div key={index} className="flex items-start gap-3">
-                      <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <feature.icon className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <h4 className="font-medium text-gray-900 dark:text-white">
-                          {feature.title}
-                        </h4>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {feature.description}
-                        </p>
-                      </div>
+      {/* Hero Section */}
+      <section className="relative pt-32 pb-32 overflow-hidden bg-teal-50">
+        {/* Grid Background Pattern */}
+        <div
+          className="absolute inset-0 opacity-30"
+          style={{
+            backgroundImage: `
+              linear-gradient(to right, #4D869C15 1px, transparent 1px),
+              linear-gradient(to bottom, #4D869C15 1px, transparent 1px)
+            `,
+            backgroundSize: '40px 40px'
+          }}
+        ></div>
+
+        {/* Floating Shapes */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <div className="absolute w-64 h-64 rounded-full bg-gradient-to-br from-blue-200/30 to-teal-200/30 -top-32 -left-32 blur-3xl"></div>
+          <div className="absolute w-96 h-96 rounded-full bg-gradient-to-br from-teal-200/20 to-blue-200/20 top-1/2 -right-48 blur-3xl"></div>
+          <div className="absolute w-72 h-72 rounded-full bg-gradient-to-br from-blue-100/30 to-teal-100/30 bottom-0 left-1/3 blur-3xl"></div>
+        </div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          className="max-w-7xl mx-auto px-6 relative z-10"
+        >
+          <div className="grid lg:grid-cols-2 gap-12 items-start">
+            {/* Left Column - Hero Text */}
+            <div className="text-left">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+              >
+                <span className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#4D869C]/10 to-[#7AB2B2]/10 rounded-full text-[#4D869C] font-semibold text-sm mb-6">
+                  <Calendar size={16} />
+                  Schedule Your Demo
+                </span>
+              </motion.div>
+
+              <motion.h1
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="text-5xl lg:text-6xl font-extrabold text-gray-900 leading-tight mb-6"
+              >
+                Experience Academic Compass
+                <br />
+                <span className="bg-gradient-to-r from-[#4D869C] to-[#7AB2B2] bg-clip-text text-transparent">
+                  In Action
+                </span>
+              </motion.h1>
+
+              <motion.p
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+                className="text-xl text-gray-600 mb-10 leading-relaxed"
+              >
+                See how Academic Compass can transform your institution's academic management.
+                Schedule a personalized demo with our experts and discover the perfect solution
+                for your needs.
+              </motion.p>
+
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+                className="grid grid-cols-3 gap-6"
+              >
+                <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-5 shadow-lg">
+                  <h3 className="text-3xl font-bold text-[#4D869C] mb-1">30 min</h3>
+                  <p className="text-sm text-gray-600">Average Demo Duration</p>
+                </div>
+                <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-5 shadow-lg">
+                  <h3 className="text-3xl font-bold text-[#4D869C] mb-1">500+</h3>
+                  <p className="text-sm text-gray-600">Institutions Trust Us</p>
+                </div>
+                <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-5 shadow-lg">
+                  <h3 className="text-3xl font-bold text-[#4D869C] mb-1">24/7</h3>
+                  <p className="text-sm text-gray-600">Support Available</p>
+                </div>
+              </motion.div>
+            </div>
+
+            {/* Right Column - Demo Request Form */}
+            <motion.div
+              initial={{ opacity: 0, x: 30 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.4 }}
+            >
+              <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
+                <div className="grid md:grid-cols-[200px_1fr]">
+                  {/* Side Navigation */}
+                  <div className="bg-gradient-to-b from-[#4D869C] to-[#7AB2B2] p-6 text-white">
+                    <div className="mb-8">
+                      <Calendar size={32} className="mb-3" />
+                      <h3 className="text-xl font-bold">Get Started</h3>
                     </div>
-                  ))}
-                </div>
-              </div>
 
-              {/* Testimonial */}
-              <div className="bg-gradient-to-br from-primary/5 to-purple-500/5 rounded-2xl p-6 border border-primary/20">
-                <div className="flex gap-1 mb-3">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="h-4 w-4 fill-yellow-500 text-yellow-500" />
-                  ))}
-                </div>
-                <p className="text-gray-700 dark:text-gray-300 italic mb-4">
-                  "Academic Compass revolutionized our timetable management. What used to take 
-                  weeks now happens in minutes with zero conflicts."
-                </p>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center">
-                    <span className="text-primary font-bold">DR</span>
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-white">Dr. Rajesh Kumar</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Principal, ABC Engineering College</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Quick Stats */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-xl p-4 text-center border border-gray-200 dark:border-gray-700">
-                  <div className="text-2xl font-bold text-primary">500+</div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Institutions</div>
-                </div>
-                <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-xl p-4 text-center border border-gray-200 dark:border-gray-700">
-                  <div className="text-2xl font-bold text-primary">50K+</div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Students</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Right Side - Form */}
-            <div className="lg:col-span-3">
-              <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-md rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                {/* Progress Steps */}
-                <div className="bg-gray-50 dark:bg-gray-900/50 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-                  <div className="flex items-center justify-between">
-                    {[
-                      { step: 1, label: 'Institution' },
-                      { step: 2, label: 'Contact' },
-                      { step: 3, label: 'Requirements' }
-                    ].map((item, index) => (
-                      <div key={item.step} className="flex items-center">
-                        <div className={`flex items-center justify-center w-8 h-8 rounded-full font-medium text-sm
-                          ${currentStep >= item.step 
-                            ? 'bg-primary text-white' 
-                            : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
-                          }`}
-                        >
-                          {currentStep > item.step ? (
-                            <CheckCircle2 className="h-5 w-5" />
-                          ) : (
-                            item.step
-                          )}
-                        </div>
-                        <span className={`ml-2 text-sm font-medium hidden sm:inline
-                          ${currentStep >= item.step 
-                            ? 'text-gray-900 dark:text-white' 
-                            : 'text-gray-500 dark:text-gray-400'
-                          }`}
-                        >
-                          {item.label}
-                        </span>
-                        {index < 2 && (
-                          <div className={`w-12 sm:w-20 h-0.5 mx-2 sm:mx-4
-                            ${currentStep > item.step 
-                              ? 'bg-primary' 
-                              : 'bg-gray-200 dark:bg-gray-700'
+                    <nav className="space-y-3">
+                      {navigationSteps.map((step) => (
+                        <button
+                          key={step.id}
+                          onClick={() => setActiveStep(step.id)}
+                          className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${activeStep === step.id
+                            ? 'bg-white/20 shadow-lg'
+                            : isStepComplete(step.id)
+                              ? 'bg-white/10'
+                              : 'hover:bg-white/5'
                             }`}
-                          />
-                        )}
-                      </div>
-                    ))}
+                        >
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isStepComplete(step.id)
+                            ? 'bg-green-400 text-white'
+                            : 'bg-white/10'
+                            }`}>
+                            {isStepComplete(step.id) ? <CheckCircle2 size={20} /> : step.icon}
+                          </div>
+                          <span className="font-medium text-sm">{step.title}</span>
+                        </button>
+                      ))}
+                    </nav>
+
+                    <div className="mt-8 pt-8 border-t border-white/20">
+                      <p className="text-sm text-white/80">Step {activeStep} of 3</p>
+                    </div>
                   </div>
-                </div>
 
-                <form onSubmit={handleSubmit} className="p-6 space-y-6">
-                  {/* Step 1: Institution Details */}
-                  {currentStep === 1 && (
-                    <div className="space-y-5">
-                      <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                        <Building2 className="h-5 w-5 text-primary" />
-                        Institution Details
-                      </h2>
+                  {/* Form Content */}
+                  <div className="p-8">
+                    <div className="mb-8">
+                      <h2 className="text-2xl font-bold text-gray-900 mb-2">Request Your Free Demo</h2>
+                      <p className="text-gray-600">Fill in your details and we'll get back to you within 24 hours</p>
+                    </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Institution Name *
-                        </label>
-                        <input
-                          type="text"
-                          name="institutionName"
-                          value={formData.institutionName}
-                          onChange={handleInputChange}
-                          placeholder="Enter your institution's full name"
-                          className={`w-full px-4 py-3 rounded-lg border ${
-                            errors.institutionName 
-                              ? 'border-red-300 focus:border-red-500' 
-                              : 'border-gray-300 dark:border-gray-600 focus:border-primary'
-                          } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
-                        />
-                        {errors.institutionName && (
-                          <p className="mt-1 text-sm text-red-600">{errors.institutionName}</p>
-                        )}
-                      </div>
+                    <form onSubmit={handleSubmit}>
+                      {/* Step 1: Institution */}
+                      {activeStep === 1 && (
+                        <motion.div
+                          initial={{ opacity: 0, x: 20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -20 }}
+                          className="space-y-6"
+                        >
+                          <h3 className="text-lg font-bold text-gray-900 mb-4">Tell us about your institution</h3>
 
-                      <div className="grid sm:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Institution Type *
-                          </label>
-                          <select
-                            name="institutionType"
-                            value={formData.institutionType}
-                            onChange={handleInputChange}
-                            className={`w-full px-4 py-3 rounded-lg border ${
-                              errors.institutionType 
-                                ? 'border-red-300' 
-                                : 'border-gray-300 dark:border-gray-600'
-                            } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
-                          >
-                            <option value="">Select type</option>
-                            {institutionTypes.map(type => (
-                              <option key={type} value={type}>{type}</option>
-                            ))}
-                          </select>
-                          {errors.institutionType && (
-                            <p className="mt-1 text-sm text-red-600">{errors.institutionType}</p>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Website (Optional)
-                          </label>
-                          <div className="relative">
-                            <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                          <div>
+                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                              <Building2 size={16} />
+                              Institution Name <span className="text-red-500">*</span>
+                            </label>
                             <input
-                              type="url"
-                              name="website"
-                              value={formData.website}
-                              onChange={handleInputChange}
-                              placeholder="https://www.example.edu"
-                              className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20"
+                              type="text"
+                              name="institution"
+                              placeholder="Your institution name"
+                              value={formData.institution}
+                              onChange={handleChange}
+                              required
+                              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#4D869C] focus:outline-none transition-colors"
                             />
                           </div>
-                        </div>
-                      </div>
 
-                      <div className="grid sm:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Number of Students *
-                          </label>
-                          <select
-                            name="studentCount"
-                            value={formData.studentCount}
-                            onChange={handleInputChange}
-                            className={`w-full px-4 py-3 rounded-lg border ${
-                              errors.studentCount 
-                                ? 'border-red-300' 
-                                : 'border-gray-300 dark:border-gray-600'
-                            } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
-                          >
-                            <option value="">Select range</option>
-                            {studentCountRanges.map(range => (
-                              <option key={range} value={range}>{range}</option>
-                            ))}
-                          </select>
-                          {errors.studentCount && (
-                            <p className="mt-1 text-sm text-red-600">{errors.studentCount}</p>
-                          )}
-                        </div>
+                          <div className="grid md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                                <Building2 size={16} />
+                                Institution Type <span className="text-red-500">*</span>
+                              </label>
+                              <select
+                                name="institutionType"
+                                value={formData.institutionType}
+                                onChange={handleChange}
+                                required
+                                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#4D869C] focus:outline-none transition-colors"
+                              >
+                                <option value="">Select type</option>
+                                {institutionTypes.map(type => (
+                                  <option key={type} value={type}>{type}</option>
+                                ))}
+                              </select>
+                            </div>
 
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Number of Faculty (Optional)
-                          </label>
-                          <input
-                            type="text"
-                            name="facultyCount"
-                            value={formData.facultyCount}
-                            onChange={handleInputChange}
-                            placeholder="e.g., 150"
-                            className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                            <div>
+                              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                                <Users size={16} />
+                                Student Count <span className="text-red-500">*</span>
+                              </label>
+                              <select
+                                name="studentCount"
+                                value={formData.studentCount}
+                                onChange={handleChange}
+                                required
+                                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#4D869C] focus:outline-none transition-colors"
+                              >
+                                <option value="">Select range</option>
+                                {studentCountRanges.map(range => (
+                                  <option key={range} value={range}>{range}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
 
-                  {/* Step 2: Contact Details */}
-                  {currentStep === 2 && (
-                    <div className="space-y-5">
-                      <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                        <Users className="h-5 w-5 text-primary" />
-                        Contact Information
-                      </h2>
+                          <div>
+                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                              <Users size={16} />
+                              Your Role <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              name="role"
+                              value={formData.role}
+                              onChange={handleChange}
+                              required
+                              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#4D869C] focus:outline-none transition-colors"
+                            >
+                              <option value="">Select your role</option>
+                              <option value="Admin">College Administrator</option>
+                              <option value="Dean">Dean/Head of Department</option>
+                              <option value="Faculty">Faculty Member</option>
+                              <option value="IT Manager">IT Manager</option>
+                              <option value="Other">Other</option>
+                            </select>
+                          </div>
 
-                      <div className="grid sm:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Contact Person Name *
-                          </label>
-                          <input
-                            type="text"
-                            name="contactName"
-                            value={formData.contactName}
-                            onChange={handleInputChange}
-                            placeholder="Full name"
-                            className={`w-full px-4 py-3 rounded-lg border ${
-                              errors.contactName 
-                                ? 'border-red-300' 
-                                : 'border-gray-300 dark:border-gray-600'
-                            } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
-                          />
-                          {errors.contactName && (
-                            <p className="mt-1 text-sm text-red-600">{errors.contactName}</p>
-                          )}
-                        </div>
+                          <div className="flex justify-end pt-4">
+                            <button
+                              type="button"
+                              onClick={() => setActiveStep(2)}
+                              disabled={!isStepComplete(1)}
+                              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#4D869C] to-[#7AB2B2] text-white rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg transition-all"
+                            >
+                              Next <ArrowRight size={18} />
+                            </button>
+                          </div>
+                        </motion.div>
+                      )}
 
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Designation (Optional)
-                          </label>
-                          <input
-                            type="text"
-                            name="designation"
-                            value={formData.designation}
-                            onChange={handleInputChange}
-                            placeholder="e.g., Principal, Dean, IT Head"
-                            className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20"
-                          />
-                        </div>
-                      </div>
+                      {/* Step 2: Contact */}
+                      {activeStep === 2 && (
+                        <motion.div
+                          initial={{ opacity: 0, x: 20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -20 }}
+                          className="space-y-6"
+                        >
+                          <h3 className="text-lg font-bold text-gray-900 mb-4">Your contact information</h3>
 
-                      <div className="grid sm:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Email Address *
-                          </label>
-                          <div className="relative">
-                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                          <div>
+                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                              <User size={16} />
+                              Full Name <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              name="name"
+                              placeholder="Enter your full name"
+                              value={formData.name}
+                              onChange={handleChange}
+                              required
+                              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#4D869C] focus:outline-none transition-colors"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                              <Mail size={16} />
+                              Email Address <span className="text-red-500">*</span>
+                            </label>
                             <input
                               type="email"
                               name="email"
+                              placeholder="your.email@institution.edu"
                               value={formData.email}
-                              onChange={handleInputChange}
-                              placeholder="official@institution.edu"
-                              className={`w-full pl-10 pr-4 py-3 rounded-lg border ${
-                                errors.email 
-                                  ? 'border-red-300' 
-                                  : 'border-gray-300 dark:border-gray-600'
-                              } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                              onChange={handleChange}
+                              required
+                              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#4D869C] focus:outline-none transition-colors"
                             />
                           </div>
-                          {errors.email && (
-                            <p className="mt-1 text-sm text-red-600">{errors.email}</p>
-                          )}
-                        </div>
 
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Phone Number *
-                          </label>
-                          <div className="relative">
-                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                          <div>
+                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                              <Phone size={16} />
+                              Phone Number <span className="text-red-500">*</span>
+                            </label>
                             <input
                               type="tel"
                               name="phone"
+                              placeholder="+1 234-567-8900"
                               value={formData.phone}
-                              onChange={handleInputChange}
-                              placeholder="+91 9876543210"
-                              className={`w-full pl-10 pr-4 py-3 rounded-lg border ${
-                                errors.phone 
-                                  ? 'border-red-300' 
-                                  : 'border-gray-300 dark:border-gray-600'
-                              } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                              onChange={handleChange}
+                              required
+                              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#4D869C] focus:outline-none transition-colors"
                             />
                           </div>
-                          {errors.phone && (
-                            <p className="mt-1 text-sm text-red-600">{errors.phone}</p>
-                          )}
-                        </div>
-                      </div>
 
-                      <div className="grid sm:grid-cols-3 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            City *
-                          </label>
-                          <div className="relative">
-                            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                            <input
-                              type="text"
-                              name="city"
-                              value={formData.city}
-                              onChange={handleInputChange}
-                              placeholder="City"
-                              className={`w-full pl-10 pr-4 py-3 rounded-lg border ${
-                                errors.city 
-                                  ? 'border-red-300' 
-                                  : 'border-gray-300 dark:border-gray-600'
-                              } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
-                            />
-                          </div>
-                          {errors.city && (
-                            <p className="mt-1 text-sm text-red-600">{errors.city}</p>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            State *
-                          </label>
-                          <input
-                            type="text"
-                            name="state"
-                            value={formData.state}
-                            onChange={handleInputChange}
-                            placeholder="State"
-                            className={`w-full px-4 py-3 rounded-lg border ${
-                              errors.state 
-                                ? 'border-red-300' 
-                                : 'border-gray-300 dark:border-gray-600'
-                            } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
-                          />
-                          {errors.state && (
-                            <p className="mt-1 text-sm text-red-600">{errors.state}</p>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Country
-                          </label>
-                          <input
-                            type="text"
-                            name="country"
-                            value={formData.country}
-                            onChange={handleInputChange}
-                            className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Step 3: Requirements */}
-                  {currentStep === 3 && (
-                    <div className="space-y-5">
-                      <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                        <Calendar className="h-5 w-5 text-primary" />
-                        Requirements & Scheduling
-                      </h2>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Current System (Optional)
-                        </label>
-                        <input
-                          type="text"
-                          name="currentSystem"
-                          value={formData.currentSystem}
-                          onChange={handleInputChange}
-                          placeholder="e.g., Excel sheets, Manual, Other ERP"
-                          className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                          Key Challenges You're Facing (Select all that apply)
-                        </label>
-                        <div className="grid sm:grid-cols-2 gap-2">
-                          {challengeOptions.map(challenge => (
-                            <label
-                              key={challenge}
-                              className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                                formData.challenges.includes(challenge)
-                                  ? 'border-primary bg-primary/5 text-primary'
-                                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                              }`}
-                            >
+                          <div className="grid md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                                <MapPin size={16} />
+                                City <span className="text-red-500">*</span>
+                              </label>
                               <input
-                                type="checkbox"
-                                checked={formData.challenges.includes(challenge)}
-                                onChange={() => handleChallengeToggle(challenge)}
-                                className="sr-only"
+                                type="text"
+                                name="city"
+                                placeholder="City"
+                                value={formData.city}
+                                onChange={handleChange}
+                                required
+                                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#4D869C] focus:outline-none transition-colors"
                               />
-                              <div className={`w-5 h-5 rounded border flex items-center justify-center ${
-                                formData.challenges.includes(challenge)
-                                  ? 'bg-primary border-primary'
-                                  : 'border-gray-300 dark:border-gray-600'
-                              }`}>
-                                {formData.challenges.includes(challenge) && (
-                                  <CheckCircle2 className="h-3 w-3 text-white" />
-                                )}
-                              </div>
-                              <span className="text-sm text-gray-700 dark:text-gray-300">{challenge}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
+                            </div>
+                            <div>
+                              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                                <MapPin size={16} />
+                                State <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                type="text"
+                                name="state"
+                                placeholder="State"
+                                value={formData.state}
+                                onChange={handleChange}
+                                required
+                                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#4D869C] focus:outline-none transition-colors"
+                              />
+                            </div>
+                          </div>
 
-                      <div className="grid sm:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Preferred Demo Date (Optional)
-                          </label>
-                          <div className="relative">
-                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                            <input
-                              type="date"
-                              name="preferredDate"
-                              value={formData.preferredDate}
-                              onChange={handleInputChange}
-                              min={new Date().toISOString().split('T')[0]}
-                              className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          <div className="flex justify-between pt-4">
+                            <button
+                              type="button"
+                              onClick={() => setActiveStep(1)}
+                              className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-all"
+                            >
+                              Back
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setActiveStep(3)}
+                              disabled={!isStepComplete(2)}
+                              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#4D869C] to-[#7AB2B2] text-white rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg transition-all"
+                            >
+                              Next <ArrowRight size={18} />
+                            </button>
+                          </div>
+                        </motion.div>
+                      )}
+
+                      {/* Step 3: Requirements */}
+                      {activeStep === 3 && (
+                        <motion.div
+                          initial={{ opacity: 0, x: 20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -20 }}
+                          className="space-y-6"
+                        >
+                          <h3 className="text-lg font-bold text-gray-900 mb-4">Demo preferences</h3>
+
+                          <div>
+                            <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-3">
+                              <Video size={16} />
+                              Demo Type <span className="text-red-500">*</span>
+                            </label>
+                            <div className="space-y-3">
+                              <label className="flex items-center gap-3 p-4 border-2 border-gray-200 rounded-xl cursor-pointer hover:border-[#4D869C] transition-colors">
+                                <input
+                                  type="radio"
+                                  name="demoType"
+                                  value="virtual"
+                                  checked={formData.demoType === 'virtual'}
+                                  onChange={handleChange}
+                                  className="w-5 h-5 text-[#4D869C]"
+                                />
+                                <span className="font-medium text-gray-900">Virtual Demo (Online)</span>
+                              </label>
+                              <label className="flex items-center gap-3 p-4 border-2 border-gray-200 rounded-xl cursor-pointer hover:border-[#4D869C] transition-colors">
+                                <input
+                                  type="radio"
+                                  name="demoType"
+                                  value="onsite"
+                                  checked={formData.demoType === 'onsite'}
+                                  onChange={handleChange}
+                                  className="w-5 h-5 text-[#4D869C]"
+                                />
+                                <span className="font-medium text-gray-900">On-site Visit</span>
+                              </label>
+                            </div>
+                          </div>
+
+                          <div className="grid md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                                <Calendar size={16} />
+                                Preferred Date <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                type="date"
+                                name="preferredDate"
+                                value={formData.preferredDate}
+                                onChange={handleChange}
+                                min={new Date().toISOString().split('T')[0]}
+                                required
+                                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#4D869C] focus:outline-none transition-colors"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                                <Clock size={16} />
+                                Preferred Time
+                              </label>
+                              <select
+                                name="preferredTime"
+                                value={formData.preferredTime}
+                                onChange={handleChange}
+                                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#4D869C] focus:outline-none transition-colors"
+                              >
+                                <option value="">Select time slot</option>
+                                <option value="09:00 AM - 10:00 AM">09:00 AM - 10:00 AM</option>
+                                <option value="10:00 AM - 11:00 AM">10:00 AM - 11:00 AM</option>
+                                <option value="11:00 AM - 12:00 PM">11:00 AM - 12:00 PM</option>
+                                <option value="02:00 PM - 03:00 PM">02:00 PM - 03:00 PM</option>
+                                <option value="03:00 PM - 04:00 PM">03:00 PM - 04:00 PM</option>
+                                <option value="04:00 PM - 05:00 PM">04:00 PM - 05:00 PM</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="text-sm font-semibold text-gray-700 mb-2 block">
+                              Additional Information
+                            </label>
+                            <textarea
+                              name="message"
+                              placeholder="Tell us about your specific needs or questions..."
+                              rows={4}
+                              value={formData.message}
+                              onChange={handleChange}
+                              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-[#4D869C] focus:outline-none transition-colors resize-none"
                             />
                           </div>
-                        </div>
 
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Preferred Time Slot (Optional)
-                          </label>
-                          <div className="relative">
-                            <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                            <select
-                              name="preferredTime"
-                              value={formData.preferredTime}
-                              onChange={handleInputChange}
-                              className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          <div className="flex justify-between pt-4">
+                            <button
+                              type="button"
+                              onClick={() => setActiveStep(2)}
+                              className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-all"
                             >
-                              <option value="">Select time slot</option>
-                              {timeSlots.map(slot => (
-                                <option key={slot} value={slot}>{slot}</option>
-                              ))}
-                            </select>
+                              Back
+                            </button>
+                            <button
+                              type="submit"
+                              disabled={!isStepComplete(3) || isSubmitting}
+                              className="flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-[#4D869C] to-[#7AB2B2] text-white rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg transition-all"
+                            >
+                              <span>{isSubmitting ? 'Scheduling...' : 'Schedule Demo'}</span>
+                              <CheckCircle2 size={18} />
+                            </button>
                           </div>
-                        </div>
-                      </div>
+                        </motion.div>
+                      )}
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Additional Notes (Optional)
-                        </label>
-                        <textarea
-                          name="additionalNotes"
-                          value={formData.additionalNotes}
-                          onChange={handleInputChange}
-                          rows={3}
-                          placeholder="Any specific requirements or questions?"
-                          className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Error Display */}
-                  {errors.submit && (
-                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-                      <p className="text-red-600 dark:text-red-400 text-sm">{errors.submit}</p>
-                    </div>
-                  )}
-
-                  {/* Navigation Buttons */}
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
-                    {currentStep > 1 ? (
-                      <button
-                        type="button"
-                        onClick={handleBack}
-                        className="px-6 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                      >
-                        Back
-                      </button>
-                    ) : (
-                      <div />
-                    )}
-
-                    {currentStep < 3 ? (
-                      <button
-                        type="button"
-                        onClick={handleNext}
-                        className="inline-flex items-center gap-2 px-6 py-2.5 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors"
-                      >
-                        Next
-                        <ArrowRight className="h-4 w-4" />
-                      </button>
-                    ) : (
-                      <button
-                        type="submit"
-                        disabled={isSubmitting}
-                        className="inline-flex items-center gap-2 px-8 py-2.5 bg-gradient-to-r from-primary to-purple-600 text-white rounded-lg font-medium hover:from-primary/90 hover:to-purple-600/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {isSubmitting ? (
-                          <>
-                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            Submitting...
-                          </>
-                        ) : (
-                          <>
-                            Submit Demo Request
-                            <ArrowRight className="h-4 w-4" />
-                          </>
-                        )}
-                      </button>
-                    )}
+                      <p className="text-xs text-gray-500 text-center mt-6">
+                        By submitting this form, you agree to our Terms of Service and Privacy Policy.
+                      </p>
+                    </form>
                   </div>
-                </form>
+                </div>
               </div>
+            </motion.div>
+          </div>
+        </motion.div>
+      </section>
 
-              {/* Trust Badges */}
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-4 text-sm text-gray-500 dark:text-gray-400">
-                <div className="flex items-center gap-1">
-                  <Shield className="h-4 w-4" />
-                  <span>Secure & Encrypted</span>
+      {/* Benefits Section */}
+      <section className="py-20 bg-teal-50">
+        <div className="max-w-7xl mx-auto px-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
+            <h2 className="text-4xl font-extrabold text-gray-900 mb-4">Why Schedule a Demo?</h2>
+            <p className="text-xl text-gray-600">Discover how Academic Compass can benefit your institution</p>
+          </motion.div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+            {benefits.map((benefit, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.1 }}
+                whileHover={{ y: -8, boxShadow: '0 12px 40px rgba(0, 0, 0, 0.15)' }}
+                className="bg-white rounded-2xl p-8 shadow-lg border border-gray-100 transition-all"
+              >
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#4D869C] to-[#7AB2B2] flex items-center justify-center text-white mb-6">
+                  {benefit.icon}
                 </div>
-                <div className="flex items-center gap-1">
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span>No Obligation</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Clock className="h-4 w-4" />
-                  <span>Response within 24 hrs</span>
-                </div>
-              </div>
-            </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-3">{benefit.title}</h3>
+                <p className="text-gray-600 leading-relaxed">{benefit.description}</p>
+              </motion.div>
+            ))}
           </div>
         </div>
-      </div>
+      </section>
+
+      {/* What to Expect Section */}
+      <section className="py-20 bg-teal-50">
+        <div className="max-w-7xl mx-auto px-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
+            <h2 className="text-4xl font-extrabold text-gray-900 mb-4">What to Expect</h2>
+            <p className="text-xl text-gray-600">Simple steps to get started with your personalized demo</p>
+          </motion.div>
+
+          <div className="relative">
+            {demoSteps.map((step, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.15 }}
+                className={`flex items-center gap-8 mb-16 ${index % 2 === 0 ? 'flex-row' : 'flex-row-reverse'}`}
+              >
+                <div className="flex-1">
+                  <div className={`bg-white rounded-2xl p-8 shadow-xl border-2 border-gray-100 ${index % 2 === 0 ? 'ml-auto' : 'mr-auto'} max-w-lg`}>
+                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#4D869C] to-[#7AB2B2] flex items-center justify-center text-white mb-6">
+                      {step.icon}
+                    </div>
+                    <h4 className="text-2xl font-bold text-gray-900 mb-3">{step.title}</h4>
+                    <p className="text-gray-600 leading-relaxed">{step.description}</p>
+                  </div>
+                </div>
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#4D869C] to-[#7AB2B2] flex flex-col items-center justify-center text-white shadow-lg">
+                    <span className="text-xs font-bold opacity-80">STEP</span>
+                    <h3 className="text-2xl font-extrabold">{step.number}</h3>
+                  </div>
+                  {index < demoSteps.length - 1 && (
+                    <div className="w-1 h-24 bg-gradient-to-b from-[#4D869C] to-[#7AB2B2] rounded-full"></div>
+                  )}
+                </div>
+                <div className="flex-1"></div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="py-20 bg-gradient-to-r from-[#4D869C] to-[#7AB2B2] relative overflow-hidden">
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute w-96 h-96 rounded-full bg-white -top-48 -left-48"></div>
+          <div className="absolute w-96 h-96 rounded-full bg-white -bottom-48 -right-48"></div>
+        </div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="max-w-4xl mx-auto px-6 text-center relative z-10"
+        >
+          <h2 className="text-4xl lg:text-5xl font-extrabold text-white mb-6">Ready to Transform Your Institution?</h2>
+          <p className="text-xl text-white/90 mb-10">Join hundreds of institutions already using Academic Compass</p>
+          <button
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="inline-flex items-center gap-3 px-10 py-5 bg-white text-[#4D869C] rounded-2xl font-bold text-lg hover:shadow-2xl hover:scale-105 transition-all"
+          >
+            <span>Schedule Your Demo Now</span>
+            <ArrowRight size={20} />
+          </button>
+        </motion.div>
+      </section>
     </div>
   );
 }

@@ -1,648 +1,405 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { 
-  Key, Copy, CheckCircle, XCircle, Clock, Building2, 
-  RefreshCw, ArrowLeft, Send, Plus, Search, Trash2, ExternalLink
+import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import {
+  Key,
+  Plus,
+  Copy,
+  Trash2,
+  Search,
+  X,
+  CheckCircle2,
+  Clock,
+  RefreshCw,
+  Send,
+  ExternalLink
 } from 'lucide-react';
+import toast from 'react-hot-toast';
+import SuperAdminLayout from '@/components/super-admin/SuperAdminLayout';
 
 interface RegistrationToken {
   id: string;
   token: string;
-  demo_request_id?: string;
-  institution_name?: string;
-  email?: string;
-  expires_at: string;
-  is_used: boolean;
-  used_at?: string;
-  college_id?: string;
-  created_by?: string;
-  created_at: string;
-  demo_request?: {
-    institution_name: string;
-    contact_name: string;
-    email: string;
-    phone: string;
-  };
-}
-
-interface DemoRequest {
-  id: string;
-  institution_name: string;
-  contact_name: string;
+  institutionName: string;
   email: string;
-  status: string;
+  expiresAt: string;
+  isUsed: boolean;
+  usedAt?: string;
+  createdAt: string;
 }
 
-export default function RegistrationTokensPage() {
-  const router = useRouter();
+const RegistrationTokensPage: React.FC = () => {
   const [tokens, setTokens] = useState<RegistrationToken[]>([]);
-  const [approvedRequests, setApprovedRequests] = useState<DemoRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
-  
-  // Search and filter
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'used' | 'expired'>('all');
-  
-  // Generate token form
-  const [showGenerateForm, setShowGenerateForm] = useState(false);
-  const [generateForm, setGenerateForm] = useState({
-    demoRequestId: '',
-    institutionName: '',
+
+  const [newToken, setNewToken] = useState({
+    institution_name: '',
     email: '',
-    expiresInDays: 7
+    expires_in_days: 30
   });
 
   useEffect(() => {
-    // Check if user is super admin
-    const userData = localStorage.getItem('user');
-    if (!userData) {
-      router.push('/login');
-      return;
-    }
+    fetchTokens();
+  }, []);
 
-    const user = JSON.parse(userData);
-    if (user.role !== 'super_admin') {
-      router.push('/login?message=Access denied. Super admin only.');
-      return;
-    }
-
-    fetchData();
-  }, [router]);
-
-  const fetchData = async () => {
+  const fetchTokens = async () => {
     try {
       setLoading(true);
-      
-      // Fetch tokens and approved requests in parallel
-      const [tokensRes, requestsRes] = await Promise.all([
-        fetch('/api/super-admin/registration-tokens'),
-        fetch('/api/super-admin/demo-requests?status=approved')
-      ]);
-
-      if (tokensRes.ok) {
-        const data = await tokensRes.json();
-        setTokens(data.tokens || []);
+      const res = await fetch('/api/super-admin/registration-tokens');
+      if (res.ok) {
+        const data = await res.json();
+        const mapped = (data.tokens || []).map((t: any) => ({
+          id: t.id,
+          token: t.token,
+          institutionName: t.institution_name || t.demo_request?.institution_name || 'Unknown',
+          email: t.email || t.demo_request?.email || 'N/A',
+          expiresAt: t.expires_at,
+          isUsed: t.is_used,
+          usedAt: t.used_at,
+          createdAt: t.created_at
+        }));
+        setTokens(mapped);
       }
-
-      if (requestsRes.ok) {
-        const data = await requestsRes.json();
-        // Filter only approved/demo_completed requests that don't have tokens yet
-        setApprovedRequests(
-          (data.requests || []).filter((r: DemoRequest) => 
-            r.status === 'approved' || r.status === 'demo_completed'
-          )
-        );
-      }
-    } catch (err: any) {
-      setError('Failed to fetch data');
+    } catch (error) {
+      toast.error('Failed to fetch tokens');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleGenerateToken = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
+  const handleGenerateToken = async () => {
+    if (!newToken.institution_name || !newToken.email) {
+      toast.error('Institution name and email are required');
+      return;
+    }
+
     try {
-      const response = await fetch('/api/college/validate-token', {
+      const res = await fetch('/api/super-admin/registration-tokens', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          demoRequestId: generateForm.demoRequestId || undefined,
-          institutionName: generateForm.institutionName,
-          email: generateForm.email,
-          expiresInDays: generateForm.expiresInDays
-        })
+        body: JSON.stringify(newToken)
       });
 
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to generate token');
+      if (res.ok) {
+        const data = await res.json();
+        toast.success('Token generated successfully');
+        setShowGenerateModal(false);
+        setNewToken({ institution_name: '', email: '', expires_in_days: 30 });
+        fetchTokens();
+
+        // Copy the token to clipboard
+        if (data.token?.token) {
+          navigator.clipboard.writeText(data.token.token);
+          toast.success('Token copied to clipboard');
+        }
+      } else {
+        const err = await res.json();
+        toast.error(err.error || 'Failed to generate token');
       }
-
-      // Copy to clipboard
-      await navigator.clipboard.writeText(data.registrationUrl);
-      setSuccessMessage(`Token generated successfully!\n\nRegistration URL (copied to clipboard):\n${data.registrationUrl}\n\nExpires: ${new Date(data.expiresAt).toLocaleString()}`);
-      
-      setShowGenerateForm(false);
-      setGenerateForm({
-        demoRequestId: '',
-        institutionName: '',
-        email: '',
-        expiresInDays: 7
-      });
-      
-      fetchData();
-      setTimeout(() => setSuccessMessage(''), 10000);
-    } catch (err: any) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
+    } catch (e) {
+      toast.error('Error generating token');
     }
   };
 
-  const handleReactivateToken = async (tokenId: string) => {
-    if (!confirm('Are you sure you want to reactivate this token? This will allow it to be used for registration again.')) return;
-
+  const handleCopyToken = async (token: string) => {
     try {
-      const response = await fetch(`/api/super-admin/registration-tokens/${tokenId}`, {
+      await navigator.clipboard.writeText(token);
+      setCopiedToken(token);
+      toast.success('Token copied to clipboard');
+      setTimeout(() => setCopiedToken(null), 2000);
+    } catch (e) {
+      toast.error('Failed to copy token');
+    }
+  };
+
+  const handleDeleteToken = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this token?')) return;
+    try {
+      const res = await fetch(`/api/super-admin/registration-tokens/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        toast.success('Token deleted');
+        fetchTokens();
+      } else {
+        const err = await res.json();
+        toast.error(err.error || 'Failed to delete token');
+      }
+    } catch (e) {
+      toast.error('Error deleting token');
+    }
+  };
+
+  const handleReactivateToken = async (id: string) => {
+    try {
+      const res = await fetch(`/api/super-admin/registration-tokens/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'reactivate', expiresInDays: 7 })
       });
 
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to reactivate token');
+      if (res.ok) {
+        toast.success('Token reactivated');
+        fetchTokens();
+      } else {
+        const err = await res.json();
+        toast.error(err.error || 'Failed to reactivate token');
       }
-
-      // Copy the registration URL to clipboard
-      await navigator.clipboard.writeText(data.registrationUrl);
-      setSuccessMessage(`Token reactivated successfully!\n\nRegistration URL (copied to clipboard):\n${data.registrationUrl}\n\nNew Expiry: ${new Date(data.expiresAt).toLocaleString()}`);
-      fetchData();
-      setTimeout(() => setSuccessMessage(''), 10000);
-    } catch (err: any) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
+    } catch (e) {
+      toast.error('Error reactivating token');
     }
-  };
-
-  const handleCopyToken = async (token: RegistrationToken) => {
-    const registrationUrl = `${window.location.origin}/college/register?token=${token.token}`;
-    await navigator.clipboard.writeText(registrationUrl);
-    setCopiedToken(token.id);
-    setTimeout(() => setCopiedToken(null), 2000);
-  };
-
-  const handleDeleteToken = async (tokenId: string) => {
-    if (!confirm('Are you sure you want to delete this token?')) return;
-
-    try {
-      const response = await fetch(`/api/super-admin/registration-tokens/${tokenId}`, {
-        method: 'DELETE'
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete token');
-      }
-
-      setSuccessMessage('Token deleted successfully');
-      fetchData();
-      setTimeout(() => setSuccessMessage(''), 3000);
-    } catch (err: any) {
-      setError(err.message);
-      setTimeout(() => setError(''), 5000);
-    }
-  };
-
-  const handleSendEmail = async (token: RegistrationToken) => {
-    if (!token.email) {
-      setError('No email address associated with this token');
-      return;
-    }
-
-    const registrationUrl = `${window.location.origin}/college/register?token=${token.token}`;
-    const subject = encodeURIComponent('Your Academic Compass Registration Link');
-    const body = encodeURIComponent(
-      `Dear ${token.institution_name || 'Institution'},\n\n` +
-      `Your registration link for Academic Compass ERP is ready!\n\n` +
-      `Registration URL: ${registrationUrl}\n\n` +
-      `This link will expire on: ${new Date(token.expires_at).toLocaleString()}\n\n` +
-      `Please complete your registration before the link expires.\n\n` +
-      `Best regards,\nAcademic Compass Team`
-    );
-    
-    window.open(`mailto:${token.email}?subject=${subject}&body=${body}`, '_blank');
   };
 
   const getTokenStatus = (token: RegistrationToken): 'active' | 'used' | 'expired' => {
-    if (token.is_used) return 'used';
-    if (new Date(token.expires_at) < new Date()) return 'expired';
+    if (token.isUsed) return 'used';
+    if (new Date(token.expiresAt) < new Date()) return 'expired';
     return 'active';
   };
 
-  const getStatusBadge = (status: 'active' | 'used' | 'expired') => {
-    const config = {
-      active: { label: 'Active', color: 'bg-green-100 text-green-800', icon: CheckCircle },
-      used: { label: 'Used', color: 'bg-blue-100 text-blue-800', icon: Building2 },
-      expired: { label: 'Expired', color: 'bg-gray-100 text-gray-800', icon: Clock },
-    };
-    const { label, color, icon: Icon } = config[status];
-    return (
-      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${color}`}>
-        <Icon className="w-3 h-3" />
-        {label}
-      </span>
-    );
-  };
-
-  // Filter tokens
-  const filteredTokens = tokens.filter(token => {
-    const status = getTokenStatus(token);
-    
-    // Status filter
-    if (filterStatus !== 'all' && status !== filterStatus) return false;
-    
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      return (
-        token.institution_name?.toLowerCase().includes(query) ||
-        token.email?.toLowerCase().includes(query) ||
-        token.token.toLowerCase().includes(query)
-      );
+  const getStatusColor = (status: 'active' | 'used' | 'expired') => {
+    switch (status) {
+      case 'active': return 'bg-green-100 text-green-700';
+      case 'used': return 'bg-blue-100 text-blue-700';
+      case 'expired': return 'bg-red-100 text-red-700';
     }
-    
-    return true;
-  });
-
-  // Stats
-  const stats = {
-    total: tokens.length,
-    active: tokens.filter(t => getTokenStatus(t) === 'active').length,
-    used: tokens.filter(t => getTokenStatus(t) === 'used').length,
-    expired: tokens.filter(t => getTokenStatus(t) === 'expired').length,
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
+    return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+      month: 'short',
+      day: 'numeric'
     });
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <RefreshCw className="w-8 h-8 animate-spin text-indigo-600" />
-          <p className="text-gray-600">Loading tokens...</p>
-        </div>
-      </div>
-    );
-  }
+  const filteredTokens = tokens.filter(t => {
+    const matchesSearch = t.institutionName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      t.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      t.token.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const status = getTokenStatus(t);
+    const matchesStatus = statusFilter === 'all' || status === statusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link href="/super-admin/dashboard" className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                <ArrowLeft className="w-5 h-5" />
-              </Link>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">Registration Tokens</h1>
-                <p className="text-sm text-gray-500">Generate and manage college registration tokens</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={fetchData}
-                className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Refresh
-              </button>
-              <button
-                onClick={() => setShowGenerateForm(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                Generate Token
-              </button>
-            </div>
+    <SuperAdminLayout activeTab="registrationTokens">
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">Registration Tokens</h1>
+            <p className="text-gray-600">Generate and manage registration tokens for new colleges</p>
           </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        {/* Alerts */}
-        {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-            {error}
-          </div>
-        )}
-        {successMessage && (
-          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700 whitespace-pre-line">
-            {successMessage}
-          </div>
-        )}
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white rounded-xl p-4 border shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-indigo-100 rounded-lg">
-                <Key className="w-5 h-5 text-indigo-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-                <p className="text-sm text-gray-500">Total Tokens</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl p-4 border shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <CheckCircle className="w-5 h-5 text-green-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.active}</p>
-                <p className="text-sm text-gray-500">Active</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl p-4 border shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Building2 className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.used}</p>
-                <p className="text-sm text-gray-500">Used</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl p-4 border shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-gray-100 rounded-lg">
-                <Clock className="w-5 h-5 text-gray-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{stats.expired}</p>
-                <p className="text-sm text-gray-500">Expired</p>
-              </div>
-            </div>
-          </div>
+          <button
+            onClick={() => setShowGenerateModal(true)}
+            className="flex items-center gap-2 px-5 py-3 bg-[#4D869C] text-white rounded-xl font-semibold hover:shadow-lg transition-all"
+          >
+            <Plus size={16} />
+            Generate Token
+          </button>
         </div>
 
         {/* Filters */}
-        <div className="bg-white rounded-xl border shadow-sm p-4 mb-6">
+        <div className="bg-white rounded-2xl shadow-lg p-6">
           <div className="flex flex-col md:flex-row gap-4">
-            {/* Search */}
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <div className="relative flex-1">
+              <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
                 placeholder="Search by institution, email, or token..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none"
               />
             </div>
-            
-            {/* Status Filter */}
-            <div className="flex gap-2">
-              {(['all', 'active', 'used', 'expired'] as const).map(status => (
-                <button
-                  key={status}
-                  onClick={() => setFilterStatus(status)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    filterStatus === status
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
-                </button>
-              ))}
-            </div>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none"
+            >
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="used">Used</option>
+              <option value="expired">Expired</option>
+            </select>
+            <button
+              onClick={fetchTokens}
+              className="px-5 py-3 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors flex items-center gap-2"
+            >
+              <RefreshCw size={18} />
+              Refresh
+            </button>
           </div>
         </div>
 
         {/* Tokens Table */}
-        <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Institution</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Token</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Expires</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Created</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {filteredTokens.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
-                      {tokens.length === 0 ? 'No tokens generated yet' : 'No tokens match your filters'}
-                    </td>
-                  </tr>
-                ) : (
-                  filteredTokens.map((token) => {
-                    const status = getTokenStatus(token);
-                    return (
-                      <tr key={token.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3">
-                          <div>
-                            <p className="font-medium text-gray-900">{token.institution_name || 'N/A'}</p>
-                            <p className="text-sm text-gray-500">{token.email || 'No email'}</p>
+        <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Token</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Institution</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Email</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Status</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Expires</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {loading ? (
+                <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-500">Loading...</td></tr>
+              ) : filteredTokens.length === 0 ? (
+                <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-500">No tokens found</td></tr>
+              ) : (
+                filteredTokens.map((token) => {
+                  const status = getTokenStatus(token);
+                  return (
+                    <tr key={token.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-10 h-10 rounded-xl bg-[#ED8936]/10 flex items-center justify-center">
+                            <Key size={20} className="text-[#ED8936]" />
                           </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <code className="text-xs bg-gray-100 px-2 py-1 rounded font-mono">
-                            {token.token.substring(0, 12)}...
-                          </code>
-                        </td>
-                        <td className="px-4 py-3">
-                          {getStatusBadge(status)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <p className={`text-sm ${status === 'expired' ? 'text-red-600' : 'text-gray-600'}`}>
-                            {formatDate(token.expires_at)}
-                          </p>
-                        </td>
-                        <td className="px-4 py-3">
-                          <p className="text-sm text-gray-600">{formatDate(token.created_at)}</p>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded max-w-[150px] truncate">
+                            {token.token}
+                          </span>
+                          <button
+                            onClick={() => handleCopyToken(token.token)}
+                            className="p-1.5 text-gray-400 hover:text-[#4D869C] hover:bg-[#4D869C]/10 rounded transition-colors"
+                          >
+                            {copiedToken === token.token ? <CheckCircle2 size={14} className="text-green-500" /> : <Copy size={14} />}
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 font-medium text-gray-900">{token.institutionName}</td>
+                      <td className="px-6 py-4 text-gray-600">{token.email}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold capitalize ${getStatusColor(status)}`}>
+                          {status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-gray-600 text-sm">
+                        <div className="flex items-center gap-1">
+                          <Clock size={14} className="text-gray-400" />
+                          {formatDate(token.expiresAt)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          {status === 'expired' || status === 'used' ? (
                             <button
-                              onClick={() => handleCopyToken(token)}
-                              className={`p-2 rounded-lg transition-colors ${
-                                copiedToken === token.id
-                                  ? 'bg-green-100 text-green-600'
-                                  : 'hover:bg-gray-100 text-gray-600'
-                              }`}
-                              title="Copy Registration URL"
-                              disabled={status !== 'active'}
+                              onClick={() => handleReactivateToken(token.id)}
+                              className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                              title="Reactivate"
                             >
-                              {copiedToken === token.id ? (
-                                <CheckCircle className="w-4 h-4" />
-                              ) : (
-                                <Copy className="w-4 h-4" />
-                              )}
+                              <RefreshCw size={16} />
                             </button>
-                            {status === 'active' && token.email && (
-                              <button
-                                onClick={() => handleSendEmail(token)}
-                                className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                                title="Send via Email"
-                              >
-                                <Send className="w-4 h-4 text-blue-600" />
-                              </button>
-                            )}
-                            {status === 'used' && (
-                              <button
-                                onClick={() => handleReactivateToken(token.id)}
-                                className="p-2 hover:bg-green-100 rounded-lg transition-colors"
-                                title="Reactivate Token"
-                              >
-                                <RefreshCw className="w-4 h-4 text-green-600" />
-                              </button>
-                            )}
-                            {status !== 'used' && (
-                              <button
-                                onClick={() => handleDeleteToken(token.id)}
-                                className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                                title="Delete Token"
-                              >
-                                <Trash2 className="w-4 h-4 text-red-600" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                          ) : (
+                            <a
+                              href={`mailto:${token.email}?subject=Your Registration Token&body=Here is your registration token: ${token.token}`}
+                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Send via Email"
+                            >
+                              <Send size={16} />
+                            </a>
+                          )}
+                          {!token.isUsed && (
+                            <button
+                              onClick={() => handleDeleteToken(token.id)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
-      </main>
 
-      {/* Generate Token Modal */}
-      {showGenerateForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg">
-            <div className="p-6 border-b">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-gray-900">Generate Registration Token</h2>
-                <button
-                  onClick={() => setShowGenerateForm(false)}
-                  className="p-2 hover:bg-gray-100 rounded-lg"
-                >
-                  <XCircle className="w-5 h-5" />
+        {/* Generate Token Modal */}
+        {showGenerateModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[2000] p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md"
+            >
+              <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                  <Key size={20} className="text-[#ED8936]" />
+                  Generate Registration Token
+                </h3>
+                <button onClick={() => setShowGenerateModal(false)} className="text-gray-400 hover:text-gray-600">
+                  <X size={20} />
                 </button>
               </div>
-            </div>
 
-            <form onSubmit={handleGenerateToken} className="p-6 space-y-4">
-              {/* Link to Demo Request */}
-              {approvedRequests.length > 0 && (
+              <div className="p-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Link to Demo Request (Optional)
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Institution Name *</label>
+                  <input
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4D869C] outline-none"
+                    placeholder="Enter institution name"
+                    value={newToken.institution_name}
+                    onChange={(e) => setNewToken({ ...newToken, institution_name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                  <input
+                    type="email"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4D869C] outline-none"
+                    placeholder="admin@institution.edu"
+                    value={newToken.email}
+                    onChange={(e) => setNewToken({ ...newToken, email: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Expires In (Days)</label>
                   <select
-                    value={generateForm.demoRequestId}
-                    onChange={(e) => {
-                      const request = approvedRequests.find(r => r.id === e.target.value);
-                      setGenerateForm({
-                        ...generateForm,
-                        demoRequestId: e.target.value,
-                        institutionName: request?.institution_name || generateForm.institutionName,
-                        email: request?.email || generateForm.email
-                      });
-                    }}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4D869C] outline-none"
+                    value={newToken.expires_in_days}
+                    onChange={(e) => setNewToken({ ...newToken, expires_in_days: parseInt(e.target.value) })}
                   >
-                    <option value="">-- Select a demo request --</option>
-                    {approvedRequests.map(request => (
-                      <option key={request.id} value={request.id}>
-                        {request.institution_name} - {request.contact_name}
-                      </option>
-                    ))}
+                    <option value={7}>7 Days</option>
+                    <option value={14}>14 Days</option>
+                    <option value={30}>30 Days</option>
+                    <option value={60}>60 Days</option>
+                    <option value={90}>90 Days</option>
                   </select>
                 </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Institution Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={generateForm.institutionName}
-                  onChange={(e) => setGenerateForm({...generateForm, institutionName: e.target.value})}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  placeholder="e.g., ABC College of Engineering"
-                  required
-                />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Contact Email <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="email"
-                  value={generateForm.email}
-                  onChange={(e) => setGenerateForm({...generateForm, email: e.target.value})}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
-                  placeholder="admin@college.edu"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Token Validity (Days)
-                </label>
-                <select
-                  value={generateForm.expiresInDays}
-                  onChange={(e) => setGenerateForm({...generateForm, expiresInDays: parseInt(e.target.value)})}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value={3}>3 days</option>
-                  <option value={7}>7 days</option>
-                  <option value={14}>14 days</option>
-                  <option value={30}>30 days</option>
-                </select>
-              </div>
-
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                <p className="text-sm text-amber-800">
-                  <strong>Note:</strong> After generating, you'll get a unique registration URL that can be sent to the institution.
-                  The token can only be used once.
-                </p>
-              </div>
-
-              <div className="flex gap-3 pt-4">
+              <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/50">
                 <button
-                  type="submit"
-                  className="flex-1 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
-                >
-                  Generate Token
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowGenerateForm(false)}
-                  className="px-6 py-3 border rounded-lg hover:bg-gray-50 transition-colors"
+                  onClick={() => setShowGenerateModal(false)}
+                  className="px-6 py-2.5 text-gray-600 font-medium hover:bg-gray-100 rounded-xl transition-colors"
                 >
                   Cancel
                 </button>
+                <button
+                  onClick={handleGenerateToken}
+                  className="px-8 py-2.5 bg-[#ED8936] text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all"
+                >
+                  Generate Token
+                </button>
               </div>
-            </form>
+            </motion.div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </SuperAdminLayout>
   );
-}
+};
+
+export default RegistrationTokensPage;

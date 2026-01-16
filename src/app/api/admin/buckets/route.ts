@@ -60,7 +60,10 @@ export async function GET(request: NextRequest) {
           departments:departments (id, name, code),
           courses:courses (id, title, code)
         ),
-        subjects:subjects!subjects_course_group_id_fkey (id)
+        bucket_subjects (
+          subject_id,
+          subjects (id, code, name)
+        )
       `)
       .order('created_at', { ascending: false });
 
@@ -192,12 +195,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create bucket' }, { status: 500 });
     }
 
-    // Link subjects to this bucket if provided
+    // Link subjects to this bucket via bucket_subjects junction table
     if (subject_ids && subject_ids.length > 0) {
+      const bucketSubjectsData = subject_ids.map((subject_id: string) => ({
+        bucket_id: bucket.id,
+        subject_id: subject_id,
+        is_active: true
+      }));
+
       const { error: subjectError } = await supabaseAdmin
-        .from('subjects')
-        .update({ course_group_id: bucket.id })
-        .in('id', subject_ids);
+        .from('bucket_subjects')
+        .insert(bucketSubjectsData);
 
       if (subjectError) {
         console.error('Error linking subjects to bucket:', subjectError);

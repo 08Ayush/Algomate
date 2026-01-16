@@ -1,62 +1,19 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 
-// GET - Get college admin by ID
-export async function GET(
-  request: NextRequest,
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
+
+export async function PATCH(
+  request: Request,
   { params }: { params: { id: string } }
 ) {
   try {
-    const id = params.id;
-
-    const { data: admin, error } = await supabaseAdmin
-      .from('users')
-      .select(`
-        id,
-        first_name,
-        last_name,
-        email,
-        college_uid,
-        phone,
-        is_active,
-        created_at,
-        college:colleges!inner(
-          id,
-          name,
-          code
-        )
-      `)
-      .eq('id', id)
-      .eq('role', 'college_admin')
-      .single();
-
-    if (error || !admin) {
-      return NextResponse.json(
-        { error: 'College admin not found' },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({ admin });
-
-  } catch (error: any) {
-    console.error('College admin fetch API error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Internal server error' },
-      { status: 500 }
-    );
-  }
-}
-
-// PUT - Update college admin
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const id = params.id;
+    const { id } = params;
     const body = await request.json();
+
     const {
       first_name,
       last_name,
@@ -68,82 +25,7 @@ export async function PUT(
       is_active
     } = body;
 
-    // Validate required fields
-    if (!first_name || !last_name || !email || !college_id || !college_uid) {
-      return NextResponse.json(
-        { error: 'All required fields must be provided' },
-        { status: 400 }
-      );
-    }
-
-    // Check if admin exists
-    const { data: existingAdmin } = await supabaseAdmin
-      .from('users')
-      .select('id, email, college_id, college_uid')
-      .eq('id', id)
-      .eq('role', 'college_admin')
-      .single();
-
-    if (!existingAdmin) {
-      return NextResponse.json(
-        { error: 'College admin not found' },
-        { status: 404 }
-      );
-    }
-
-    // Check if new college exists (if being changed)
-    if (college_id !== existingAdmin.college_id) {
-      const { data: college } = await supabaseAdmin
-        .from('colleges')
-        .select('id')
-        .eq('id', college_id)
-        .single();
-
-      if (!college) {
-        return NextResponse.json(
-          { error: 'Target college not found' },
-          { status: 404 }
-        );
-      }
-    }
-
-    // Check for duplicate email if it's being changed
-    if (email !== existingAdmin.email) {
-      const { data: duplicate } = await supabaseAdmin
-        .from('users')
-        .select('id')
-        .eq('email', email)
-        .neq('id', id)
-        .single();
-
-      if (duplicate) {
-        return NextResponse.json(
-          { error: 'Email already exists' },
-          { status: 400 }
-        );
-      }
-    }
-
-    // Check for duplicate college_uid in target college if being changed
-    if (college_uid !== existingAdmin.college_uid || college_id !== existingAdmin.college_id) {
-      const { data: uidDuplicate } = await supabaseAdmin
-        .from('users')
-        .select('id')
-        .eq('college_id', college_id)
-        .eq('college_uid', college_uid)
-        .neq('id', id)
-        .single();
-
-      if (uidDuplicate) {
-        return NextResponse.json(
-          { error: 'College UID already exists for this college' },
-          { status: 400 }
-        );
-      }
-    }
-
-    // Prepare update data
-    const updateData: any = {
+    const updates: any = {
       first_name,
       last_name,
       email,
@@ -154,119 +36,51 @@ export async function PUT(
       updated_at: new Date().toISOString()
     };
 
-    // Hash new password if provided
+    // Only update password if a new one is provided
     if (password && password.trim() !== '') {
-      console.log(`Updating password for admin ${id}`);
-      updateData.password_hash = await bcrypt.hash(password, 10);
+      const salt = await bcrypt.genSalt(10);
+      updates.password_hash = await bcrypt.hash(password, salt);
     }
 
-    // Update admin
     const { data: updatedAdmin, error } = await supabaseAdmin
       .from('users')
-      .update(updateData)
+      .update(updates)
       .eq('id', id)
-      .eq('role', 'college_admin')
-      .select(`
-        id,
-        first_name,
-        last_name,
-        email,
-        college_uid,
-        college_id,
-        phone,
-        is_active,
-        college:colleges!users_college_id_fkey(
-          id,
-          name,
-          code
-        )
-      `)
+      .select()
       .single();
 
     if (error) {
-      console.error('College admin update error:', error);
-      return NextResponse.json(
-        { error: 'Failed to update college admin' },
-        { status: 500 }
-      );
+      console.error('Error updating admin:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    console.log(`Successfully updated college admin ${id}. Password changed: ${!!password}`);
-
-    return NextResponse.json({
-      message: 'College admin updated successfully',
-      admin: updatedAdmin
-    });
-
-  } catch (error: any) {
-    console.error('College admin update API error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ admin: updatedAdmin });
+  } catch (error) {
+    console.error('SERVER ERROR:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
 
-// DELETE - Delete college admin
 export async function DELETE(
-  request: NextRequest,
+  request: Request,
   { params }: { params: { id: string } }
 ) {
   try {
-    const id = params.id;
+    const { id } = params;
 
-    // Check if admin exists
-    const { data: existingAdmin } = await supabaseAdmin
-      .from('users')
-      .select('id, first_name, last_name')
-      .eq('id', id)
-      .eq('role', 'college_admin')
-      .single();
-
-    if (!existingAdmin) {
-      return NextResponse.json(
-        { error: 'College admin not found' },
-        { status: 404 }
-      );
-    }
-
-    // Check if this is the only admin for the college
-    const { data: adminCount } = await supabaseAdmin
-      .from('users')
-      .select('id')
-      .eq('role', 'college_admin')
-      .eq('is_active', true);
-
-    if (adminCount && adminCount.length <= 1) {
-      return NextResponse.json(
-        { error: 'Cannot delete the last active college admin' },
-        { status: 400 }
-      );
-    }
-
-    // Delete admin
     const { error } = await supabaseAdmin
       .from('users')
       .delete()
       .eq('id', id);
 
     if (error) {
-      console.error('College admin deletion error:', error);
-      return NextResponse.json(
-        { error: `Failed to delete college admin: ${error.message}` },
-        { status: 500 }
-      );
+      console.error('Error deleting admin:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({
-      message: 'College admin deleted successfully'
-    });
-
-  } catch (error: any) {
-    console.error('College admin deletion API error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ message: 'Admin deleted successfully' });
+  } catch (error) {
+    console.error('SERVER ERROR:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

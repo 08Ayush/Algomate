@@ -22,7 +22,7 @@ interface AdminWithCollege {
 export async function GET(request: NextRequest) {
   try {
     console.log('Fetching college admins from database...');
-    
+
     const { data: admins, error } = await supabaseAdmin
       .from('users')
       .select(`
@@ -144,6 +144,7 @@ export async function POST(request: NextRequest) {
     const { data: newAdmin, error } = await supabaseAdmin
       .from('users')
       .insert({
+        id: crypto.randomUUID(),
         first_name,
         last_name,
         email,

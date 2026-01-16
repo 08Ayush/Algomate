@@ -125,53 +125,27 @@ export async function POST(request: NextRequest) {
 
     const { name, code, description } = await request.json();
 
-    // Validate required fields
     if (!name || !code) {
-      return NextResponse.json(
-        { error: 'Name and code are required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Name and code required' }, { status: 400 });
     }
 
-    // Check if department code already exists in the same college
-    const { data: existingDept } = await supabaseAdmin
-      .from('departments')
-      .select('id')
-      .eq('code', code)
-      .eq('college_id', user.college_id)
-      .single();
-
-    if (existingDept) {
-      return NextResponse.json(
-        { error: 'Department code already exists in your college' },
-        { status: 400 }
-      );
-    }
-
-    // Create department for user's college
+    // Direct insert (unique constraint handles duplicates)
     const { data: newDept, error } = await supabaseAdmin
       .from('departments')
       .insert({
         name,
         code: code.toUpperCase(),
         description: description || null,
-        college_id: user.college_id  // Use authenticated user's college_id
+        college_id: user.college_id
       })
-      .select()
+      .select('id, name, code, description, college_id')
       .single();
 
     if (error) {
-      console.error('Department creation error:', error);
-      return NextResponse.json(
-        { error: 'Failed to create department' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    return NextResponse.json({
-      message: 'Department created successfully',
-      department: newDept
-    }, { status: 201 });
+    return NextResponse.json({ department: newDept }, { status: 201 });
 
   } catch (error: any) {
     console.error('Department creation API error:', error);

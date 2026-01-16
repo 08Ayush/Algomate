@@ -21,7 +21,9 @@ interface StudentChoice {
   subject_id: string;
   priority: number;
   created_at: string;
-  students?: {
+  is_allotted: boolean;
+  allotted_at: string | null;
+  users?: {
     id: string;
     first_name: string;
     last_name: string;
@@ -85,6 +87,7 @@ export default function StudentChoicesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSubject, setFilterSubject] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'students' | 'subjects'>('students');
+  const [filterAllotted, setFilterAllotted] = useState<'all' | 'allotted' | 'pending'>('all');
 
   const supabase = createClient();
 
@@ -137,7 +140,7 @@ export default function StudentChoicesPage() {
         .from('student_subject_choices')
         .select(`
           *,
-          students:students (
+          users:users!student_subject_choices_student_id_fkey (
             id,
             first_name,
             last_name,
@@ -154,6 +157,7 @@ export default function StudentChoicesPage() {
           )
         `)
         .eq('bucket_id', bucketId)
+        .order('is_allotted', { ascending: true })
         .order('created_at', { ascending: false });
 
       if (choicesError) {
@@ -198,21 +202,28 @@ export default function StudentChoicesPage() {
 
   // Group choices by student
   const choicesByStudent = choices.reduce((acc, choice) => {
-    if (!choice.students) return acc;
+    if (!choice.users) return acc;
     const studentId = choice.student_id;
     if (!acc[studentId]) {
       acc[studentId] = {
-        student: choice.students,
+        student: choice.users,
         choices: []
       };
     }
     acc[studentId].choices.push(choice);
     return acc;
-  }, {} as Record<string, { student: StudentChoice['students']; choices: StudentChoice[] }>);
+  }, {} as Record<string, { student: StudentChoice['users']; choices: StudentChoice[] }>);
 
   // Filter choices
-  const filteredStudents = Object.values(choicesByStudent).filter(({ student }) => {
+  const filteredStudents = Object.values(choicesByStudent).filter(({ student, choices: studentChoices }) => {
     if (!student) return false;
+    
+    // Filter by allotted status
+    const hasAllotted = studentChoices.some(c => c.is_allotted);
+    if (filterAllotted === 'allotted' && !hasAllotted) return false;
+    if (filterAllotted === 'pending' && hasAllotted) return false;
+    
+    // Filter by search query
     const matchesSearch = searchQuery === '' ||
       student.first_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       student.last_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -228,9 +239,9 @@ export default function StudentChoicesPage() {
   const exportToCSV = () => {
     const headers = ['Student ID', 'Student Name', 'Email', 'Subject Code', 'Subject Name', 'Priority', 'Selected On'];
     const rows = choices.map(c => [
-      c.students?.college_uid || '',
-      `${c.students?.first_name || ''} ${c.students?.last_name || ''}`,
-      c.students?.email || '',
+      c.users?.college_uid || '',
+      `${c.users?.first_name || ''} ${c.users?.last_name || ''}`,
+      c.users?.email || '',
       c.subjects?.code || '',
       c.subjects?.name || '',
       c.priority?.toString() || '',
@@ -396,6 +407,18 @@ export default function StudentChoicesPage() {
                   By Subject
                 </button>
               </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={filterAllotted}
+                  onChange={(e) => setFilterAllotted(e.target.value as 'all' | 'allotted' | 'pending')}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  aria-label="Filter students by allotment status"
+                >
+                  <option value="all">All Students</option>
+                  <option value="allotted">Allotted Only</option>
+                  <option value="pending">Pending Only</option>
+                </select>
+              </div>
               <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                 <input
@@ -422,44 +445,63 @@ export default function StudentChoicesPage() {
             </div>
           ) : viewMode === 'students' ? (
             <div className="space-y-4">
-              {filteredStudents.map(({ student, choices: studentChoices }) => (
-                <div key={student?.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h3 className="font-semibold text-gray-900">
-                        {student?.first_name} {student?.last_name}
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        {student?.college_uid} • {student?.email}
-                      </p>
-                    </div>
-                    <span className="text-xs text-gray-400">
-                      Semester {student?.current_semester}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {studentChoices
-                      .sort((a, b) => (a.priority || 99) - (b.priority || 99))
-                      .map((choice) => (
-                        <div
-                          key={choice.id}
-                          className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-2 ${
-                            choice.priority === 1
-                              ? 'bg-green-100 text-green-800 border border-green-200'
-                              : choice.priority === 2
-                              ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                              : 'bg-gray-100 text-gray-800 border border-gray-200'
-                          }`}
-                        >
-                          <span className="font-medium">{choice.subjects?.code}</span>
-                          <span className="text-xs opacity-75">
-                            Priority {choice.priority || '-'}
-                          </span>
+              {filteredStudents.map(({ student, choices: studentChoices }) => {
+                const hasAllotted = studentChoices.some(c => c.is_allotted);
+                return (
+                  <div key={student?.id} className={`bg-white rounded-lg shadow-sm border-2 p-4 ${
+                    hasAllotted ? 'border-green-300 bg-green-50' : 'border-gray-200'
+                  }`}>
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-gray-900">
+                            {student?.first_name} {student?.last_name}
+                          </h3>
+                          {hasAllotted && (
+                            <span className="px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded-full">
+                              Allotted
+                            </span>
+                          )}
                         </div>
-                      ))}
+                        <p className="text-sm text-gray-500">
+                          {student?.college_uid} • {student?.email}
+                        </p>
+                      </div>
+                      <span className="text-xs text-gray-400">
+                        Semester {student?.current_semester}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {studentChoices
+                        .sort((a, b) => (a.priority || 99) - (b.priority || 99))
+                        .map((choice) => (
+                          <div
+                            key={choice.id}
+                            className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-2 ${
+                              choice.is_allotted
+                                ? 'bg-green-200 text-green-900 border-2 border-green-400'
+                                : choice.priority === 1
+                                ? 'bg-green-100 text-green-800 border border-green-200'
+                                : choice.priority === 2
+                                ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                : 'bg-gray-100 text-gray-800 border border-gray-200'
+                            }`}
+                          >
+                            <span className="font-medium">{choice.subjects?.code}</span>
+                            <span className="text-xs opacity-75">
+                              Priority {choice.priority || '-'}
+                            </span>
+                            {choice.is_allotted && (
+                              <span className="text-xs font-semibold text-green-900">
+                                ✓ Allotted
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
