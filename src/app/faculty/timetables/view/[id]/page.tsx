@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
+import { motion } from 'framer-motion';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
@@ -14,7 +16,9 @@ import {
   MapPin,
   User,
   BookOpen,
-  AlertCircle
+  AlertCircle,
+  FileText,
+  RefreshCw
 } from 'lucide-react';
 
 interface ScheduledClass {
@@ -73,7 +77,6 @@ export default function ViewTimetablePage() {
       setLoading(true);
       setError(null);
 
-      // Get user for authentication
       const userStr = localStorage.getItem('user');
       if (!userStr) {
         throw new Error('Please log in to view timetables');
@@ -81,7 +84,6 @@ export default function ViewTimetablePage() {
       const user = JSON.parse(userStr);
       const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
 
-      // Fetch timetable details from API
       const response = await fetch(`/api/timetables/${timetableId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -94,7 +96,7 @@ export default function ViewTimetablePage() {
       }
 
       const result = await response.json();
-      
+
       if (!result.success) {
         throw new Error(result.error || 'Failed to fetch timetable');
       }
@@ -102,18 +104,16 @@ export default function ViewTimetablePage() {
       setTimetable(result.timetable);
       setClasses(result.scheduledClasses || []);
 
-      // Define all possible time slots (matching the schedule structure)
       const allTimeSlots = [
         '09:00-10:00',
         '10:00-11:00',
         '11:15-12:15',
         '12:15-13:15',
-        'LUNCH', // Lunch break
+        'LUNCH',
         '14:15-15:15',
         '15:15-16:15'
       ];
 
-      // Use all time slots instead of just extracting from scheduled classes
       setTimeSlots(allTimeSlots);
 
     } catch (err: any) {
@@ -126,57 +126,50 @@ export default function ViewTimetablePage() {
 
   const getClassForSlot = (day: string, timeSlot: string): ScheduledClass | undefined => {
     const [startTime, endTime] = timeSlot.split('-');
-    // Normalize time format: "09:00:00" or "09:00" -> "09:00"
     const normalizeTime = (time: string) => time.substring(0, 5);
-    
+
     return classes.find(
-      cls => cls.day === day && 
-             normalizeTime(cls.start_time) === normalizeTime(startTime) && 
-             normalizeTime(cls.end_time) === normalizeTime(endTime)
+      cls => cls.day === day &&
+        normalizeTime(cls.start_time) === normalizeTime(startTime) &&
+        normalizeTime(cls.end_time) === normalizeTime(endTime)
     );
   };
 
   const isLabContinuation = (classInfo: ScheduledClass): boolean => {
-    // First check the is_continuation flag (preferred)
     if (classInfo.is_continuation !== undefined) {
       return classInfo.is_continuation;
     }
-    // Fallback to notes check for backward compatibility
     return classInfo.notes?.includes('Continuation') || classInfo.notes?.includes('cont.') || false;
   };
 
   const isLabStart = (classInfo: ScheduledClass): boolean => {
-    // Check if it's a lab and NOT a continuation
     if (classInfo.is_lab !== undefined) {
       return classInfo.is_lab && !classInfo.is_continuation;
     }
-    // Fallback to class_type check
-    return (classInfo.class_type === 'LAB' || classInfo.class_type === 'PRACTICAL') && 
-           classInfo.session_duration === 120;
+    return (classInfo.class_type === 'LAB' || classInfo.class_type === 'PRACTICAL') &&
+      classInfo.session_duration === 120;
   };
 
   const getStatusBadge = (status: string) => {
-    const badges = {
-      draft: 'bg-gray-100 text-gray-700',
-      pending_approval: 'bg-yellow-100 text-yellow-700',
-      published: 'bg-green-100 text-green-700',
-      rejected: 'bg-red-100 text-red-700'
+    const badges: Record<string, { bg: string; text: string; label: string }> = {
+      draft: { bg: 'bg-gray-100', text: 'text-gray-700', label: 'Draft' },
+      pending_approval: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Pending Approval' },
+      published: { bg: 'bg-green-100', text: 'text-green-700', label: 'Published' },
+      rejected: { bg: 'bg-red-100', text: 'text-red-700', label: 'Rejected' }
     };
-    return badges[status as keyof typeof badges] || 'bg-gray-100 text-gray-700';
+    return badges[status] || badges.draft;
   };
 
   const exportToPDF = () => {
     if (!timetable) return;
 
-    const doc = new jsPDF('l', 'mm', 'a4'); // Landscape orientation
+    const doc = new jsPDF('l', 'mm', 'a4');
     const pageWidth = doc.internal.pageSize.getWidth();
 
-    // Add title
     doc.setFontSize(18);
     doc.setFont('helvetica', 'bold');
     doc.text(timetable.title, pageWidth / 2, 15, { align: 'center' });
 
-    // Add metadata
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     const metaY = 25;
@@ -185,33 +178,38 @@ export default function ViewTimetablePage() {
     doc.text(`Academic Year: ${timetable.academic_year}`, 140, metaY);
     doc.text(`Created: ${new Date(timetable.created_at).toLocaleDateString()}`, 210, metaY);
 
-    // Prepare table data
     const tableData: any[] = [];
-    
+
     DAYS.forEach(day => {
       const rowData: any[] = [day];
-      
+
       timeSlots.forEach(slot => {
-        const classInfo = getClassForSlot(day, slot);
-        if (classInfo) {
-          const cellContent = `${classInfo.subject_code || ''}\n${classInfo.subject_name || ''}\n${classInfo.faculty_name || ''}\n${classInfo.classroom_name || ''}`;
-          rowData.push(cellContent);
+        if (slot === 'LUNCH') {
+          rowData.push('LUNCH BREAK');
         } else {
-          rowData.push('-');
+          const classInfo = getClassForSlot(day, slot);
+          if (classInfo) {
+            const cellContent = `${classInfo.subject_code || ''}\n${classInfo.subject_name || ''}\n${classInfo.faculty_name || ''}\n${classInfo.classroom_name || ''}`;
+            rowData.push(cellContent);
+          } else {
+            rowData.push('-');
+          }
         }
       });
-      
+
       tableData.push(rowData);
     });
 
-    // Prepare headers
     const headers = ['Day / Time'];
     timeSlots.forEach(slot => {
-      const [start, end] = slot.split('-');
-      headers.push(`${start}\n${end}`);
+      if (slot === 'LUNCH') {
+        headers.push('1:15-2:15\nLunch');
+      } else {
+        const [start, end] = slot.split('-');
+        headers.push(`${start}\n${end}`);
+      }
     });
 
-    // Generate table
     autoTable(doc, {
       head: [headers],
       body: tableData,
@@ -225,32 +223,21 @@ export default function ViewTimetablePage() {
         halign: 'center'
       },
       headStyles: {
-        fillColor: [59, 130, 246], // Blue color
+        fillColor: [77, 134, 156],
         textColor: 255,
         fontStyle: 'bold',
         halign: 'center'
       },
       columnStyles: {
-        0: { 
-          fontStyle: 'bold', 
-          fillColor: [243, 244, 246], // Gray background for day column
+        0: {
+          fontStyle: 'bold',
+          fillColor: [243, 244, 246],
           halign: 'left',
           cellWidth: 25
-        }
-      },
-      didDrawCell: (data) => {
-        // Add some padding for better readability
-        if (data.section === 'body' && data.column.index > 0) {
-          const cellValue = data.cell.raw as string;
-          if (cellValue && cellValue !== '-') {
-            // Make subject name bold
-            data.cell.styles.fontStyle = 'normal';
-          }
         }
       }
     });
 
-    // Add footer
     const pageCount = doc.getNumberOfPages();
     doc.setFontSize(8);
     for (let i = 1; i <= pageCount; i++) {
@@ -269,17 +256,16 @@ export default function ViewTimetablePage() {
       );
     }
 
-    // Save the PDF
     const fileName = `${timetable.title.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
     doc.save(fileName);
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading timetable...</p>
+      <div className="min-h-screen bg-gradient-to-br from-[#CDE8E5] via-[#EEF7FF] to-[#7AB2B2] flex items-center justify-center">
+        <div className="text-center bg-white rounded-2xl p-10 shadow-lg">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-[#4D869C] border-t-transparent mx-auto"></div>
+          <p className="mt-6 text-gray-600 font-medium">Loading timetable...</p>
         </div>
       </div>
     );
@@ -287,14 +273,14 @@ export default function ViewTimetablePage() {
 
   if (error || !timetable) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Timetable</h2>
-          <p className="text-gray-600 mb-4">{error || 'Timetable not found'}</p>
+      <div className="min-h-screen bg-gradient-to-br from-[#CDE8E5] via-[#EEF7FF] to-[#7AB2B2] flex items-center justify-center">
+        <div className="text-center bg-white rounded-2xl p-10 shadow-lg max-w-md">
+          <AlertCircle size={48} className="text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Error Loading Timetable</h2>
+          <p className="text-gray-600 mb-6">{error || 'Timetable not found'}</p>
           <button
             onClick={() => router.push('/faculty/timetables')}
-            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+            className="px-6 py-3 bg-[#4D869C] text-white rounded-xl font-medium hover:shadow-lg transition-all"
           >
             Back to Timetables
           </button>
@@ -303,120 +289,170 @@ export default function ViewTimetablePage() {
     );
   }
 
+  const statusInfo = getStatusBadge(timetable.status);
+
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
+    <FacultyCreatorLayout activeTab="timetables">
+      <div className="space-y-6">
         {/* Header */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <div className="flex items-start justify-between mb-4">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-gradient-to-r from-[#4D869C] via-[#5a9aae] to-[#7AB2B2] rounded-2xl p-6 shadow-lg"
+        >
+          <div className="flex items-start justify-between">
             <div className="flex items-start gap-4">
               <button
                 onClick={() => router.push('/faculty/timetables')}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors mt-1"
+                className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white"
               >
-                <ArrowLeft className="w-5 h-5" />
+                <ArrowLeft size={20} />
               </button>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">{timetable.title}</h1>
+                <h1 className="text-3xl font-bold text-white mb-1">{timetable.title}</h1>
                 {timetable.description && (
-                  <p className="text-gray-600 mt-1">{timetable.description}</p>
+                  <p className="text-white/70">{timetable.description}</p>
                 )}
               </div>
             </div>
-            <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusBadge(timetable.status)}`}>
-              {timetable.status.replace('_', ' ').toUpperCase()}
+            <span className={`px-4 py-2 rounded-full text-sm font-bold ${statusInfo.bg} ${statusInfo.text}`}>
+              {statusInfo.label}
             </span>
           </div>
 
-          {/* Metadata Grid */}
+          {/* Metadata */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-            <div className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-gray-400" />
-              <div>
-                <p className="text-xs text-gray-500">Batch</p>
-                <p className="text-sm font-medium">{timetable.batch_name}</p>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3">
+              <div className="flex items-center gap-2 text-white/70 mb-1">
+                <Users size={16} /> Batch
               </div>
+              <p className="text-white font-semibold">{timetable.batch_name || 'N/A'}</p>
             </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-gray-400" />
-              <div>
-                <p className="text-xs text-gray-500">Academic Year</p>
-                <p className="text-sm font-medium">{timetable.academic_year}</p>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3">
+              <div className="flex items-center gap-2 text-white/70 mb-1">
+                <Calendar size={16} /> Academic Year
               </div>
+              <p className="text-white font-semibold">{timetable.academic_year}</p>
             </div>
-            <div className="flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-gray-400" />
-              <div>
-                <p className="text-xs text-gray-500">Semester</p>
-                <p className="text-sm font-medium">Semester {timetable.semester}</p>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3">
+              <div className="flex items-center gap-2 text-white/70 mb-1">
+                <BookOpen size={16} /> Semester
               </div>
+              <p className="text-white font-semibold">Semester {timetable.semester}</p>
             </div>
-            <div className="flex items-center gap-2">
-              <User className="w-5 h-5 text-gray-400" />
-              <div>
-                <p className="text-xs text-gray-500">Created By</p>
-                <p className="text-sm font-medium">{timetable.creator_name}</p>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3">
+              <div className="flex items-center gap-2 text-white/70 mb-1">
+                <User size={16} /> Created By
               </div>
+              <p className="text-white font-semibold">{timetable.creator_name || 'Unknown'}</p>
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex gap-3 mt-6 pt-6 border-t">
+          {/* Actions */}
+          <div className="flex gap-3 mt-6">
             {timetable.status === 'draft' && (
               <button
                 onClick={() => router.push('/faculty/ai-timetable-creator')}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                className="flex items-center gap-2 px-4 py-2.5 bg-white text-[#4D869C] rounded-xl font-medium hover:shadow-lg transition-all"
               >
-                <Edit className="w-4 h-4" />
-                Edit Timetable
+                <Edit size={16} /> Edit Timetable
               </button>
             )}
             <button
               onClick={exportToPDF}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              className="flex items-center gap-2 px-4 py-2.5 bg-white/20 text-white rounded-xl font-medium hover:bg-white/30 transition-all"
             >
-              <Download className="w-4 h-4" />
-              Export PDF
+              <Download size={16} /> Export PDF
+            </button>
+            <button
+              onClick={fetchTimetableDetails}
+              className="flex items-center gap-2 px-4 py-2.5 bg-white/20 text-white rounded-xl font-medium hover:bg-white/30 transition-all"
+            >
+              <RefreshCw size={16} /> Refresh
             </button>
           </div>
-        </div>
+        </motion.div>
+
+        {/* Statistics */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="grid grid-cols-3 gap-4"
+        >
+          <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-blue-100">
+              <Clock size={24} className="text-blue-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-gray-900">{classes.length}</p>
+              <p className="text-sm text-gray-500">Total Classes</p>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-green-100">
+              <BookOpen size={24} className="text-green-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-gray-900">
+                {Array.from(new Set(classes.map(c => c.subject_id))).length}
+              </p>
+              <p className="text-sm text-gray-500">Unique Subjects</p>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-purple-100">
+              <Users size={24} className="text-purple-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-gray-900">
+                {Array.from(new Set(classes.map(c => c.faculty_id))).length}
+              </p>
+              <p className="text-sm text-gray-500">Faculty Members</p>
+            </div>
+          </div>
+        </motion.div>
 
         {/* Timetable Grid */}
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="bg-white rounded-2xl shadow-lg overflow-hidden"
+        >
           <div className="overflow-x-auto">
             {timeSlots.length === 0 ? (
-              <div className="text-center py-12">
-                <Clock className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">No classes scheduled yet</p>
+              <div className="text-center py-16">
+                <Clock size={48} className="text-gray-300 mx-auto mb-4" />
+                <p className="text-gray-500">No classes scheduled yet</p>
               </div>
             ) : (
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="bg-gray-50">
-                    <th className="border border-gray-200 p-3 text-left font-semibold text-gray-700 sticky left-0 bg-gray-50 z-10">
+                  <tr className="bg-[#4D869C]">
+                    <th className="border border-[#4D869C]/30 p-3 text-left font-semibold text-white sticky left-0 bg-[#4D869C] z-10">
                       Day / Time
                     </th>
                     {timeSlots.map((slot) => {
-                      // Handle lunch break specially
                       if (slot === 'LUNCH') {
                         return (
-                          <th key={slot} className="border border-gray-200 p-3 text-center font-semibold text-yellow-700 bg-yellow-50 min-w-[200px]">
+                          <th key={slot} className="border border-[#4D869C]/30 p-3 text-center font-semibold text-amber-100 bg-amber-600 min-w-[160px]">
                             <div className="flex flex-col items-center">
-                              <span className="text-2xl mb-1">🍽️</span>
+                              <span className="text-lg mb-1">🍽️</span>
                               <span className="text-sm">1:15-2:15</span>
-                              <span className="text-xs">Lunch Break</span>
+                              <span className="text-xs">Lunch</span>
                             </div>
                           </th>
                         );
                       }
-                      
+
                       const [start, end] = slot.split('-');
                       return (
-                        <th key={slot} className="border border-gray-200 p-3 text-center font-semibold text-gray-700 min-w-[200px]">
+                        <th key={slot} className="border border-[#4D869C]/30 p-3 text-center font-semibold text-white min-w-[160px]">
                           <div className="flex flex-col items-center">
-                            <Clock className="w-4 h-4 mb-1 text-gray-400" />
+                            <Clock size={14} className="mb-1 text-white/70" />
                             <span className="text-sm">{start}</span>
-                            <span className="text-xs text-gray-500">to {end}</span>
+                            <span className="text-xs text-white/70">to {end}</span>
                           </div>
                         </th>
                       );
@@ -424,37 +460,35 @@ export default function ViewTimetablePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {DAYS.map((day) => (
-                    <tr key={day} className="hover:bg-gray-50">
-                      <td className="border border-gray-200 p-3 font-medium text-gray-700 sticky left-0 bg-white z-10">
+                  {DAYS.map((day, dayIndex) => (
+                    <tr key={day} className={dayIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                      <td className="border border-gray-200 p-3 font-bold text-gray-800 sticky left-0 bg-inherit z-10">
                         {day}
                       </td>
                       {timeSlots.map((slot) => {
-                        // Handle lunch break - show lunch for all days
                         if (slot === 'LUNCH') {
                           return (
-                            <td key={`${day}-${slot}`} className="border border-gray-200 p-4 bg-yellow-50">
-                              <div className="text-center text-yellow-700 font-medium text-sm">
+                            <td key={`${day}-${slot}`} className="border border-gray-200 p-4 bg-amber-50">
+                              <div className="text-center text-amber-700 font-medium text-sm">
                                 🍽️ Lunch
                               </div>
                             </td>
                           );
                         }
-                        
+
                         const classInfo = getClassForSlot(day, slot);
                         const isContinuation = classInfo && isLabContinuation(classInfo);
                         const isLabStartSlot = classInfo && isLabStart(classInfo);
-                        
+
                         return (
                           <td key={`${day}-${slot}`} className="border border-gray-200 p-2">
                             {classInfo ? (
-                              <div className={`${
-                                isContinuation 
-                                  ? 'bg-purple-50 border-l-4 border-l-purple-500 border-t border-r border-b border-purple-200' 
+                              <div className={`${isContinuation
+                                  ? 'bg-purple-50 border-l-4 border-l-purple-500 border-t border-r border-b border-purple-200'
                                   : isLabStartSlot
-                                  ? 'bg-purple-50 border-l border-t border-r border-b-0 border-purple-200'
-                                  : 'bg-blue-50 border border-blue-200'
-                              } rounded-lg p-3 hover:bg-opacity-80 transition-colors relative`}>
+                                    ? 'bg-purple-50 border border-purple-200'
+                                    : 'bg-[#4D869C]/10 border border-[#4D869C]/30'
+                                } rounded-xl p-3 relative`}>
                                 {isLabStartSlot && (
                                   <div className="absolute top-1 right-1 bg-purple-600 text-white text-xs px-2 py-0.5 rounded-full">
                                     2hr
@@ -465,29 +499,27 @@ export default function ViewTimetablePage() {
                                     ↓
                                   </div>
                                 )}
-                                <div className={`font-semibold text-sm ${
-                                  isContinuation ? 'text-purple-900' : isLabStartSlot ? 'text-purple-900' : 'text-blue-900'
-                                } mb-1`}>
+                                <div className={`font-bold text-sm ${isContinuation || isLabStartSlot ? 'text-purple-900' : 'text-[#4D869C]'
+                                  } mb-1`}>
                                   {classInfo.subject_name}
                                 </div>
                                 {classInfo.subject_code && (
-                                  <div className={`text-xs ${
-                                    isContinuation ? 'text-purple-700' : isLabStartSlot ? 'text-purple-700' : 'text-blue-700'
-                                  } mb-2`}>
+                                  <div className={`text-xs ${isContinuation || isLabStartSlot ? 'text-purple-700' : 'text-[#4D869C]/80'
+                                    } mb-2`}>
                                     {classInfo.subject_code}
                                   </div>
                                 )}
                                 <div className="flex items-center gap-1 text-xs text-gray-600 mb-1">
-                                  <User className="w-3 h-3" />
-                                  <span>{classInfo.faculty_name}</span>
+                                  <User size={12} />
+                                  <span className="truncate">{classInfo.faculty_name}</span>
                                 </div>
                                 <div className="flex items-center gap-1 text-xs text-gray-600">
-                                  <MapPin className="w-3 h-3" />
+                                  <MapPin size={12} />
                                   <span>{classInfo.classroom_name}</span>
                                 </div>
                               </div>
                             ) : (
-                              <div className="text-center text-xs text-gray-400 py-4">
+                              <div className="text-center text-xs text-gray-400 py-6">
                                 Free
                               </div>
                             )}
@@ -500,51 +532,42 @@ export default function ViewTimetablePage() {
               </table>
             )}
           </div>
-        </div>
+        </motion.div>
 
         {/* Legend */}
-        <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Legend</h3>
-          <div className="flex flex-wrap gap-4">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-blue-50 border border-blue-200 rounded"></div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="bg-white rounded-2xl shadow-lg p-6"
+        >
+          <h3 className="text-sm font-bold text-gray-700 mb-4">Legend</h3>
+          <div className="flex flex-wrap gap-6">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-[#4D869C]/10 border border-[#4D869C]/30 rounded-lg"></div>
               <span className="text-sm text-gray-600">Theory Class (1 hour)</span>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-purple-50 border border-purple-200 rounded relative">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-purple-50 border border-purple-200 rounded-lg relative">
                 <span className="absolute -top-1 -right-1 bg-purple-600 text-white text-[8px] px-1 rounded-full">2hr</span>
               </div>
               <span className="text-sm text-gray-600">Lab Start (2-hour session)</span>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-purple-50 border-l-4 border-l-purple-500 border-t border-r border-b border-purple-200 rounded relative">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-purple-50 border-l-4 border-l-purple-500 border-t border-r border-b border-purple-200 rounded-lg relative">
                 <span className="absolute -top-1 -right-1 bg-purple-600 text-white text-[8px] px-1 rounded-full">↓</span>
               </div>
               <span className="text-sm text-gray-600">Lab Continuation</span>
             </div>
-          </div>
-        </div>
-
-        {/* Statistics */}
-        <div className="grid grid-cols-3 gap-4 mt-6">
-          <div className="bg-white rounded-lg shadow-sm p-4">
-            <div className="text-2xl font-bold text-blue-600">{classes.length}</div>
-            <div className="text-sm text-gray-600">Total Classes</div>
-          </div>
-          <div className="bg-white rounded-lg shadow-sm p-4">
-            <div className="text-2xl font-bold text-green-600">
-              {Array.from(new Set(classes.map(c => c.subject_id))).length}
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-center">
+                <span className="text-sm">🍽️</span>
+              </div>
+              <span className="text-sm text-gray-600">Lunch Break</span>
             </div>
-            <div className="text-sm text-gray-600">Unique Subjects</div>
           </div>
-          <div className="bg-white rounded-lg shadow-sm p-4">
-            <div className="text-2xl font-bold text-purple-600">
-              {Array.from(new Set(classes.map(c => c.faculty_id))).length}
-            </div>
-            <div className="text-sm text-gray-600">Faculty Members</div>
-          </div>
-        </div>
+        </motion.div>
       </div>
-    </div>
+    </FacultyCreatorLayout>
   );
 }

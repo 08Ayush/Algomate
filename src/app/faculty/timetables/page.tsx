@@ -1,628 +1,382 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
-import { Header } from '@/components/Header';
-import LeftSidebar from '@/components/LeftSidebar';
-import { Calendar, Search, Eye, Trash2, Send, AlertCircle, CheckCircle, Clock, XCircle, Download, Bell } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
-import { NotificationComposer } from '@/components/NotificationComposer';
+import {
+    CalendarDays, Search, RefreshCw, Eye, Trash2, CheckCircle, Clock, AlertCircle,
+    Send, Bell, XCircle
+} from 'lucide-react';
+import toast from 'react-hot-toast';
+import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
 
 interface Timetable {
-  id: string;
-  title: string;
-  status: string;
-  academic_year: string;
-  semester: number;
-  created_at: string;
-  fitness_score: number;
-  batch_name: string;
-  created_by_name: string;
-  class_count: number;
-  batch_id?: string;
+    id: string;
+    title: string;
+    status: string;
+    created_at: string;
+    updated_at?: string;
+    batch?: {
+        name: string;
+        semester: number;
+        section: string;
+    };
+    batch_name?: string; // Keep for backward compatibility if needed
+    semester?: number;
+    academic_year?: string;
+    fitness_score?: number;
+    created_by?: string;
 }
 
-export default function TimetablesPage() {
-  const router = useRouter();
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [timetables, setTimetables] = useState<Timetable[]>([]);
-  const [filteredTimetables, setFilteredTimetables] = useState<Timetable[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState<string>('all');
-  const [isDeleting, setIsDeleting] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState<string | null>(null);
-  const [showNotificationComposer, setShowNotificationComposer] = useState(false);
-  const [selectedTimetableForNotification, setSelectedTimetableForNotification] = useState<{id: string, batchId: string} | null>(null);
+const TimetablesPage: React.FC = () => {
+    const router = useRouter();
+    const [user, setUser] = useState<any>(null);
+    const [timetables, setTimetables] = useState<Timetable[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (!userData) {
-      router.push('/login');
-      return;
-    }
+    const isCreator = user?.faculty_type === 'creator';
+    const isPublisher = user?.faculty_type === 'publisher';
 
-    try {
-      const parsedUser = JSON.parse(userData);
-      
-      if (parsedUser.role !== 'faculty') {
-        router.push('/login');
-        return;
-      }
-      
-      const facultyType = parsedUser.faculty_type;
-      if (facultyType !== 'creator' && facultyType !== 'publisher') {
-        router.push('/student/dashboard');
-        return;
-      }
-      
-      setUser(parsedUser);
-      fetchTimetables(parsedUser.id, parsedUser.faculty_type, parsedUser.department_id);
-    } catch (error) {
-      console.error('Error parsing user data:', error);
-      localStorage.removeItem('user');
-      router.push('/login');
-    }
-  }, [router]);
+    useEffect(() => {
+        const userData = localStorage.getItem('user');
+        if (!userData) {
+            router.push('/login');
+            return;
+        }
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
+        fetchTimetables(parsedUser);
+    }, [router]);
 
-  const fetchTimetables = async (userId: string, facultyType?: string, departmentId?: string) => {
-    try {
-      console.log('🔍 Fetching timetables for user:', userId, 'Faculty Type:', facultyType, 'Department:', departmentId);
-      
-      // Use API route instead of direct Supabase query
-      const token = btoa(JSON.stringify({ id: userId, role: 'faculty', department_id: departmentId }));
-      
-      const response = await fetch('/api/timetables', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+    const getAuthHeaders = () => {
+        const userData = localStorage.getItem('user');
+        if (!userData) { router.push('/login'); return null; }
+        return { 'Authorization': `Bearer ${Buffer.from(userData).toString('base64')}`, 'Content-Type': 'application/json' };
+    };
 
-      if (!response.ok) {
-        console.error('❌ Failed to fetch timetables:', response.statusText);
-        setLoading(false);
-        return;
-      }
+    const fetchTimetables = async (userData?: any) => {
+        try {
+            setLoading(true);
+            const currentUser = userData || user;
+            if (!currentUser) return;
+            const headers = getAuthHeaders();
+            if (!headers) return;
 
-      const result = await response.json();
-      
-      if (!result.success || !result.timetables) {
-        console.error('❌ No timetables returned from API');
-        setLoading(false);
-        return;
-      }
+            const q = currentUser.department_id ? `?department_id=${currentUser.department_id}` : '';
+            const res = await fetch(`/api/timetables${q}`, { headers });
+            if (res.ok) {
+                const data = await res.json();
+                setTimetables(data.timetables || data.data || []);
+            }
+        } catch { toast.error('Error loading timetables'); } finally { setLoading(false); }
+    };
 
-      let timetablesData = result.timetables;
-      
-      console.log('📦 Raw timetables data from API:', timetablesData);
-      
-      // Check if user is a publisher
-      const isPublisher = facultyType === 'publisher';
-      
-      // Filter based on role
-      if (!isPublisher) {
-        // Creators see only their own timetables
-        console.log('✏️ Creator mode: Filtering by created_by:', userId);
-        timetablesData = timetablesData.filter((tt: any) => tt.created_by === userId);
-      } else {
-        console.log('📊 Publisher mode: Showing all timetables from department');
-      }
+    const submitForReview = async (timetableId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!confirm('Submit this timetable for review by publisher?')) return;
 
-      if (!timetablesData || timetablesData.length === 0) {
-        console.log('📭 No timetables found for user after filtering');
-        setLoading(false);
-        return;
-      }
+        setActionLoading(timetableId);
+        try {
+            const headers = getAuthHeaders();
+            if (!headers) return;
 
-      console.log('✅ Found', timetablesData.length, 'timetables');
+            const res = await fetch(`/api/timetables/${timetableId}/submit`, {
+                method: 'POST',
+                headers
+            });
 
-      // Transform data
-      const timetablesWithDetails = timetablesData.map((tt: any) => {
-        const batch = Array.isArray(tt.batch) ? tt.batch[0] : tt.batch;
-        const creator = Array.isArray(tt.created_by_user) ? tt.created_by_user[0] : tt.created_by_user;
+            const data = await res.json();
+            if (data.success) {
+                toast.success('Timetable submitted for review!');
+                fetchTimetables();
+            } else {
+                toast.error(data.error || 'Failed to submit');
+            }
+        } catch (error) {
+            console.error('Error submitting timetable:', error);
+            toast.error('Failed to submit timetable');
+        } finally {
+            setActionLoading(null);
+        }
+    };
 
-        return {
-          id: tt.id,
-          title: tt.title || `Timetable - ${batch?.name || 'Unknown'}`,
-          status: tt.status || 'draft',
-          academic_year: tt.academic_year || 'Unknown',
-          semester: tt.semester || 1,
-          created_at: tt.created_at,
-          fitness_score: tt.fitness_score || 0,
-          batch_name: batch?.name || 'Unknown Batch',
-          batch_id: tt.batch_id,
-          created_by_name: creator 
-            ? `${creator.first_name || ''} ${creator.last_name || ''}`.trim() 
-            : 'Unknown',
-          class_count: tt.class_count || 0
+    const deleteTimetable = async (timetableId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!confirm('Are you sure you want to delete this timetable? This action cannot be undone.')) return;
+
+        setActionLoading(timetableId);
+        try {
+            const headers = getAuthHeaders();
+            if (!headers) return;
+
+            const res = await fetch(`/api/timetables/${timetableId}/delete`, {
+                method: 'DELETE',
+                headers
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                toast.success('Timetable deleted successfully!');
+                setTimetables(prev => prev.filter(t => t.id !== timetableId));
+            } else {
+                toast.error(data.error || 'Failed to delete');
+            }
+        } catch (error) {
+            console.error('Error deleting timetable:', error);
+            toast.error('Failed to delete timetable');
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const unpublishTimetable = async (timetableId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!confirm('Are you sure you want to unpublish this timetable? It will be reverted to draft status.')) return;
+
+        setActionLoading(timetableId);
+        try {
+            const headers = getAuthHeaders();
+            if (!headers) return;
+
+            const res = await fetch(`/api/timetables/${timetableId}/unpublish`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ reason: 'Unpublished by publisher' })
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                toast.success('Timetable unpublished successfully!');
+                fetchTimetables();
+            } else {
+                toast.error(data.error || 'Failed to unpublish');
+            }
+        } catch (error) {
+            console.error('Error unpublishing timetable:', error);
+            toast.error('Failed to unpublish timetable');
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const notifyStudents = async (timetableId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        toast.success('Students will be notified about the timetable!');
+        // TODO: Implement notification API call
+    };
+
+    const filteredTimetables = timetables.filter(t => {
+        const matchesSearch = t.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (t.batch?.name || t.batch_name)?.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesStatus = statusFilter === 'all' || t.status === statusFilter;
+        return matchesSearch && matchesStatus;
+    });
+
+    const getStatusColor = (status: string) => {
+        const colors: Record<string, string> = {
+            'published': 'bg-green-100 text-green-700',
+            'pending_approval': 'bg-yellow-100 text-yellow-700',
+            'draft': 'bg-gray-100 text-gray-700',
+            'generating': 'bg-purple-100 text-purple-700',
+            'approved': 'bg-blue-100 text-blue-700',
+            'rejected': 'bg-red-100 text-red-700',
         };
-      });
-
-      console.log('✅ Processed timetables:', timetablesWithDetails);
-      setTimetables(timetablesWithDetails);
-      setFilteredTimetables(timetablesWithDetails);
-      setLoading(false);
-    } catch (error) {
-      console.error('❌ Error in fetchTimetables:', error);
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    let filtered = timetables;
-
-    // Filter by status
-    if (selectedStatus !== 'all') {
-      filtered = filtered.filter(tt => tt.status === selectedStatus);
-    }
-
-    // Filter by search query
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(tt => 
-        tt.title.toLowerCase().includes(query) ||
-        tt.batch_name.toLowerCase().includes(query) ||
-        tt.academic_year.toLowerCase().includes(query)
-      );
-    }
-
-    setFilteredTimetables(filtered);
-  }, [searchQuery, selectedStatus, timetables]);
-
-  const handleDelete = async (timetableId: string, title: string) => {
-    if (!confirm(`Are you sure you want to delete "${title}"? This action cannot be undone.`)) {
-      return;
-    }
-
-    setIsDeleting(timetableId);
-    console.log('🗑️ Deleting timetable:', timetableId);
-
-    try {
-      const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
-      
-      const response = await fetch(`/api/timetables/${timetableId}/delete`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        alert(`Failed to delete: ${result.error || 'Unknown error'}`);
-        setIsDeleting(null);
-        return;
-      }
-
-      console.log('✅ Timetable deleted successfully');
-      alert('Timetable deleted successfully!');
-      
-      // Refresh the list
-      if (user) {
-        fetchTimetables(user.id, user.faculty_type, user.department_id);
-      }
-    } catch (error: any) {
-      console.error('❌ Error in handleDelete:', error);
-      alert(`Error: ${error.message}`);
-    } finally {
-      setIsDeleting(null);
-    }
-  };
-
-  const handleSubmitForReview = async (timetableId: string, title: string) => {
-    if (!confirm(`Submit "${title}" for review? Publishers will be able to review and approve it.`)) {
-      return;
-    }
-
-    setIsSubmitting(timetableId);
-    console.log('📤 Submitting timetable for review:', timetableId);
-
-    try {
-      const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
-      
-      const response = await fetch(`/api/timetables/${timetableId}/submit`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        alert(`Failed to submit: ${result.error || 'Unknown error'}`);
-        setIsSubmitting(null);
-        return;
-      }
-
-      console.log('✅ Timetable submitted for review successfully');
-      alert(result.message || 'Timetable submitted for review! Publishers will be notified.');
-      
-      // Refresh the list
-      if (user) {
-        fetchTimetables(user.id, user.faculty_type, user.department_id);
-      }
-    } catch (error: any) {
-      console.error('❌ Error in handleSubmitForReview:', error);
-      alert(`Error: ${error.message}`);
-    } finally {
-      setIsSubmitting(null);
-    }
-  };
-
-  const handleUnpublish = async (timetableId: string, title: string) => {
-    const reason = prompt(`Why are you unpublishing "${title}"? This will revert it to draft status.`);
-    if (!reason || reason.trim() === '') {
-      return;
-    }
-
-    setIsSubmitting(timetableId);
-    console.log('🔙 Unpublishing timetable:', timetableId);
-
-    try {
-      const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
-      
-      const response = await fetch(`/api/timetables/${timetableId}/unpublish`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ reason })
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        alert(`Failed to unpublish: ${result.error || 'Unknown error'}`);
-        setIsSubmitting(null);
-        return;
-      }
-
-      console.log('✅ Timetable unpublished successfully');
-      alert('Timetable unpublished successfully!');
-      
-      // Refresh the list
-      if (user) {
-        fetchTimetables(user.id, user.faculty_type, user.department_id);
-      }
-    } catch (error: any) {
-      console.error('❌ Error in handleUnpublish:', error);
-      alert(`Error: ${error.message}`);
-    } finally {
-      setIsSubmitting(null);
-    }
-  };
-
-  const handleView = (timetableId: string) => {
-    // TODO: Navigate to view page or open modal
-    console.log('👁️ Viewing timetable:', timetableId);
-    router.push(`/faculty/timetables/view/${timetableId}`);
-  };
-
-  const getStatusBadge = (status: string) => {
-    const statusConfig: Record<string, { color: string; icon: any; label: string }> = {
-      draft: { color: 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200', icon: AlertCircle, label: 'Draft' },
-      pending_approval: { color: 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200', icon: Clock, label: 'Pending Review' },
-      published: { color: 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200', icon: CheckCircle, label: 'Published' },
-      rejected: { color: 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200', icon: XCircle, label: 'Rejected' },
+        return colors[status?.toLowerCase()] || 'bg-gray-100 text-gray-700';
     };
 
-    const config = statusConfig[status] || statusConfig.draft;
-    const Icon = config.icon;
-
-    return (
-      <span className={`inline-flex items-center ${config.color} text-xs font-medium px-2.5 py-0.5 rounded-full`}>
-        <Icon className="w-3 h-3 mr-1" />
-        {config.label}
-      </span>
-    );
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMins < 60) return `${diffMins} minutes ago`;
-    if (diffHours < 24) return `${diffHours} hours ago`;
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
-
-  const getStats = () => {
-    return {
-      total: timetables.length,
-      draft: timetables.filter(tt => tt.status === 'draft').length,
-      pending: timetables.filter(tt => tt.status === 'pending_approval').length,
-      published: timetables.filter(tt => tt.status === 'published').length,
+    const getStatusIcon = (status: string) => {
+        switch (status) {
+            case 'published': return <CheckCircle size={14} />;
+            case 'pending_approval': return <Clock size={14} />;
+            case 'generating': return <AlertCircle size={14} />;
+            case 'rejected': return <XCircle size={14} />;
+            default: return null;
+        }
     };
-  };
 
-  if (loading) {
+    const formatDate = (dateString: string) => {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    };
+
     return (
-      <div className="min-h-screen bg-white dark:bg-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Loading timetables...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return null;
-  }
-
-  const stats = getStats();
-
-  return (
-    <>
-      <Header />
-      <div className="flex">
-        <LeftSidebar />
-        <main className="flex-1 min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-900 p-6">
-          <div className="max-w-7xl mx-auto space-y-6">
-            {/* Header */}
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">My Timetables</h1>
-              <p className="text-gray-600 dark:text-gray-300">View, manage, and submit your created timetables</p>
-            </div>
-
-            {/* Notification Feature Info Banner */}
-            <div className="bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border border-purple-200 dark:border-purple-800 rounded-xl p-4">
-              <div className="flex items-start gap-3">
-                <Bell className="w-5 h-5 text-purple-600 dark:text-purple-400 mt-0.5" />
-                <div>
-                  <h3 className="font-semibold text-purple-900 dark:text-purple-100 mb-1">
-                    📢 Notify Students About Timetable Changes
-                  </h3>
-                  <p className="text-sm text-purple-700 dark:text-purple-300">
-                    For published timetables, you can send notifications to students and faculty about last-minute changes or important updates. 
-                    Look for the <strong>"Notify Students"</strong> button next to each published timetable.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Total</p>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.total}</p>
-                  </div>
-                  <Calendar className="w-8 h-8 text-blue-500" />
-                </div>
-              </div>
-              <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Drafts</p>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.draft}</p>
-                  </div>
-                  <AlertCircle className="w-8 h-8 text-gray-500" />
-                </div>
-              </div>
-              <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Pending</p>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.pending}</p>
-                  </div>
-                  <Clock className="w-8 h-8 text-yellow-500" />
-                </div>
-              </div>
-              <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Published</p>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.published}</p>
-                  </div>
-                  <CheckCircle className="w-8 h-8 text-green-500" />
-                </div>
-              </div>
-            </div>
-
-            {/* Search and Filter */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-4">
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search by title, batch, or academic year..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white placeholder-gray-500"
-                  />
-                </div>
-                <select
-                  value={selectedStatus}
-                  onChange={(e) => setSelectedStatus(e.target.value)}
-                  className="px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
-                >
-                  <option value="all">All Status</option>
-                  <option value="draft">Draft</option>
-                  <option value="pending_approval">Pending Review</option>
-                  <option value="published">Published</option>
-                  <option value="rejected">Rejected</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Timetables List */}
-            {filteredTimetables.length === 0 ? (
-              <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-12 text-center">
-                <Calendar className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">No timetables found</h3>
-                <p className="text-gray-600 dark:text-gray-400 mb-4">
-                  {searchQuery || selectedStatus !== 'all' 
-                    ? 'Try adjusting your search or filter' 
-                    : 'Create your first timetable to get started'}
-                </p>
-                <button
-                  onClick={() => router.push('/faculty/ai-timetable-creator')}
-                  className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                  Create Timetable
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {filteredTimetables.map((timetable) => (
-                  <div key={timetable.id} className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6 hover:shadow-md transition-shadow">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start space-x-4 flex-1">
-                        <div className="p-3 bg-blue-100 dark:bg-blue-900 rounded-xl">
-                          <Calendar className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{timetable.title}</h3>
-                            {getStatusBadge(timetable.status)}
-                          </div>
-                          <div className="space-y-1">
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                              <span className="font-medium">Batch:</span> {timetable.batch_name} • 
-                              <span className="font-medium"> Semester:</span> {timetable.semester} • 
-                              <span className="font-medium"> Year:</span> {timetable.academic_year}
-                            </p>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                              <span className="font-medium">Classes:</span> {timetable.class_count} • 
-                              <span className="font-medium"> Fitness:</span> {timetable.fitness_score.toFixed(1)}%
-                            </p>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                              <span className="font-medium">Created By:</span> {timetable.created_by_name} • 
-                              <span className="font-medium"> Created:</span> {formatDate(timetable.created_at)}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Action Buttons */}
-                      <div className="flex items-center space-x-2 ml-4">
-                        {/* View Button */}
-                        <button
-                          onClick={() => handleView(timetable.id)}
-                          className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                          title="View Timetable"
-                        >
-                          <Eye className="w-5 h-5" />
-                        </button>
-
-                        {/* Send Notification Button (for published timetables) */}
-                        {timetable.status === 'published' && timetable.batch_id && (
-                          <button
-                            onClick={() => {
-                              setSelectedTimetableForNotification({
-                                id: timetable.id,
-                                batchId: timetable.batch_id!
-                              });
-                              setShowNotificationComposer(true);
-                            }}
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-sm font-medium rounded-lg hover:from-purple-700 hover:to-blue-700 transition-all shadow-md hover:shadow-lg"
-                            title="Send notification to students and faculty about this timetable"
-                          >
-                            <Bell className="w-4 h-4" />
-                            <span>Notify Students</span>
-                          </button>
-                        )}
-
-                        {/* Submit for Review Button (only for drafts) */}
-                        {timetable.status === 'draft' && (
-                          <button
-                            onClick={() => handleSubmitForReview(timetable.id, timetable.title)}
-                            disabled={isSubmitting === timetable.id}
-                            className="inline-flex items-center px-3 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                            title="Submit for Review"
-                          >
-                            {isSubmitting === timetable.id ? (
-                              <>
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                Submitting...
-                              </>
-                            ) : (
-                              <>
-                                <Send className="w-4 h-4 mr-1" />
-                                Submit
-                              </>
-                            )}
-                          </button>
-                        )}
-
-                        {/* Unpublish Button (only for publishers on published timetables) */}
-                        {user?.faculty_type === 'publisher' && timetable.status === 'published' && (
-                          <button
-                            onClick={() => handleUnpublish(timetable.id, timetable.title)}
-                            disabled={isSubmitting === timetable.id}
-                            className="inline-flex items-center px-3 py-2 bg-orange-600 text-white text-sm rounded-lg hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                            title="Unpublish Timetable"
-                          >
-                            {isSubmitting === timetable.id ? (
-                              <>
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                Unpublishing...
-                              </>
-                            ) : (
-                              <>
-                                <XCircle className="w-4 h-4 mr-1" />
-                                Unpublish
-                              </>
-                            )}
-                          </button>
-                        )}
-
-                        {/* Delete Button (for drafts/rejected by creator, or any by publisher) */}
-                        {((timetable.status === 'draft' || timetable.status === 'rejected') || 
-                          (user?.faculty_type === 'publisher' && timetable.status === 'published')) && (
-                          <button
-                            onClick={() => handleDelete(timetable.id, timetable.title)}
-                            disabled={isDeleting === timetable.id}
-                            className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            title="Delete Timetable"
-                          >
-                            {isDeleting === timetable.id ? (
-                              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-red-600"></div>
-                            ) : (
-                              <Trash2 className="w-5 h-5" />
-                            )}
-                          </button>
-                        )}
-                      </div>
+        <FacultyCreatorLayout activeTab="timetables">
+            <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                    <div>
+                        <h1 className="text-4xl font-bold text-gray-900 mb-2">Timetables</h1>
+                        <p className="text-gray-600">View and manage generated timetables</p>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </main>
-      </div>
+                    <button onClick={() => fetchTimetables()} className="flex items-center gap-2 px-4 py-3 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 bg-white">
+                        <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+                    </button>
+                </div>
 
-      {/* Notification Composer Modal */}
-      {showNotificationComposer && user && selectedTimetableForNotification && (
-        <NotificationComposer
-          isOpen={showNotificationComposer}
-          onClose={() => {
-            setShowNotificationComposer(false);
-            setSelectedTimetableForNotification(null);
-          }}
-          userId={user.id}
-          userDepartmentId={user.department_id}
-          timetableId={selectedTimetableForNotification.id}
-          batchId={selectedTimetableForNotification.batchId}
-        />
-      )}
-    </>
-  );
-}
+                {/* Search & Filters */}
+                <div className="bg-white rounded-2xl shadow-lg p-6">
+                    <div className="flex gap-4 flex-wrap">
+                        <div className="relative flex-1 min-w-[200px]">
+                            <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input
+                                type="text"
+                                placeholder="Search timetables..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none"
+                            />
+                        </div>
+                        <select
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value)}
+                            className="px-4 py-3 border border-gray-200 rounded-xl min-w-[150px]"
+                        >
+                            <option value="all">All Status</option>
+                            <option value="published">Published</option>
+                            <option value="pending_approval">Pending</option>
+                            <option value="draft">Draft</option>
+                            <option value="generating">Generating</option>
+                            <option value="rejected">Rejected</option>
+                        </select>
+                    </div>
+                </div>
+
+                {/* Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-2xl shadow-lg p-5 flex items-center gap-4">
+                        <div className="p-3 rounded-xl bg-blue-100"><CalendarDays size={22} className="text-blue-600" /></div>
+                        <div><p className="text-xl font-bold text-gray-900">{timetables.length}</p><p className="text-sm text-gray-500">Total</p></div>
+                    </motion.div>
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="bg-white rounded-2xl shadow-lg p-5 flex items-center gap-4">
+                        <div className="p-3 rounded-xl bg-green-100"><CheckCircle size={22} className="text-green-600" /></div>
+                        <div><p className="text-xl font-bold text-gray-900">{timetables.filter(t => t.status === 'published').length}</p><p className="text-sm text-gray-500">Published</p></div>
+                    </motion.div>
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white rounded-2xl shadow-lg p-5 flex items-center gap-4">
+                        <div className="p-3 rounded-xl bg-yellow-100"><Clock size={22} className="text-yellow-600" /></div>
+                        <div><p className="text-xl font-bold text-gray-900">{timetables.filter(t => t.status === 'pending_approval').length}</p><p className="text-sm text-gray-500">Pending</p></div>
+                    </motion.div>
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="bg-white rounded-2xl shadow-lg p-5 flex items-center gap-4">
+                        <div className="p-3 rounded-xl bg-gray-100"><AlertCircle size={22} className="text-gray-600" /></div>
+                        <div><p className="text-xl font-bold text-gray-900">{timetables.filter(t => t.status === 'draft').length}</p><p className="text-sm text-gray-500">Drafts</p></div>
+                    </motion.div>
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-white rounded-2xl shadow-lg p-5 flex items-center gap-4">
+                        <div className="p-3 rounded-xl bg-red-100"><XCircle size={22} className="text-red-600" /></div>
+                        <div><p className="text-xl font-bold text-gray-900">{timetables.filter(t => t.status === 'rejected').length}</p><p className="text-sm text-gray-500">Rejected</p></div>
+                    </motion.div>
+                </div>
+
+                {/* Timetables List */}
+                <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+                    {loading ? (
+                        <div className="text-center py-16">
+                            <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#4D869C] border-t-transparent mx-auto"></div>
+                            <p className="mt-4 text-gray-500">Loading timetables...</p>
+                        </div>
+                    ) : filteredTimetables.length === 0 ? (
+                        <div className="text-center py-16 text-gray-500">
+                            <CalendarDays size={48} className="mx-auto mb-4 text-gray-300" />
+                            <h3 className="text-xl font-semibold text-gray-900 mb-2">No timetables found</h3>
+                            <p>No timetables match your search criteria.</p>
+                        </div>
+                    ) : (
+                        <div className="divide-y divide-gray-100">
+                            {filteredTimetables.map((tt, i) => (
+                                <motion.div
+                                    key={tt.id}
+                                    initial={{ opacity: 0, x: -20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: i * 0.03 }}
+                                    className="p-5 hover:bg-gray-50 transition-all cursor-pointer flex items-center gap-4"
+                                    onClick={() => router.push(`/faculty/timetables/${tt.id}`)}
+                                >
+                                    {/* Icon */}
+                                    <div className="p-3 rounded-xl bg-blue-50 shrink-0">
+                                        <CalendarDays size={24} className="text-blue-600" />
+                                    </div>
+
+                                    {/* Main Info */}
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-3 mb-1">
+                                            <h3 className="font-bold text-gray-900 truncate">{tt.title}</h3>
+                                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${getStatusColor(tt.status)}`}>
+                                                {getStatusIcon(tt.status)}
+                                                {tt.status?.replace('_', ' ')}
+                                            </span>
+                                        </div>
+                                        <p className="text-sm text-gray-500 truncate">
+                                            Batch: {tt.batch?.name || tt.batch_name || 'N/A'} • Semester: {tt.semester || 'N/A'} • Year: {tt.academic_year || 'N/A'}
+                                        </p>
+                                        <div className="flex items-center gap-4 mt-1 text-xs text-gray-400">
+                                            {tt.fitness_score && (
+                                                <span className="text-green-600 font-medium">Fitness: {tt.fitness_score}%</span>
+                                            )}
+                                            <span>Created: {formatDate(tt.created_at)}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        {/* View Button - Always visible */}
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); router.push(`/faculty/timetables/${tt.id}`); }}
+                                            className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
+                                        >
+                                            <Eye size={14} />
+                                        </button>
+
+                                        {/* Submit Button - Only for Creator, only for Draft */}
+                                        {isCreator && tt.status === 'draft' && (
+                                            <button
+                                                onClick={(e) => submitForReview(tt.id, e)}
+                                                disabled={actionLoading === tt.id}
+                                                className="flex items-center gap-1.5 px-3 py-2 bg-[#4D869C] text-white rounded-lg text-sm font-medium hover:shadow-md disabled:opacity-50"
+                                            >
+                                                <Send size={14} /> Submit
+                                            </button>
+                                        )}
+
+                                        {/* Notify Students - Only for Publisher, only for Published */}
+                                        {isPublisher && tt.status === 'published' && (
+                                            <button
+                                                onClick={(e) => notifyStudents(tt.id, e)}
+                                                className="flex items-center gap-1.5 px-3 py-2 bg-[#4D869C] text-white rounded-lg text-sm font-medium hover:shadow-md"
+                                            >
+                                                <Bell size={14} /> Notify Students
+                                            </button>
+                                        )}
+
+                                        {/* Unpublish Button - Only for Publisher, only for Published */}
+                                        {isPublisher && tt.status === 'published' && (
+                                            <button
+                                                onClick={(e) => unpublishTimetable(tt.id, e)}
+                                                disabled={actionLoading === tt.id}
+                                                className="flex items-center gap-1.5 px-3 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:shadow-md disabled:opacity-50"
+                                            >
+                                                <XCircle size={14} /> Unpublish
+                                            </button>
+                                        )}
+
+                                        {/* Delete Button - For Creator/Publisher, only for Draft */}
+                                        {(isCreator || isPublisher) && tt.status === 'draft' && (
+                                            <button
+                                                onClick={(e) => deleteTimetable(tt.id, e)}
+                                                disabled={actionLoading === tt.id}
+                                                className="flex items-center gap-1.5 px-3 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:shadow-md disabled:opacity-50"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        )}
+                                    </div>
+                                </motion.div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </FacultyCreatorLayout>
+    );
+};
+
+export default TimetablesPage;

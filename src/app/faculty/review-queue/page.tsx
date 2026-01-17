@@ -2,10 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Header } from '@/components/Header';
-import LeftSidebar from '@/components/LeftSidebar';
-import { Eye, CheckCircle, XCircle, Clock, AlertCircle, Mail } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
+import { motion } from 'framer-motion';
+import { Eye, CheckCircle, XCircle, Clock, AlertCircle, Mail, RefreshCw, Calendar, Users } from 'lucide-react';
 
 interface PendingTimetable {
   id: string;
@@ -38,12 +37,12 @@ export default function ReviewQueuePage() {
 
     try {
       const parsedUser = JSON.parse(userData);
-      
+
       if (parsedUser.role !== 'faculty' || parsedUser.faculty_type !== 'publisher') {
         router.push('/faculty/dashboard');
         return;
       }
-      
+
       setUser(parsedUser);
     } catch (error) {
       console.error('Error parsing user data:', error);
@@ -52,7 +51,6 @@ export default function ReviewQueuePage() {
     }
   }, [router]);
 
-  // Separate useEffect to fetch timetables when user is set
   useEffect(() => {
     if (user?.id) {
       fetchPendingTimetables();
@@ -62,12 +60,9 @@ export default function ReviewQueuePage() {
   const fetchPendingTimetables = async () => {
     try {
       if (!user?.id) {
-        console.error('❌ No user found');
         setLoading(false);
         return;
       }
-
-      console.log('🔍 Fetching pending timetables for review');
 
       const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
 
@@ -78,25 +73,18 @@ export default function ReviewQueuePage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error('❌ Error fetching pending timetables:', errorData.error);
         setLoading(false);
         return;
       }
 
       const result = await response.json();
 
-      if (!result.success) {
-        console.error('❌ Failed to fetch pending timetables:', result.error);
-        setLoading(false);
-        return;
+      if (result.success) {
+        setPendingTimetables(result.timetables || []);
       }
-
-      console.log('✅ Fetched', result.timetables?.length || 0, 'pending timetables for this department');
-      setPendingTimetables(result.timetables || []);
       setLoading(false);
     } catch (error) {
-      console.error('❌ Error in fetchPendingTimetables:', error);
+      console.error('Error in fetchPendingTimetables:', error);
       setLoading(false);
     }
   };
@@ -107,11 +95,10 @@ export default function ReviewQueuePage() {
     }
 
     setIsProcessing(timetableId);
-    console.log('✅ Approving timetable:', timetableId);
 
     try {
       const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
-      
+
       const response = await fetch(`/api/timetables/${timetableId}/approve`, {
         method: 'POST',
         headers: {
@@ -127,13 +114,9 @@ export default function ReviewQueuePage() {
         return;
       }
 
-      console.log('✅ Timetable approved and published successfully');
       alert('✅ Timetable approved and published successfully!');
-      
-      // Refresh the list
       fetchPendingTimetables();
     } catch (error: any) {
-      console.error('❌ Error in handleApprove:', error);
       alert(`Error: ${error.message}`);
     } finally {
       setIsProcessing(null);
@@ -147,11 +130,10 @@ export default function ReviewQueuePage() {
     }
 
     setIsProcessing(timetableId);
-    console.log('❌ Rejecting timetable:', timetableId);
 
     try {
       const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
-      
+
       const response = await fetch(`/api/timetables/${timetableId}/reject`, {
         method: 'POST',
         headers: {
@@ -169,13 +151,9 @@ export default function ReviewQueuePage() {
         return;
       }
 
-      console.log('✅ Timetable rejected successfully');
       alert('Timetable rejected. Creator will be notified.');
-      
-      // Refresh the list
       fetchPendingTimetables();
     } catch (error: any) {
-      console.error('❌ Error in handleReject:', error);
       alert(`Error: ${error.message}`);
     } finally {
       setIsProcessing(null);
@@ -188,11 +166,8 @@ export default function ReviewQueuePage() {
     }
 
     setIsSendingEmail(timetableId);
-    console.log('📧 Sending email notifications for timetable:', timetableId);
 
     try {
-      // Note: Email service needs to be implemented
-      // For now, this is a placeholder showing future implementation
       alert(
         '📧 Email Notification Feature\n\n' +
         'This feature is under development and will send notifications to:\n' +
@@ -201,50 +176,12 @@ export default function ReviewQueuePage() {
         '• Department administrators\n\n' +
         'Coming soon!'
       );
-
-      /* Future implementation:
-      const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
-      
-      const response = await fetch('/api/email/sendUpdate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          timetableId,
-          publishedBy: `${user.first_name} ${user.last_name}`
-        })
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        alert(`Failed to send emails: ${result.error || 'Unknown error'}`);
-        setIsSendingEmail(null);
-        return;
-      }
-
-      const stats = result.stats;
-      alert(
-        `✅ Email notifications sent successfully!\n\n` +
-        `📧 Sent to:\n` +
-        `• ${stats.students} students\n` +
-        `• ${stats.faculty} faculty members\n` +
-        `Total: ${stats.sent}/${stats.total} emails sent`
-      );
-      */
-
-    } catch (error: any) {
-      console.error('❌ Error sending email notifications:', error);
-      alert(`Error: ${error.message}`);
     } finally {
       setIsSendingEmail(null);
     }
   };
 
   const handleView = (timetableId: string) => {
-    console.log('👁️ Viewing timetable for review:', timetableId);
     router.push(`/faculty/timetables/view/${timetableId}`);
   };
 
@@ -260,16 +197,16 @@ export default function ReviewQueuePage() {
     if (diffHours < 24) return `${diffHours} hours ago`;
     if (diffDays === 1) return 'Yesterday';
     if (diffDays < 7) return `${diffDays} days ago`;
-    
+
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-white dark:bg-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Loading review queue...</p>
+      <div className="min-h-screen bg-gradient-to-br from-[#CDE8E5] via-[#EEF7FF] to-[#7AB2B2] flex items-center justify-center">
+        <div className="text-center bg-white rounded-2xl p-10 shadow-lg">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-[#4D869C] border-t-transparent mx-auto"></div>
+          <p className="mt-6 text-gray-600 font-medium">Loading review queue...</p>
         </div>
       </div>
     );
@@ -279,158 +216,175 @@ export default function ReviewQueuePage() {
     return null;
   }
 
-  const stats = {
-    pending: pendingTimetables.length,
-    approved: 0, // Could fetch from database if needed
-    rejected: 0, // Could fetch from database if needed
-  };
-
   return (
-    <>
-      <Header />
-      <div className="flex">
-        <LeftSidebar />
-        <main className="flex-1 min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-900 p-6">
-          <div className="max-w-7xl mx-auto space-y-6">
+    <FacultyCreatorLayout activeTab="review-queue">
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">Review Queue</h1>
+            <p className="text-gray-600">Review and approve pending timetables from creators</p>
+          </div>
+          <button
+            onClick={fetchPendingTimetables}
+            className="flex items-center gap-2 px-4 py-3 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 bg-white"
+          >
+            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4"
+          >
+            <div className="p-3 rounded-xl bg-yellow-100">
+              <Clock size={24} className="text-yellow-600" />
+            </div>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Review Queue</h1>
-              <p className="text-gray-600 dark:text-gray-300">Review and approve pending timetables</p>
+              <p className="text-2xl font-bold text-gray-900">{pendingTimetables.length}</p>
+              <p className="text-sm text-gray-500">Pending Review</p>
             </div>
+          </motion.div>
 
-            {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
-                <div className="flex items-center space-x-4">
-                  <div className="p-3 bg-yellow-100 dark:bg-yellow-900 rounded-xl">
-                    <Clock className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.pending}</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Pending Review</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
-                <div className="flex items-center space-x-4">
-                  <div className="p-3 bg-green-100 dark:bg-green-900 rounded-xl">
-                    <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.approved}</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Approved Today</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
-                <div className="flex items-center space-x-4">
-                  <div className="p-3 bg-red-100 dark:bg-red-900 rounded-xl">
-                    <XCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.rejected}</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Rejected</p>
-                  </div>
-                </div>
-              </div>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4"
+          >
+            <div className="p-3 rounded-xl bg-green-100">
+              <CheckCircle size={24} className="text-green-600" />
             </div>
+            <div>
+              <p className="text-2xl font-bold text-gray-900">--</p>
+              <p className="text-sm text-gray-500">Approved Today</p>
+            </div>
+          </motion.div>
 
-            {/* Review Items */}
-            {pendingTimetables.length === 0 ? (
-              <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-12 text-center">
-                <AlertCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">No pending reviews</h3>
-                <p className="text-gray-600 dark:text-gray-400">
-                  All timetables have been reviewed. Check back later for new submissions.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {pendingTimetables.map((timetable) => (
-                  <div key={timetable.id} className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{timetable.title}</h3>
-                          <span className="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 text-xs font-medium px-2.5 py-0.5 rounded-full">
-                            Pending
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4"
+          >
+            <div className="p-3 rounded-xl bg-red-100">
+              <XCircle size={24} className="text-red-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-gray-900">--</p>
+              <p className="text-sm text-gray-500">Rejected</p>
+            </div>
+          </motion.div>
+        </div>
+
+        {/* Review Items */}
+        <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+          {pendingTimetables.length === 0 ? (
+            <div className="text-center py-16">
+              <AlertCircle size={48} className="mx-auto mb-4 text-gray-300" />
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">No pending reviews</h3>
+              <p className="text-gray-500">All timetables have been reviewed. Check back later for new submissions.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {pendingTimetables.map((timetable, i) => (
+                <motion.div
+                  key={timetable.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  className="p-6 hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="p-2 rounded-lg bg-blue-100">
+                          <Calendar size={20} className="text-blue-600" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold text-gray-900">{timetable.title}</h3>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-bold">
+                            <Clock size={12} /> Pending Review
                           </span>
                         </div>
-                        <div className="space-y-1">
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
-                            <span className="font-medium">Submitted by:</span> {timetable.creator_name} ({timetable.creator_email})
-                          </p>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
-                            <span className="font-medium">Batch:</span> {timetable.batch_name} • 
-                            <span className="font-medium"> Semester:</span> {timetable.semester} • 
-                            <span className="font-medium"> Year:</span> {timetable.academic_year}
-                          </p>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">
-                            <span className="font-medium">Classes:</span> {timetable.class_count} • 
-                            <span className="font-medium"> Submitted:</span> {formatDate(timetable.submitted_at)}
-                          </p>
+                      </div>
+
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
+                        <div>
+                          <p className="text-gray-500">Submitted by</p>
+                          <p className="font-medium text-gray-900">{timetable.creator_name}</p>
+                          <p className="text-xs text-gray-500">{timetable.creator_email}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Batch</p>
+                          <p className="font-medium text-gray-900">{timetable.batch_name}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Semester / Year</p>
+                          <p className="font-medium text-gray-900">Sem {timetable.semester} • {timetable.academic_year}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-500">Submitted</p>
+                          <p className="font-medium text-gray-900">{formatDate(timetable.submitted_at)}</p>
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => handleView(timetable.id)}
-                        className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                      >
-                        <Eye className="w-4 h-4 mr-2" />
-                        Review
-                      </button>
-                      <button
-                        onClick={() => handleApprove(timetable.id, timetable.title)}
-                        disabled={isProcessing === timetable.id}
-                        className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {isProcessing === timetable.id ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                            Processing...
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle className="w-4 h-4 mr-2" />
-                            Approve & Publish
-                          </>
-                        )}
-                      </button>
-                      <button
-                        onClick={() => handleReject(timetable.id, timetable.title)}
-                        disabled={isProcessing === timetable.id}
-                        className="inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                      >
-                        <XCircle className="w-4 h-4 mr-2" />
-                        Reject
-                      </button>
-                      <button
-                        onClick={() => handleSendEmailNotification(timetable.id, timetable.title)}
-                        disabled={isSendingEmail === timetable.id}
-                        className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {isSendingEmail === timetable.id ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                            Sending...
-                          </>
-                        ) : (
-                          <>
-                            <Mail className="w-4 h-4 mr-2" />
-                            Send Email
-                          </>
-                        )}
-                      </button>
+
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full font-medium">
+                          {timetable.class_count} Classes
+                        </span>
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </main>
+
+                  <div className="flex items-center gap-2 mt-4 pt-4 border-t border-gray-100">
+                    <button
+                      onClick={() => handleView(timetable.id)}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-[#4D869C] text-white rounded-xl font-medium hover:shadow-lg transition-all"
+                    >
+                      <Eye size={16} /> Review
+                    </button>
+                    <button
+                      onClick={() => handleApprove(timetable.id, timetable.title)}
+                      disabled={isProcessing === timetable.id}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 disabled:opacity-50 transition-all"
+                    >
+                      {isProcessing === timetable.id ? (
+                        <RefreshCw size={16} className="animate-spin" />
+                      ) : (
+                        <CheckCircle size={16} />
+                      )}
+                      Approve & Publish
+                    </button>
+                    <button
+                      onClick={() => handleReject(timetable.id, timetable.title)}
+                      disabled={isProcessing === timetable.id}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 disabled:opacity-50 transition-all"
+                    >
+                      <XCircle size={16} /> Reject
+                    </button>
+                    <button
+                      onClick={() => handleSendEmailNotification(timetable.id, timetable.title)}
+                      disabled={isSendingEmail === timetable.id}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-xl font-medium hover:bg-purple-700 disabled:opacity-50 transition-all"
+                    >
+                      {isSendingEmail === timetable.id ? (
+                        <RefreshCw size={16} className="animate-spin" />
+                      ) : (
+                        <Mail size={16} />
+                      )}
+                      Send Email
+                    </button>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-    </>
+    </FacultyCreatorLayout>
   );
 }

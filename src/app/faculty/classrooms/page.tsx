@@ -1,308 +1,211 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
-import { Header } from '@/components/Header';
-import LeftSidebar from '@/components/LeftSidebar';
-import { MapPin, Search, Users, MonitorPlay, Wind, Computer, FlaskConical } from 'lucide-react';
+import { MapPin, Search, RefreshCw, Users, Monitor, Building } from 'lucide-react';
+import toast from 'react-hot-toast';
+import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
 
 interface Classroom {
   id: string;
   name: string;
-  building: string;
-  floor_number: number;
+  room_number: string;
   capacity: number;
   type: string;
-  has_projector: boolean;
-  has_ac: boolean;
-  has_computers: boolean;
-  has_lab_equipment: boolean;
-  is_smart_classroom: boolean;
-  facilities: string[];
-  location_notes?: string;
-  department_name: string;
-  department_code: string;
+  has_projector?: boolean;
+  has_ac?: boolean;
+  building?: string;
+  floor?: number;
+  is_available: boolean;
 }
 
-export default function ClassroomsPage() {
+const ClassroomsPage: React.FC = () => {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
-  const [statistics, setStatistics] = useState({
-    totalClassrooms: 0,
-    lectureHalls: 0,
-    labs: 0,
-    smartClassrooms: 0
-  });
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedType, setSelectedType] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState('all');
 
-  useEffect(() => {
+  useEffect(() => { fetchClassrooms(); }, []);
+
+  const getAuthHeaders = () => {
     const userData = localStorage.getItem('user');
-    if (!userData) {
-      router.push('/login');
-      return;
-    }
+    if (!userData) { router.push('/login'); return null; }
+    return { 'Authorization': `Bearer ${Buffer.from(userData).toString('base64')}`, 'Content-Type': 'application/json' };
+  };
 
+  const fetchClassrooms = async () => {
     try {
-      const parsedUser = JSON.parse(userData);
-      
-      if (parsedUser.role !== 'faculty') {
-        router.push('/login');
-        return;
+      setLoading(true);
+      const userData = localStorage.getItem('user');
+      if (!userData) return;
+      const user = JSON.parse(userData);
+      const headers = getAuthHeaders();
+      if (!headers) return;
+
+      const q = user.college_id ? `?college_id=${user.college_id}` : '';
+      const res = await fetch(`/api/classrooms${q}`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setClassrooms(data.classrooms || data.data || []);
       }
-      
-      const facultyType = parsedUser.faculty_type;
-      if (facultyType !== 'creator' && facultyType !== 'publisher') {
-        router.push('/student/dashboard');
-        return;
-      }
-      
-      setUser(parsedUser);
-      setLoading(false);
-    } catch (error) {
-      console.error('Error parsing user data:', error);
-      localStorage.removeItem('user');
-      router.push('/login');
-    }
-  }, [router]);
+    } catch { toast.error('Error loading classrooms'); } finally { setLoading(false); }
+  };
 
-  // Fetch classrooms across all departments (creator/publisher can view all)
-  useEffect(() => {
-    async function fetchClassrooms() {
-      try {
-        if (!user) return;
-        
-        // Use admin API for cross-department access
-        const authToken = Buffer.from(JSON.stringify(user)).toString('base64');
-        const response = await fetch('/api/admin/classrooms', {
-          headers: {
-            'Authorization': `Bearer ${authToken}`
-          }
-        });
-        
-        const result = await response.json();
-        console.log('Classrooms API Result:', result);
-        
-        if (result.classrooms) {
-          const classroomsData = result.classrooms;
-          setClassrooms(classroomsData);
-          
-          // Calculate statistics
-          setStatistics({
-            totalClassrooms: classroomsData.length,
-            lectureHalls: classroomsData.filter((c: any) => c.type === 'Lecture Hall').length,
-            labs: classroomsData.filter((c: any) => c.type === 'Lab').length,
-            smartClassrooms: classroomsData.filter((c: any) => c.is_smart_classroom).length
-          });
-        }
-      } catch (error) {
-        console.error('Error fetching classrooms:', error);
-      }
-    }
-    fetchClassrooms();
-  }, [user]);
+  const uniqueTypes = [...new Set(classrooms.map(c => c.type).filter(Boolean))];
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return null;
-  }
-
-  // Filter classrooms
-  const filteredClassrooms = classrooms.filter(classroom => {
-    const matchesType = selectedType === 'all' || classroom.type === selectedType;
-    const matchesSearch = searchQuery === '' ||
-      classroom.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      classroom.building?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      classroom.type.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    return matchesType && matchesSearch;
+  const filteredClassrooms = classrooms.filter(c => {
+    const matchesSearch = c.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.room_number?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesType = typeFilter === 'all' || c.type === typeFilter;
+    return matchesSearch && matchesType;
   });
+
+  const getTypeColor = (type: string) => {
+    const colors: Record<string, string> = {
+      'lecture_hall': 'bg-blue-100 text-blue-700',
+      'lab': 'bg-green-100 text-green-700',
+      'seminar': 'bg-purple-100 text-purple-700',
+      'workshop': 'bg-orange-100 text-orange-700',
+    };
+    return colors[type?.toLowerCase()] || 'bg-gray-100 text-gray-700';
+  };
 
   return (
-    <>
-      <Header />
-      <div className="flex">
-        <LeftSidebar />
-        <main className="flex-1 min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-900 p-6">
-          <div className="max-w-7xl mx-auto space-y-6">
-            {/* Page Header */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Classrooms & Venues</h1>
-                <p className="text-gray-600 dark:text-gray-300">All Departments - Cross-Department View</p>
-              </div>
+    <FacultyCreatorLayout activeTab="classrooms">
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">Classrooms</h1>
+            <p className="text-gray-600">View available classrooms and labs</p>
+          </div>
+          <button onClick={fetchClassrooms} className="flex items-center gap-2 px-4 py-3 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 bg-white">
+            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
+
+        {/* Search & Filters */}
+        <div className="bg-white rounded-2xl shadow-lg p-6">
+          <div className="flex gap-4 flex-wrap">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search classrooms..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none"
+              />
             </div>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="px-4 py-3 border border-gray-200 rounded-xl min-w-[150px]"
+            >
+              <option value="all">All Types</option>
+              {uniqueTypes.map(type => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
+          </div>
+        </div>
 
-            {/* Statistics Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Classrooms</h3>
-                  <MapPin className="w-5 h-5 text-gray-400" />
-                </div>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">{statistics.totalClassrooms}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Available rooms</p>
-              </div>
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-blue-100"><MapPin size={24} className="text-blue-600" /></div>
+            <div><p className="text-2xl font-bold text-gray-900">{classrooms.length}</p><p className="text-sm text-gray-500">Total Rooms</p></div>
+          </div>
+          <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-green-100"><Users size={24} className="text-green-600" /></div>
+            <div><p className="text-2xl font-bold text-gray-900">{classrooms.reduce((sum, c) => sum + (c.capacity || 0), 0)}</p><p className="text-sm text-gray-500">Total Capacity</p></div>
+          </div>
+          <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-purple-100"><Monitor size={24} className="text-purple-600" /></div>
+            <div><p className="text-2xl font-bold text-gray-900">{classrooms.filter(c => c.has_projector).length}</p><p className="text-sm text-gray-500">With Projector</p></div>
+          </div>
+          <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-orange-100"><Building size={24} className="text-orange-600" /></div>
+            <div><p className="text-2xl font-bold text-gray-900">{classrooms.filter(c => c.is_available).length}</p><p className="text-sm text-gray-500">Available</p></div>
+          </div>
+        </div>
 
-              <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Lecture Halls</h3>
-                  <Users className="w-5 h-5 text-gray-400" />
-                </div>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">{statistics.lectureHalls}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Theory rooms</p>
-              </div>
-
-              <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Lab Rooms</h3>
-                  <FlaskConical className="w-5 h-5 text-gray-400" />
-                </div>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">{statistics.labs}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Practical labs</p>
-              </div>
-
-              <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Smart Classrooms</h3>
-                  <MonitorPlay className="w-5 h-5 text-gray-400" />
-                </div>
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">{statistics.smartClassrooms}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Tech-enabled</p>
-              </div>
+        {/* Classrooms Grid */}
+        <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+          {loading ? (
+            <div className="text-center py-12 text-gray-500">Loading...</div>
+          ) : filteredClassrooms.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              <MapPin size={40} className="mx-auto mb-3 text-gray-300" />
+              <p>No classrooms found</p>
             </div>
-
-            {/* Search and Filters */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-4">
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search classrooms by name, building, or type..."
-                    className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
-                  />
-                </div>
-                <select
-                  value={selectedType}
-                  onChange={(e) => setSelectedType(e.target.value)}
-                  className="px-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
+              {filteredClassrooms.map((room, i) => (
+                <motion.div
+                  key={room.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.03 }}
+                  className="bg-gray-50 rounded-xl p-5 hover:shadow-md transition-all"
                 >
-                  <option value="all">All Types</option>
-                  <option value="Lecture Hall">Lecture Hall</option>
-                  <option value="Lab">Lab</option>
-                  <option value="Seminar Room">Seminar Room</option>
-                  <option value="Tutorial Room">Tutorial Room</option>
-                  <option value="Auditorium">Auditorium</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Classrooms Header */}
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                All Classrooms
-              </h2>
-              <span className="text-sm text-gray-600 dark:text-gray-400">
-                {filteredClassrooms.length} classrooms
-              </span>
-            </div>
-
-            {/* Classrooms Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredClassrooms.length === 0 ? (
-                <div className="col-span-full bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-12 text-center">
-                  <MapPin className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500 dark:text-gray-400">No classrooms found</p>
-                </div>
-              ) : (
-                filteredClassrooms.map((classroom) => (
-                  <div key={classroom.id} className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6 hover:shadow-md transition-shadow">
-                    <div className="flex items-start justify-between mb-4">
-                      <div>
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">{classroom.name}</h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                          {classroom.building && `${classroom.building} - `}Floor {classroom.floor_number}
-                        </p>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-blue-100">
+                        <MapPin size={20} className="text-blue-600" />
                       </div>
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        classroom.type === 'Lab'
-                          ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
-                          : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
-                      }`}>
-                        {classroom.type}
+                      <div>
+                        <h3 className="font-bold text-gray-900">{room.name || room.room_number}</h3>
+                        <p className="text-sm text-gray-500">{room.room_number}</p>
+                      </div>
+                    </div>
+                    <span className={`px-2 py-1 rounded-full text-xs font-bold ${room.is_available ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                      {room.is_available ? 'Available' : 'Occupied'}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Capacity</span>
+                      <span className="font-medium text-gray-900">{room.capacity} seats</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Type</span>
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${getTypeColor(room.type)}`}>
+                        {room.type || 'N/A'}
                       </span>
                     </div>
-
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600 dark:text-gray-400">Capacity</span>
-                        <div className="flex items-center text-gray-900 dark:text-white">
-                          <Users className="w-4 h-4 mr-1" />
-                          <span className="font-medium">{classroom.capacity}</span>
-                        </div>
+                    {room.building && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Building</span>
+                        <span className="text-gray-900">{room.building}</span>
                       </div>
-
-                      {/* Facilities */}
-                      <div className="pt-3 border-t border-gray-200 dark:border-slate-700">
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Facilities:</p>
-                        <div className="flex flex-wrap gap-2">
-                          {classroom.has_projector && (
-                            <div className="flex items-center text-xs text-gray-700 dark:text-gray-300">
-                              <MonitorPlay className="w-3 h-3 mr-1" />
-                              Projector
-                            </div>
-                          )}
-                          {classroom.has_ac && (
-                            <div className="flex items-center text-xs text-gray-700 dark:text-gray-300">
-                              <Wind className="w-3 h-3 mr-1" />
-                              AC
-                            </div>
-                          )}
-                          {classroom.has_computers && (
-                            <div className="flex items-center text-xs text-gray-700 dark:text-gray-300">
-                              <Computer className="w-3 h-3 mr-1" />
-                              Computers
-                            </div>
-                          )}
-                          {classroom.has_lab_equipment && (
-                            <div className="flex items-center text-xs text-gray-700 dark:text-gray-300">
-                              <FlaskConical className="w-3 h-3 mr-1" />
-                              Lab Equipment
-                            </div>
-                          )}
-                          {classroom.is_smart_classroom && (
-                            <span className="px-2 py-0.5 bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 text-xs rounded-full">
-                              Smart
-                            </span>
-                          )}
-                        </div>
+                    )}
+                    {room.floor !== undefined && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Floor</span>
+                        <span className="text-gray-900">{room.floor}</span>
                       </div>
-
-                      {classroom.location_notes && (
-                        <div className="pt-2">
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{classroom.location_notes}</p>
-                        </div>
-                      )}
-                    </div>
+                    )}
                   </div>
-                ))
-              )}
+
+                  <div className="mt-3 flex gap-2">
+                    {room.has_projector && (
+                      <span className="px-2 py-1 bg-purple-50 text-purple-600 rounded text-xs">Projector</span>
+                    )}
+                    {room.has_ac && (
+                      <span className="px-2 py-1 bg-blue-50 text-blue-600 rounded text-xs">AC</span>
+                    )}
+                  </div>
+                </motion.div>
+              ))}
             </div>
-          </div>
-        </main>
+          )}
+        </div>
       </div>
-    </>
+    </FacultyCreatorLayout>
   );
-}
+};
+
+export default ClassroomsPage;

@@ -1,180 +1,191 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
-import { Header } from '@/components/Header';
-import LeftSidebar from '@/components/LeftSidebar';
-import { Users, Search, Plus, Mail, Phone } from 'lucide-react';
+import { Users, Search, RefreshCw, Mail, Phone, Award, BookOpen, Building } from 'lucide-react';
+import toast from 'react-hot-toast';
+import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
 
-interface User {
-  role: string;
+interface Faculty {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone?: string;
+  college_uid: string;
   faculty_type: string;
-  department_id: string;
-  department_code?: string;
   department_name?: string;
+  department_code?: string;
+  max_hours_per_day?: number;
+  max_hours_per_week?: number;
+  subjects: string[];
+  is_active: boolean;
 }
 
-export default function FacultyListPage() {
+const FacultyListPage: React.FC = () => {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
+  const [faculty, setFaculty] = useState<Faculty[]>([]);
   const [loading, setLoading] = useState(true);
-  const [facultyList, setFacultyList] = useState<any[]>([]);
-  const [search, setSearch] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
 
-  useEffect(() => {
+  useEffect(() => { fetchFaculty(); }, []);
+
+  const getAuthHeaders = () => {
     const userData = localStorage.getItem('user');
-    if (!userData) {
-      router.push('/login');
-      return;
-    }
+    if (!userData) { router.push('/login'); return null; }
+    return { 'Authorization': `Bearer ${Buffer.from(userData).toString('base64')}`, 'Content-Type': 'application/json' };
+  };
 
+  const fetchFaculty = async () => {
     try {
-      const parsedUser = JSON.parse(userData);
-      if (parsedUser.role !== 'faculty') {
-        router.push('/login');
-        return;
+      setLoading(true);
+      const headers = getAuthHeaders();
+      if (!headers) return;
+      const res = await fetch('/api/faculty', { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setFaculty(data.data || []);
       }
-      const facultyType = parsedUser.faculty_type;
-      if (facultyType !== 'creator' && facultyType !== 'publisher') {
-        router.push('/student/dashboard');
-        return;
-      }
-      setUser(parsedUser);
-      setLoading(false);
-    } catch (error) {
-      console.error('Error parsing user data:', error);
-      localStorage.removeItem('user');
-      router.push('/login');
-    }
-  }, [router]);
+    } catch { toast.error('Error loading faculty'); } finally { setLoading(false); }
+  };
 
-  // Fetch faculty list (filtered by department for non-admin users)
-  useEffect(() => {
-    async function fetchFaculty() {
-      try {
-        // Only fetch after user is loaded
-        if (!user) return;
-        
-        // Use admin API with authentication
-        const authToken = Buffer.from(JSON.stringify(user)).toString('base64');
-        const response = await fetch('/api/admin/faculty', {
-          headers: {
-            'Authorization': `Bearer ${authToken}`
-          }
-        });
-        
-        console.log('Response status:', response.status);
-        const result = await response.json();
-        console.log('API Result:', result);
-        
-        if (result.faculty && Array.isArray(result.faculty)) {
-          console.log(`Found ${result.faculty.length} faculty members`);
-          setFacultyList(result.faculty);
-        } else {
-          console.error('Failed to fetch faculty or no data:', result);
-          setFacultyList([]);
-        }
-      } catch (error) {
-        console.error('Error fetching faculty:', error);
-        setFacultyList([]);
-      }
-    }
-    fetchFaculty();
-  }, [user]);
+  const filteredFaculty = faculty.filter(f => {
+    const matchesSearch = `${f.first_name} ${f.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      f.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      f.college_uid?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesType = typeFilter === 'all' || f.faculty_type === typeFilter;
+    return matchesSearch && matchesType;
+  });
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return null;
-  }
+  const getFacultyTypeColor = (type: string) => {
+    const colors: Record<string, string> = {
+      'creator': 'bg-blue-100 text-blue-700',
+      'publisher': 'bg-purple-100 text-purple-700',
+      'general': 'bg-gray-100 text-gray-700',
+    };
+    return colors[type] || 'bg-gray-100 text-gray-700';
+  };
 
   return (
-    <>
-      <Header />
-      <div className="flex">
-        <LeftSidebar />
-        <main className="flex-1 min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-900 p-6">
-          <div className="max-w-7xl mx-auto space-y-6">
-            {/* Page Header */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Faculty Directory</h1>
-                <p className="text-gray-600 dark:text-gray-300">
-                  {user?.department_name || user?.department_code || 'Your Department'} - Faculty Members {facultyList.length > 0 && `(${facultyList.length})`}
-                </p>
-              </div>
-            </div>
+    <FacultyCreatorLayout activeTab="faculty">
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">Faculty</h1>
+            <p className="text-gray-600">View and manage faculty members in your department</p>
+          </div>
+          <button onClick={fetchFaculty} className="flex items-center gap-2 px-4 py-3 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 bg-white">
+            <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
 
-            {/* Search Bar */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  placeholder="Search faculty by name, email..."
-                  className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
-                />
-              </div>
+        {/* Search & Filters */}
+        <div className="bg-white rounded-2xl shadow-lg p-6">
+          <div className="flex gap-4 flex-wrap">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search faculty..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none"
+              />
             </div>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="px-4 py-3 border border-gray-200 rounded-xl min-w-[150px]"
+            >
+              <option value="all">All Types</option>
+              <option value="creator">Creator</option>
+              <option value="publisher">Publisher</option>
+              <option value="general">General</option>
+            </select>
+          </div>
+        </div>
 
-            {/* Faculty Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {facultyList
-                .filter(faculty => {
-                  const q = search.toLowerCase();
-                  return (
-                    faculty.first_name.toLowerCase().includes(q) ||
-                    faculty.last_name.toLowerCase().includes(q) ||
-                    faculty.email.toLowerCase().includes(q)
-                  );
-                })
-                .map(faculty => (
-                  <div key={faculty.id} className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
-                    <div className="flex items-start space-x-4">
-                      <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-full flex items-center justify-center text-white text-xl font-bold">
-                        {faculty.first_name[0]}{faculty.last_name[0]}
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-blue-100"><Users size={24} className="text-blue-600" /></div>
+            <div><p className="text-2xl font-bold text-gray-900">{faculty.length}</p><p className="text-sm text-gray-500">Total Faculty</p></div>
+          </div>
+          <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-purple-100"><Award size={24} className="text-purple-600" /></div>
+            <div><p className="text-2xl font-bold text-gray-900">{faculty.filter(f => f.faculty_type === 'creator').length}</p><p className="text-sm text-gray-500">Creators</p></div>
+          </div>
+          <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-green-100"><BookOpen size={24} className="text-green-600" /></div>
+            <div><p className="text-2xl font-bold text-gray-900">{faculty.filter(f => f.faculty_type === 'publisher').length}</p><p className="text-sm text-gray-500">Publishers</p></div>
+          </div>
+          <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-orange-100"><Building size={24} className="text-orange-600" /></div>
+            <div><p className="text-2xl font-bold text-gray-900">{new Set(faculty.map(f => f.department_name).filter(Boolean)).size}</p><p className="text-sm text-gray-500">Departments</p></div>
+          </div>
+        </div>
+
+        {/* Faculty Grid */}
+        <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+          {loading ? (
+            <div className="text-center py-12 text-gray-500">Loading...</div>
+          ) : filteredFaculty.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              <Users size={40} className="mx-auto mb-3 text-gray-300" />
+              <p>No faculty found</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
+              {filteredFaculty.map((f, i) => (
+                <motion.div
+                  key={f.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.03 }}
+                  className="bg-gray-50 rounded-xl p-5 hover:shadow-md transition-all"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-full bg-[#4D869C] text-white flex items-center justify-center font-bold text-lg">
+                      {f.first_name?.[0]}{f.last_name?.[0]}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-bold text-gray-900">{f.first_name} {f.last_name}</h3>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${getFacultyTypeColor(f.faculty_type)}`}>
+                          {f.faculty_type}
+                        </span>
                       </div>
-                      <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{faculty.title ? faculty.title + ' ' : ''}{faculty.first_name} {faculty.last_name}</h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {faculty.departments?.name || 'No Department Assigned'}
-                          {faculty.faculty_type && (
-                            <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
-                              {faculty.faculty_type.charAt(0).toUpperCase() + faculty.faculty_type.slice(1)}
-                            </span>
-                          )}
-                        </p>
-                        <div className="mt-3 space-y-2">
-                          <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
-                            <Mail className="w-4 h-4 mr-2" />
-                            {faculty.email}
+                      <p className="text-sm text-gray-500 mb-2">{f.department_name || 'No department'}</p>
+
+                      <div className="space-y-1 text-sm">
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <Mail size={14} />
+                          <span className="truncate">{f.email}</span>
+                        </div>
+                        {f.phone && (
+                          <div className="flex items-center gap-2 text-gray-600">
+                            <Phone size={14} />
+                            <span>{f.phone}</span>
                           </div>
-                          <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
-                            <Phone className="w-4 h-4 mr-2" />
-                            {faculty.phone || 'N/A'}
-                          </div>
+                        )}
+                        <div className="flex items-center gap-2 text-gray-500 text-xs mt-2">
+                          <span className="font-mono bg-gray-200 px-2 py-0.5 rounded">{f.college_uid}</span>
                         </div>
                       </div>
+
+
                     </div>
                   </div>
-                ))}
-              {facultyList.length === 0 && (
-                <div className="col-span-3 text-center text-gray-500 dark:text-gray-400 py-12">
-                  No faculty found for your department.
-                </div>
-              )}
+                </motion.div>
+              ))}
             </div>
-          </div>
-        </main>
+          )}
+        </div>
       </div>
-    </>
+    </FacultyCreatorLayout>
   );
-}
+};
+
+export default FacultyListPage;

@@ -22,7 +22,7 @@ async function getAuthenticatedUser(request: NextRequest) {
   try {
     const userString = Buffer.from(token, 'base64').toString();
     const user = JSON.parse(userString);
-    
+
     // Verify user exists and is active
     const { data: dbUser, error } = await supabase
       .from('users')
@@ -77,8 +77,10 @@ export async function GET(request: NextRequest) {
         requires_lab,
         requires_projector,
         is_core_subject,
+        nep_category,
         description,
         is_active,
+        course_id,
         department:departments!subjects_department_id_fkey(id, name, code)
       `)
       .eq('is_active', true)
@@ -107,10 +109,10 @@ export async function GET(request: NextRequest) {
 
       if (deptError) {
         console.error('Error fetching department:', deptError);
-        return NextResponse.json({ 
-          success: false, 
+        return NextResponse.json({
+          success: false,
           error: 'Department not found',
-          data: [] 
+          data: []
         });
       }
 
@@ -123,28 +125,29 @@ export async function GET(request: NextRequest) {
 
     if (subjectsError) {
       console.error('Error fetching subjects:', subjectsError);
-      return NextResponse.json({ 
-        success: false, 
+      return NextResponse.json({
+        success: false,
         error: subjectsError.message,
-        data: [] 
+        data: []
       }, { status: 500 });
     }
 
     console.log(`Found ${subjectsData?.length || 0} subjects`);
 
     // Transform data - now using semester column directly from subjects table
-      const transformedData = subjectsData?.map((subject: any) => {
+    const transformedData = subjectsData?.map((subject: any) => {
       const department = Array.isArray(subject.department) ? subject.department[0] : subject.department;
-      
+
       // Get semester directly from subject (single value, not array)
       const semester = subject.semester;
-      
+
       console.log(`Subject ${subject.code}: Semester ${semester}, Type: ${subject.subject_type}`);
-      
+
       return {
         id: subject.id,
         name: subject.name,
         code: subject.code,
+        course_id: subject.course_id,
         college_id: subject.college_id,
         department_id: subject.department_id,
         department_name: department?.name || '',
@@ -157,6 +160,7 @@ export async function GET(request: NextRequest) {
         requires_lab: subject.requires_lab,
         requires_projector: subject.requires_projector,
         is_core_subject: subject.is_core_subject,
+        nep_category: subject.nep_category,
         description: subject.description,
         is_active: subject.is_active
       };
@@ -169,12 +173,12 @@ export async function GET(request: NextRequest) {
 
     // Group by semester
     const groupedBySemester: { [key: number]: any[] } = {};
-    
+
     // Initialize all semester arrays (1-8)
     for (let sem = 1; sem <= 8; sem++) {
       groupedBySemester[sem] = [];
     }
-    
+
     // Populate with subjects based on their semester column
     filteredData.forEach(subject => {
       const sem = subject.semester;
@@ -195,8 +199,8 @@ export async function GET(request: NextRequest) {
     const theorySubjects = filteredData.filter(s => s.subject_type === 'THEORY').length;
     const labSubjects = filteredData.filter(s => s.subject_type === 'LAB' || s.subject_type === 'PRACTICAL').length;
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       data: filteredData,
       groupedBySemester,
       statistics: {
@@ -210,8 +214,8 @@ export async function GET(request: NextRequest) {
     });
   } catch (error: any) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ 
-      success: false, 
+    return NextResponse.json({
+      success: false,
       error: 'Internal server error',
       data: []
     }, { status: 500 });

@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Header } from '@/components/Header';
-import LeftSidebar from '@/components/LeftSidebar';
+import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
 import TimetableCreatorIntegrated from '@/components/TimetableCreatorIntegrated';
+import { motion } from 'framer-motion';
+import { Bot, Sparkles, Zap } from 'lucide-react';
 
 export default function AITimetableCreatorPage() {
   const router = useRouter();
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -20,12 +21,12 @@ export default function AITimetableCreatorPage() {
 
     try {
       const parsedUser = JSON.parse(userData);
-      
+
       if (parsedUser.role !== 'faculty' || parsedUser.faculty_type !== 'creator') {
         router.push('/faculty/dashboard');
         return;
       }
-      
+
       setUser(parsedUser);
       setLoading(false);
     } catch (error) {
@@ -37,8 +38,11 @@ export default function AITimetableCreatorPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen bg-gradient-to-br from-[#CDE8E5] via-[#EEF7FF] to-[#7AB2B2] flex items-center justify-center">
+        <div className="text-center bg-white rounded-2xl p-10 shadow-lg">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-[#4D869C] border-t-transparent mx-auto"></div>
+          <p className="mt-6 text-gray-600 font-medium">Loading AI Timetable Creator...</p>
+        </div>
       </div>
     );
   }
@@ -48,14 +52,43 @@ export default function AITimetableCreatorPage() {
   }
 
   return (
-    <>
-      <Header />
-      <div className="flex">
-        <LeftSidebar />
-        <main className="flex-1 min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-900 p-6">
+    <FacultyCreatorLayout activeTab="ai-creator">
+      <div className="space-y-6">
+        {/* Header Banner */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-gradient-to-r from-[#4D869C] via-[#5a9aae] to-[#7AB2B2] rounded-2xl p-6 shadow-lg"
+        >
+          <div className="flex items-center gap-4">
+            <div className="p-4 bg-white/20 backdrop-blur-sm rounded-xl">
+              <Bot size={32} className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-white mb-1">AI Timetable Creator</h1>
+              <p className="text-white/80">Generate optimized timetables using advanced AI algorithms</p>
+            </div>
+            <div className="ml-auto flex gap-2">
+              <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-white/20 backdrop-blur-sm text-white rounded-full text-sm font-medium">
+                <Sparkles size={14} /> AI Powered
+              </span>
+              <span className="inline-flex items-center gap-1 px-3 py-1.5 bg-white/20 backdrop-blur-sm text-white rounded-full text-sm font-medium">
+                <Zap size={14} /> Smart Optimization
+              </span>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Main Content */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white rounded-2xl shadow-lg border border-gray-100"
+        >
           <TimetableCreatorIntegrated user={user} />
-        </main>
+        </motion.div>
       </div>
-    </>
+    </FacultyCreatorLayout>
   );
 }

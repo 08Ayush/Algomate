@@ -2,22 +2,22 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Header } from '@/components/Header';
-import LeftSidebar from '@/components/LeftSidebar';
+import { motion } from 'framer-motion';
 import { NotificationComposer } from '@/components/NotificationComposer';
-import { 
-  Bell, 
-  CheckCircle, 
-  AlertCircle, 
-  Calendar, 
-  RefreshCw, 
-  Trash2,
+import {
+  Bell,
+  CheckCircle,
+  AlertCircle,
+  Calendar,
+  RefreshCw,
   Filter,
   CheckCheck,
   Clock,
-  X,
   ArrowRight,
-  Send
+  Send,
+  ArrowLeft,
+  Home,
+  Info
 } from 'lucide-react';
 
 interface Notification {
@@ -51,7 +51,6 @@ export default function NotificationsPage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [filteredNotifications, setFilteredNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'unread' | 'read'>('all');
@@ -67,6 +66,13 @@ export default function NotificationsPage() {
 
     try {
       const parsedUser = JSON.parse(userData);
+
+      // Redirect faculty users to the faculty notifications page
+      if (parsedUser.role === 'faculty') {
+        router.replace('/faculty/notifications');
+        return;
+      }
+
       setUser(parsedUser);
       fetchNotifications(parsedUser.id);
     } catch (error) {
@@ -75,10 +81,6 @@ export default function NotificationsPage() {
       router.push('/login');
     }
   }, [router]);
-
-  useEffect(() => {
-    applyFilters();
-  }, [filter, typeFilter, notifications]);
 
   const fetchNotifications = async (userId: string) => {
     try {
@@ -97,23 +99,12 @@ export default function NotificationsPage() {
     }
   };
 
-  const applyFilters = () => {
-    let filtered = [...notifications];
-
-    // Apply read/unread filter
-    if (filter === 'unread') {
-      filtered = filtered.filter(n => !n.is_read);
-    } else if (filter === 'read') {
-      filtered = filtered.filter(n => n.is_read);
-    }
-
-    // Apply type filter
-    if (typeFilter !== 'all') {
-      filtered = filtered.filter(n => n.type === typeFilter);
-    }
-
-    setFilteredNotifications(filtered);
-  };
+  const filteredNotifications = notifications.filter(n => {
+    if (filter === 'unread' && n.is_read) return false;
+    if (filter === 'read' && !n.is_read) return false;
+    if (typeFilter !== 'all' && n.type !== typeFilter) return false;
+    return true;
+  });
 
   const markAsRead = async (notificationIds: string[]) => {
     if (!user) return;
@@ -170,39 +161,33 @@ export default function NotificationsPage() {
       markAsRead([notification.id]);
     }
 
-    // Navigate to timetable if applicable
     if (notification.timetable_id) {
-      router.push(`/faculty/timetables?id=${notification.timetable_id}`);
+      // Redirect based on user role
+      if (user?.role === 'college_admin') {
+        router.push(`/college-admin/timetables/${notification.timetable_id}`);
+      } else if (user?.role === 'student') {
+        router.push(`/student/timetable`);
+      }
     }
   };
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
-      case 'timetable_published':
-        return <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />;
-      case 'schedule_change':
-        return <RefreshCw className="w-6 h-6 text-blue-600 dark:text-blue-400" />;
-      case 'system_alert':
-        return <AlertCircle className="w-6 h-6 text-orange-600 dark:text-orange-400" />;
-      case 'approval_request':
-        return <Calendar className="w-6 h-6 text-purple-600 dark:text-purple-400" />;
-      default:
-        return <Bell className="w-6 h-6 text-gray-600 dark:text-gray-400" />;
+      case 'timetable_published': return <CheckCircle size={20} className="text-green-600" />;
+      case 'schedule_change': return <RefreshCw size={20} className="text-blue-600" />;
+      case 'system_alert': return <AlertCircle size={20} className="text-orange-600" />;
+      case 'approval_request': return <Calendar size={20} className="text-purple-600" />;
+      default: return <Bell size={20} className="text-gray-600" />;
     }
   };
 
   const getNotificationBgColor = (type: string) => {
     switch (type) {
-      case 'timetable_published':
-        return 'bg-green-100 dark:bg-green-900';
-      case 'schedule_change':
-        return 'bg-blue-100 dark:bg-blue-900';
-      case 'system_alert':
-        return 'bg-orange-100 dark:bg-orange-900';
-      case 'approval_request':
-        return 'bg-purple-100 dark:bg-purple-900';
-      default:
-        return 'bg-gray-100 dark:bg-gray-800';
+      case 'timetable_published': return 'bg-green-100';
+      case 'schedule_change': return 'bg-blue-100';
+      case 'system_alert': return 'bg-orange-100';
+      case 'approval_request': return 'bg-purple-100';
+      default: return 'bg-gray-100';
     }
   };
 
@@ -220,145 +205,186 @@ export default function NotificationsPage() {
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
+  const getDashboardRoute = () => {
+    if (!user) return '/';
+    switch (user.role) {
+      case 'college_admin': return '/college-admin/dashboard';
+      case 'super_admin': return '/super-admin/dashboard';
+      case 'student': return '/student/dashboard';
+      default: return '/';
+    }
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-white dark:bg-slate-950 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen bg-gradient-to-br from-[#CDE8E5] via-[#EEF7FF] to-[#7AB2B2] flex items-center justify-center">
+        <div className="text-center bg-white rounded-2xl p-10 shadow-lg">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-[#4D869C] border-t-transparent mx-auto"></div>
+          <p className="mt-6 text-gray-600 font-medium">Loading notifications...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <>
-      <Header />
-      <div className="flex">
-        <LeftSidebar />
-        <main className="flex-1 min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-900 p-6">
-          <div className="max-w-5xl mx-auto space-y-6">
-            {/* Header Section */}
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div className="min-h-screen bg-gradient-to-br from-[#CDE8E5] via-[#EEF7FF] to-[#7AB2B2]">
+      {/* Header */}
+      <header className="fixed top-0 left-0 right-0 h-[70px] bg-gradient-to-r from-[#4D869C] to-[#7AB2B2] shadow-lg z-50 flex items-center justify-between px-8">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => router.push(getDashboardRoute())}
+            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+          >
+            <ArrowLeft size={20} className="text-white" />
+          </button>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+              <Bell size={20} className="text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-white">Notifications</h1>
+              <p className="text-xs text-white/70">Academic Compass</p>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => router.push(getDashboardRoute())}
+            className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-colors"
+          >
+            <Home size={16} /> Dashboard
+          </button>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="pt-[90px] pb-10 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-4xl mx-auto space-y-6">
+          {/* Header Section */}
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col md:flex-row md:items-center md:justify-between gap-4"
+          >
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
+                <Bell size={28} /> Notifications
+              </h1>
+              <p className="text-gray-600">
+                {unreadCount > 0 ? `You have ${unreadCount} unread notification${unreadCount > 1 ? 's' : ''}` : 'All caught up!'}
+              </p>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => user && fetchNotifications(user.id)}
+                disabled={refreshing}
+                className="px-4 py-2.5 bg-white text-gray-700 hover:bg-gray-50 rounded-xl transition-colors flex items-center gap-2 shadow-sm border border-gray-200 font-medium disabled:opacity-50"
+              >
+                <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} /> Refresh
+              </button>
+              {unreadCount > 0 && (
+                <button
+                  onClick={markAllAsRead}
+                  className="px-4 py-2.5 bg-[#4D869C] text-white hover:shadow-lg rounded-xl transition-all flex items-center gap-2 font-medium"
+                >
+                  <CheckCheck size={16} /> Mark all read
+                </button>
+              )}
+            </div>
+          </motion.div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-blue-100"><Bell size={24} className="text-blue-600" /></div>
               <div>
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-3">
-                  <Bell className="w-8 h-8" />
-                  Notifications
-                </h1>
-                <p className="text-gray-600 dark:text-gray-300">
-                  {unreadCount > 0 ? `You have ${unreadCount} unread notification${unreadCount > 1 ? 's' : ''}` : 'All caught up!'}
+                <p className="text-2xl font-bold text-gray-900">{notifications.length}</p>
+                <p className="text-sm text-gray-500">Total</p>
+              </div>
+            </motion.div>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-orange-100"><Info size={24} className="text-orange-600" /></div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{unreadCount}</p>
+                <p className="text-sm text-gray-500">Unread</p>
+              </div>
+            </motion.div>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-green-100"><CheckCircle size={24} className="text-green-600" /></div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">{notifications.filter(n => n.is_read).length}</p>
+                <p className="text-sm text-gray-500">Read</p>
+              </div>
+            </motion.div>
+          </div>
+
+          {/* Filters */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="bg-white rounded-2xl shadow-lg p-6"
+          >
+            <div className="flex flex-col md:flex-row gap-6">
+              <div className="flex-1">
+                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1">
+                  <Filter size={14} /> Filter by Status
+                </label>
+                <div className="flex gap-2">
+                  {(['all', 'unread', 'read'] as const).map(f => (
+                    <button
+                      key={f}
+                      onClick={() => setFilter(f)}
+                      className={`px-4 py-2 rounded-xl transition-colors font-medium ${filter === f
+                          ? 'bg-[#4D869C] text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                    >
+                      {f === 'all' ? `All (${notifications.length})` :
+                        f === 'unread' ? `Unread (${unreadCount})` :
+                          `Read (${notifications.filter(n => n.is_read).length})`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex-1">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Filter by Type</label>
+                <select
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#4D869C] outline-none"
+                >
+                  <option value="all">All Types</option>
+                  <option value="timetable_published">Timetable Published</option>
+                  <option value="schedule_change">Schedule Changes</option>
+                  <option value="system_alert">System Alerts</option>
+                  <option value="approval_request">Approval Requests</option>
+                </select>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Notifications List */}
+          <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+            {filteredNotifications.length === 0 ? (
+              <div className="text-center py-16">
+                <Bell size={48} className="text-gray-300 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">No notifications</h3>
+                <p className="text-gray-500">
+                  {filter === 'unread' ? "You're all caught up!" : 'No notifications to display.'}
                 </p>
               </div>
-              <div className="flex gap-2">
-                {/* Send Notification Button (only for creators and publishers) */}
-                {user && user.role === 'faculty' && (user.faculty_type === 'creator' || user.faculty_type === 'publisher') && (
-                  <button
-                    onClick={() => setShowNotificationComposer(true)}
-                    className="px-4 py-2 bg-purple-600 text-white hover:bg-purple-700 rounded-lg transition-colors flex items-center gap-2"
-                  >
-                    <Send className="w-4 h-4" />
-                    Send Notification
-                  </button>
-                )}
-                <button
-                  onClick={() => user && fetchNotifications(user.id)}
-                  disabled={refreshing}
-                  className="px-4 py-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                  Refresh
-                </button>
-                {unreadCount > 0 && (
-                  <button
-                    onClick={markAllAsRead}
-                    className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2"
-                  >
-                    <CheckCheck className="w-4 h-4" />
-                    Mark all as read
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Filters */}
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-4">
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    <Filter className="w-4 h-4 inline mr-1" />
-                    Filter by Status
-                  </label>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setFilter('all')}
-                      className={`px-4 py-2 rounded-lg transition-colors ${
-                        filter === 'all'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600'
-                      }`}
-                    >
-                      All ({notifications.length})
-                    </button>
-                    <button
-                      onClick={() => setFilter('unread')}
-                      className={`px-4 py-2 rounded-lg transition-colors ${
-                        filter === 'unread'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600'
-                      }`}
-                    >
-                      Unread ({unreadCount})
-                    </button>
-                    <button
-                      onClick={() => setFilter('read')}
-                      className={`px-4 py-2 rounded-lg transition-colors ${
-                        filter === 'read'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600'
-                      }`}
-                    >
-                      Read ({notifications.filter(n => n.is_read).length})
-                    </button>
-                  </div>
-                </div>
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Filter by Type
-                  </label>
-                  <select
-                    value={typeFilter}
-                    onChange={(e) => setTypeFilter(e.target.value)}
-                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
-                  >
-                    <option value="all">All Types</option>
-                    <option value="timetable_published">Timetable Published</option>
-                    <option value="schedule_change">Schedule Changes</option>
-                    <option value="system_alert">System Alerts</option>
-                    <option value="approval_request">Approval Requests</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Notifications List */}
-            <div className="space-y-3">
-              {filteredNotifications.length === 0 ? (
-                <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-12 text-center">
-                  <Bell className="w-16 h-16 text-gray-400 dark:text-gray-600 mx-auto mb-4" />
-                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                    No notifications
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-400">
-                    {filter === 'unread'
-                      ? "You're all caught up! No unread notifications."
-                      : 'No notifications to display.'}
-                  </p>
-                </div>
-              ) : (
-                filteredNotifications.map((notification) => (
-                  <div
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {filteredNotifications.map((notification, i) => (
+                  <motion.div
                     key={notification.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.03 }}
                     onClick={() => handleNotificationClick(notification)}
-                    className={`bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-700 p-6 transition-all hover:shadow-md cursor-pointer ${
-                      !notification.is_read ? 'ring-2 ring-blue-500 dark:ring-blue-400' : ''
-                    }`}
+                    className={`p-6 hover:bg-gray-50 cursor-pointer transition-colors ${!notification.is_read ? 'bg-blue-50/50' : ''
+                      }`}
                   >
                     <div className="flex items-start gap-4">
                       <div className={`p-3 ${getNotificationBgColor(notification.type)} rounded-xl shrink-0`}>
@@ -366,40 +392,45 @@ export default function NotificationsPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">
-                          <h3 className="font-semibold text-gray-900 dark:text-white mb-1 flex items-center gap-2">
+                          <h3 className="font-bold text-gray-900 flex items-center gap-2">
                             {notification.title}
                             {!notification.is_read && (
-                              <span className="inline-block w-2 h-2 bg-blue-600 rounded-full"></span>
+                              <span className="inline-block w-2 h-2 bg-[#4D869C] rounded-full"></span>
                             )}
                           </h3>
                           {notification.timetable_id && (
-                            <ArrowRight className="w-5 h-5 text-gray-400 shrink-0" />
+                            <ArrowRight size={18} className="text-gray-400 shrink-0" />
                           )}
                         </div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3 line-clamp-2">
-                          {notification.message}
-                        </p>
-                        <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-500">
+                        <p className="text-sm text-gray-600 mt-1 line-clamp-2">{notification.message}</p>
+                        <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
                           <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {formatTimeAgo(notification.created_at)}
+                            <Clock size={12} /> {formatTimeAgo(notification.created_at)}
                           </span>
-                          {notification.is_read && notification.read_at && (
-                            <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
-                              <CheckCircle className="w-3 h-3" />
-                              Read
+                          {notification.is_read && (
+                            <span className="flex items-center gap-1 text-green-600">
+                              <CheckCircle size={12} /> Read
                             </span>
                           )}
                         </div>
                       </div>
+                      {!notification.is_read && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); markAsRead([notification.id]); }}
+                          className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-[#4D869C]"
+                          title="Mark as read"
+                        >
+                          <CheckCircle size={16} />
+                        </button>
+                      )}
                     </div>
-                  </div>
-                ))
-              )}
-            </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
           </div>
-        </main>
-      </div>
+        </div>
+      </main>
 
       {/* Notification Composer Modal */}
       {showNotificationComposer && user && (
@@ -407,13 +438,12 @@ export default function NotificationsPage() {
           isOpen={showNotificationComposer}
           onClose={() => {
             setShowNotificationComposer(false);
-            // Refresh notifications after sending
             if (user) fetchNotifications(user.id);
           }}
           userId={user.id}
           userDepartmentId={user.department_id}
         />
       )}
-    </>
+    </div>
   );
 }

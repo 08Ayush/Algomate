@@ -1,38 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
-import { Header } from '@/components/Header';
-import LeftSidebar from '@/components/LeftSidebar';
-import { supabase } from '@/lib/supabase';
-import { Plus, Trash2, Search, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
-
-interface Faculty {
-  id: string;
-  first_name: string;
-  last_name: string;
-  email: string;
-  department_id: string;
-  course_id?: string;
-}
-
-interface Subject {
-  id: string;
-  name: string;
-  code: string;
-  semester: number;
-  subject_type: string;
-  credits_per_week: number;
-  department_id: string;
-  course_id?: string;
-}
-
-interface Course {
-  id: string;
-  title: string;
-  code: string;
-  nature_of_course?: string;
-}
+import { Sparkles, Search, RefreshCw, BookOpen, Users, Award, Plus, X, Trash2, GraduationCap } from 'lucide-react';
+import toast from 'react-hot-toast';
+import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
 
 interface Qualification {
   id: string;
@@ -40,709 +13,514 @@ interface Qualification {
   subject_id: string;
   proficiency_level: number;
   preference_score: number;
+  teaching_load_weight: number;
   is_primary_teacher: boolean;
   can_handle_lab: boolean;
   can_handle_tutorial: boolean;
-  faculty: Faculty;
-  subject: Subject;
+  faculty?: { first_name: string; last_name: string; email: string };
+  subject?: {
+    name: string;
+    code: string;
+    subject_type: string;
+    semester: number;
+  };
+  subjects?: { name: string; code: string };
 }
 
-export default function FacultyQualificationsPage() {
+interface Subject {
+  id: string;
+  name: string;
+  code: string;
+  subject_type?: string;
+  semester?: number;
+  course_id?: string;
+}
+
+interface Faculty {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+}
+
+interface Course {
+  id: string;
+  title: string;
+  code: string;
+}
+
+const QualificationsPage: React.FC = () => {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
   const [qualifications, setQualifications] = useState<Qualification[]>([]);
-  const [faculty, setFaculty] = useState<Faculty[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [facultyList, setFacultyList] = useState<Faculty[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
-  const [courseName, setCourseName] = useState<string>('');
-  const [showAddModal, setShowAddModal] = useState(false);
+
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSemester, setSelectedSemester] = useState<number | 'all'>('all');
-  const [selectedCourseFilter, setSelectedCourseFilter] = useState<string>('all');
-  const [saving, setSaving] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  // Form state
-  const [selectedFaculty, setSelectedFaculty] = useState('');
-  const [selectedCourse, setSelectedCourse] = useState('');
-  const [selectedSemesterModal, setSelectedSemesterModal] = useState<number | ''>('');
-  const [selectedSubject, setSelectedSubject] = useState('');
-  const [proficiencyLevel, setProficiencyLevel] = useState(7);
-  const [preferenceScore, setPreferenceScore] = useState(5);
-  const [isPrimaryTeacher, setIsPrimaryTeacher] = useState(false);
-  const [canHandleLab, setCanHandleLab] = useState(true);
-  const [canHandleTutorial, setCanHandleTutorial] = useState(true);
+  // Form State
+  const [form, setForm] = useState({
+    faculty_id: '',
+    course_id: '',     // Filter helper
+    semester: '',      // Filter helper
+    subject_id: '',
+    proficiency_level: 7,
+    preference_score: 5,
+    is_primary_teacher: false,
+    can_handle_lab: true,
+    can_handle_tutorial: true
+  });
 
-  useEffect(() => {
+  useEffect(() => { fetchData(); }, []);
+
+  const getAuthHeaders = () => {
     const userData = localStorage.getItem('user');
-    if (!userData) {
-      router.push('/login');
-      return;
-    }
+    if (!userData) { router.push('/login'); return null; }
+    return { 'Authorization': `Bearer ${Buffer.from(userData).toString('base64')}`, 'Content-Type': 'application/json' };
+  };
 
-    try {
-      const parsedUser = JSON.parse(userData);
-      
-      if (parsedUser.role !== 'faculty') {
-        router.push('/login');
-        return;
-      }
-      
-      setUser(parsedUser);
-      loadData(parsedUser);
-    } catch (error) {
-      console.error('Error parsing user data:', error);
-      localStorage.removeItem('user');
-      router.push('/login');
-    }
-  }, [router]);
-
-  const loadData = async (userData: any) => {
+  const fetchData = async () => {
     try {
       setLoading(true);
+      const headers = getAuthHeaders();
+      if (!headers) return;
 
-      // Get user's course_id (optional)
-      const userCourseId = userData.course_id;
-      console.log('👤 Loading data for user:', userData.email);
+      const [qualRes, subRes, facRes, courseRes] = await Promise.all([
+        fetch('/api/faculty/qualifications', { headers }),
+        fetch('/api/subjects', { headers }),
+        fetch('/api/faculty', { headers }),
+        fetch('/api/admin/courses', { headers })
+      ]);
 
-      // Load course name if user has a course assigned
-      if (userCourseId) {
-        const { data: courseData, error: courseError } = await supabase
-          .from('courses')
-          .select('title, code')
-          .eq('id', userCourseId)
-          .single();
-
-        if (!courseError && courseData) {
-          setCourseName(`${courseData.title} (${courseData.code})`);
-        }
+      if (qualRes.ok) {
+        const data = await qualRes.json();
+        setQualifications(data.qualifications || data.data || []);
       }
-
-      // Load qualifications for the entire college (filtered by department for creators)
-      const authToken = Buffer.from(JSON.stringify(userData)).toString('base64');
-      const qualRes = await fetch('/api/faculty/qualifications', {
-        headers: {
-          'Authorization': `Bearer ${authToken}`
-        }
-      });
-      const qualData = await qualRes.json();
-      if (qualData.success) {
-        setQualifications(qualData.qualifications);
-        console.log(`✅ Loaded ${qualData.qualifications.length} qualifications`);
+      if (subRes.ok) {
+        const data = await subRes.json();
+        setSubjects(data.subjects || data.data || []);
       }
-
-      // Load all faculty from the college - filter by department for non-admin users
-      let facultyQuery = supabase
-        .from('users')
-        .select('id, first_name, last_name, email, department_id, course_id')
-        .eq('role', 'faculty')
-        .eq('college_id', userData.college_id)
-        .eq('is_active', true);
-
-      // Filter by department for publishers/creators
-      if (userData.role === 'faculty' && userData.department_id) {
-        facultyQuery = facultyQuery.eq('department_id', userData.department_id);
+      if (facRes.ok) {
+        const data = await facRes.json();
+        setFacultyList(data.data || []);
       }
-
-      const { data: facultyData, error: facultyError } = await facultyQuery
-        .order('first_name');
-
-      if (!facultyError && facultyData) {
-        setFaculty(facultyData);
-        console.log(`✅ Loaded ${facultyData.length} faculty from college (filtered by department if needed)`);
+      if (courseRes.ok) {
+        const data = await courseRes.json();
+        setCourses(data.courses || []);
       }
-
-      // Load all subjects from the college - filter by department for non-admin users
-      let subjectsQuery = supabase
-        .from('subjects')
-        .select('id, name, code, semester, subject_type, credits_per_week, department_id, course_id')
-        .eq('college_id', userData.college_id)
-        .eq('is_active', true);
-
-      // Filter by department for publishers/creators
-      if (userData.role === 'faculty' && userData.department_id) {
-        subjectsQuery = subjectsQuery.eq('department_id', userData.department_id);
-      }
-
-      const { data: subjectsData, error: subjectsError } = await subjectsQuery
-        .order('semester', { ascending: true })
-        .order('name');
-
-      if (!subjectsError && subjectsData) {
-        setSubjects(subjectsData);
-        console.log(`✅ Loaded ${subjectsData.length} subjects from college`);
-      }
-
-      // Load courses for the college
-      const { data: coursesData, error: coursesError } = await supabase
-        .from('courses')
-        .select('id, title, code, nature_of_course')
-        .eq('college_id', userData.college_id)
-        .order('code');
-
-      if (!coursesError && coursesData) {
-        setCourses(coursesData);
-        console.log(`✅ Loaded ${coursesData.length} courses`);
-      }
-
-      setLoading(false);
-    } catch (error) {
-      console.error('Error loading data:', error);
-      setLoading(false);
-    }
+    } catch { toast.error('Error loading data'); } finally { setLoading(false); }
   };
 
-  const handleAddQualification = async () => {
-    if (!selectedFaculty || !selectedSubject) {
-      alert('Please select both faculty and subject');
-      return;
-    }
-
-    setSaving(true);
-
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.faculty_id || !form.subject_id) { toast.error('Select faculty and subject'); return; }
+    setSubmitting(true);
     try {
-      const authToken = Buffer.from(JSON.stringify(user)).toString('base64');
-      const response = await fetch('/api/faculty/qualifications', {
+      const headers = getAuthHeaders();
+      if (!headers) return;
+      const res = await fetch('/api/faculty/qualifications', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        },
+        headers,
         body: JSON.stringify({
-          faculty_id: selectedFaculty,
-          subject_id: selectedSubject,
-          proficiency_level: proficiencyLevel,
-          preference_score: preferenceScore,
-          is_primary_teacher: isPrimaryTeacher,
-          can_handle_lab: canHandleLab,
-          can_handle_tutorial: canHandleTutorial
-        }),
+          faculty_id: form.faculty_id,
+          subject_id: form.subject_id,
+          proficiency_level: form.proficiency_level,
+          preference_score: form.preference_score,
+          is_primary_teacher: form.is_primary_teacher,
+          can_handle_lab: form.can_handle_lab,
+          can_handle_tutorial: form.can_handle_tutorial,
+        })
       });
-
-      const data = await response.json();
-
-      if (data.success) {
-        alert('Qualification added successfully!');
-        setShowAddModal(false);
+      if (res.ok) {
+        toast.success('Qualification added');
+        setShowForm(false);
         resetForm();
-        loadData(user);
+        fetchData();
       } else {
-        const errorMsg = data.details ? `${data.error}\n\nDetails: ${data.details}` : data.error;
-        console.error('API Error:', data);
-        alert(`Error: ${errorMsg}`);
+        const err = await res.json();
+        toast.error(err.error || 'Failed');
       }
-    } catch (error) {
-      console.error('Error adding qualification:', error);
-      alert('Error adding qualification. Please try again.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDeleteQualification = async (id: string, facultyName: string, subjectName: string) => {
-    if (!confirm(`Remove qualification: ${facultyName} for ${subjectName}?`)) {
-      return;
-    }
-
-    try {
-      const authToken = Buffer.from(JSON.stringify(user)).toString('base64');
-      const response = await fetch(`/api/faculty/qualifications?id=${id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${authToken}`
-        }
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        alert('Qualification deleted successfully!');
-        loadData(user);
-      } else {
-        alert(`Error: ${data.error}`);
-      }
-    } catch (error) {
-      console.error('Error deleting qualification:', error);
-      alert('Error deleting qualification. Please try again.');
-    }
+    } catch { toast.error('Error'); } finally { setSubmitting(false); }
   };
 
   const resetForm = () => {
-    setSelectedFaculty('');
-    setSelectedCourse('');
-    setSelectedSemesterModal('');
-    setSelectedSubject('');
-    setProficiencyLevel(7);
-    setPreferenceScore(5);
-    setIsPrimaryTeacher(false);
-    setCanHandleLab(true);
-    setCanHandleTutorial(true);
+    setForm({
+      faculty_id: '',
+      course_id: '',
+      semester: '',
+      subject_id: '',
+      proficiency_level: 7,
+      preference_score: 5,
+      is_primary_teacher: false,
+      can_handle_lab: true,
+      can_handle_tutorial: true
+    });
   };
 
-  // Filter subjects by selected course and semester (for adding new qualifications)
-  const filteredSubjectsBySelection = subjects.filter(s => {
-    const matchesCourse = !selectedCourse || s.course_id === selectedCourse;
-    const matchesSemester = !selectedSemesterModal || s.semester === selectedSemesterModal;
+  const handleDelete = async (id: string) => {
+    if (!confirm('Remove this qualification?')) return;
+    try {
+      const headers = getAuthHeaders();
+      if (!headers) return;
+      const res = await fetch(`/api/faculty/qualifications?id=${id}`, { method: 'DELETE', headers });
+      if (res.ok) {
+        toast.success('Qualification removed');
+        setQualifications(prev => prev.filter(q => q.id !== id));
+      } else {
+        toast.error('Failed to remove');
+      }
+    } catch { toast.error('Error'); }
+  };
+
+  const filteredQualifications = qualifications.filter(q =>
+    q.faculty?.first_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    q.faculty?.last_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (q.subject?.name || q.subjects?.name || '')?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (q.subject?.code || q.subjects?.code || '')?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const groupedByFaculty = filteredQualifications.reduce((acc, q) => {
+    const fid = q.faculty_id;
+    if (!acc[fid]) acc[fid] = { faculty: q.faculty, qualifications: [] };
+    acc[fid].qualifications.push(q);
+    return acc;
+  }, {} as Record<string, { faculty: any; qualifications: Qualification[] }>);
+
+  const getProficiencyColor = (level: number) => {
+    if (level >= 9) return 'bg-green-500';
+    if (level >= 7) return 'bg-blue-500';
+    if (level >= 5) return 'bg-yellow-500';
+    return 'bg-red-500';
+  };
+
+  // Filter subjects for the form
+  const filteredSubjects = subjects.filter(s => {
+    const matchesCourse = !form.course_id || (s.course_id === form.course_id);
+    const matchesSemester = !form.semester || (s.semester?.toString() === form.semester);
     return matchesCourse && matchesSemester;
   });
 
-  // Filter qualifications by search, semester, and course
-  const filteredQualifications = qualifications.filter(qual => {
-    const matchesSearch = 
-      qual.faculty?.first_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      qual.faculty?.last_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      qual.subject?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      qual.subject?.code?.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesSemester = selectedSemester === 'all' || qual.subject?.semester === selectedSemester;
-    
-    const matchesCourse = selectedCourseFilter === 'all' || qual.subject?.course_id === selectedCourseFilter;
-    
-    return matchesSearch && matchesSemester && matchesCourse;
-  });
-
-  // Group by faculty to show all faculty members individually
-  const qualificationsByFaculty = filteredQualifications.reduce((acc, qual) => {
-    const facultyId = qual.faculty?.id || 'unknown';
-    const facultyName = `${qual.faculty?.first_name || ''} ${qual.faculty?.last_name || ''}`;
-    
-    if (!acc[facultyId]) {
-      acc[facultyId] = {
-        name: facultyName,
-        email: qual.faculty?.email || '',
-        qualifications: []
-      };
-    }
-    acc[facultyId].qualifications.push(qual);
-    return acc;
-  }, {} as Record<string, { name: string; email: string; qualifications: Qualification[] }>);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
   return (
-    <>
-      <Header />
-      <div className="flex">
-        <LeftSidebar />
-        <main className="flex-1 min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-900 p-6">
-          <div className="max-w-7xl mx-auto">
-            {/* Header */}
-            <div className="mb-6">
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-                Faculty Subject Qualifications
-              </h1>
-              <p className="text-gray-600 dark:text-gray-300 mb-3">
-                Manage which faculty members are qualified to teach specific subjects
-              </p>
-              {courseName && (
-                <div className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                  <svg className="w-5 h-5 text-blue-600 dark:text-blue-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                  </svg>
-                  <span className="text-sm font-semibold text-blue-800 dark:text-blue-300">
-                    {courseName}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-              <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-gray-200 dark:border-slate-700">
-                <div className="text-sm text-gray-600 dark:text-gray-400">Total Qualifications</div>
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">{qualifications.length}</div>
-              </div>
-              <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-gray-200 dark:border-slate-700">
-                <div className="text-sm text-gray-600 dark:text-gray-400">Faculty Members</div>
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">{faculty.length}</div>
-              </div>
-              <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-gray-200 dark:border-slate-700">
-                <div className="text-sm text-gray-600 dark:text-gray-400">Active Subjects</div>
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">{subjects.length}</div>
-              </div>
-              <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-gray-200 dark:border-slate-700">
-                <div className="text-sm text-gray-600 dark:text-gray-400">Primary Teachers</div>
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {qualifications.filter(q => q.is_primary_teacher).length}
-                </div>
-              </div>
-            </div>
-
-            {/* Controls */}
-            <div className="bg-white dark:bg-slate-800 rounded-lg p-4 mb-6 border border-gray-200 dark:border-slate-700">
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search faculty or subject..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <select
-                  value={selectedCourseFilter}
-                  onChange={(e) => setSelectedCourseFilter(e.target.value)}
-                  className="px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Courses</option>
-                  {courses.map(course => (
-                    <option key={course.id} value={course.id}>
-                      {course.code} - {course.title}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={selectedSemester}
-                  onChange={(e) => setSelectedSemester(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-                  className="px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Semesters</option>
-                  {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
-                    <option key={sem} value={sem}>Semester {sem}</option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => setShowAddModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                >
-                  <Plus className="w-5 h-5" />
-                  Add Qualification
-                </button>
-              </div>
-            </div>
-
-            {/* Qualifications List */}
-            {Object.keys(qualificationsByFaculty).length === 0 ? (
-              <div className="bg-white dark:bg-slate-800 rounded-lg p-8 text-center border border-gray-200 dark:border-slate-700">
-                <AlertCircle className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                  No Qualifications Found
-                </h3>
-                <p className="text-gray-600 dark:text-gray-400 mb-4">
-                  Start by adding faculty-subject qualifications to enable AI timetable generation
-                </p>
-                <button
-                  onClick={() => setShowAddModal(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                >
-                  <Plus className="w-5 h-5" />
-                  Add First Qualification
-                </button>
-              </div>
-            ) : (
-              Object.entries(qualificationsByFaculty).map(([facultyId, facultyData]) => (
-                <div key={facultyId} className="mb-6">
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                        {facultyData.name}
-                      </h2>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        {facultyData.email} • {facultyData.qualifications.length} Qualification{facultyData.qualifications.length !== 1 ? 's' : ''}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
-                    <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
-                      <thead className="bg-gray-50 dark:bg-slate-900">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Subject
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Semester
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Type
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Proficiency
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Capabilities
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-slate-700">
-                        {facultyData.qualifications.map(qual => (
-                          <tr key={qual.id} className="hover:bg-gray-50 dark:hover:bg-slate-700">
-                            <td className="px-6 py-4">
-                              <div className="text-sm font-medium text-gray-900 dark:text-white">
-                                {qual.subject?.name}
-                              </div>
-                              <div className="text-sm text-gray-500 dark:text-gray-400">
-                                {qual.subject?.code}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span className="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
-                                Sem {qual.subject?.semester}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span className="text-sm text-gray-900 dark:text-white">
-                                {qual.subject?.subject_type}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex items-center gap-2">
-                                <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-2 max-w-[100px]">
-                                  <div
-                                    className="bg-blue-600 h-2 rounded-full"
-                                    style={{ width: `${qual.proficiency_level * 10}%` }}
-                                  ></div>
-                                </div>
-                                <span className="text-sm text-gray-600 dark:text-gray-400">
-                                  {qual.proficiency_level}/10
-                                </span>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex flex-wrap gap-1">
-                                {qual.is_primary_teacher && (
-                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
-                                    Primary
-                                  </span>
-                                )}
-                                {qual.can_handle_lab && (
-                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                                    Lab
-                                  </span>
-                                )}
-                                {qual.can_handle_tutorial && (
-                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                                    Tutorial
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                              <button
-                                onClick={() => handleDeleteQualification(
-                                  qual.id,
-                                  `${qual.faculty?.first_name} ${qual.faculty?.last_name}`,
-                                  qual.subject?.name
-                                )}
-                                className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                              >
-                                <Trash2 className="w-5 h-5" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ))
-            )}
-
-            {/* Add Modal */}
-            {showAddModal && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white dark:bg-slate-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                  <div className="p-6">
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-                      Add Faculty Qualification
-                    </h2>
-
-                    <div className="space-y-4">
-                      {/* Faculty Selection */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Select Faculty *
-                        </label>
-                        <select
-                          value={selectedFaculty}
-                          onChange={(e) => setSelectedFaculty(e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          <option value="">Choose faculty...</option>
-                          {faculty.map(f => (
-                            <option key={f.id} value={f.id}>
-                              {f.first_name} {f.last_name} ({f.email})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Course Selection */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Select Course
-                        </label>
-                        <select
-                          value={selectedCourse}
-                          onChange={(e) => {
-                            setSelectedCourse(e.target.value);
-                            setSelectedSubject(''); // Reset subject when course changes
-                          }}
-                          className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          <option value="">All Courses</option>
-                          {courses.map(c => (
-                            <option key={c.id} value={c.id}>
-                              {c.title} ({c.code})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Semester Selection */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Select Semester
-                        </label>
-                        <select
-                          value={selectedSemesterModal}
-                          onChange={(e) => {
-                            setSelectedSemesterModal(e.target.value ? Number(e.target.value) : '');
-                            setSelectedSubject(''); // Reset subject when semester changes
-                          }}
-                          className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          <option value="">All Semesters</option>
-                          {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
-                            <option key={sem} value={sem}>
-                              Semester {sem}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Subject Selection */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Select Subject *
-                        </label>
-                        <select
-                          value={selectedSubject}
-                          onChange={(e) => setSelectedSubject(e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          <option value="">Choose subject...</option>
-                          {filteredSubjectsBySelection.map(s => (
-                            <option key={s.id} value={s.id}>
-                              Sem {s.semester} - {s.name} ({s.code}) - {s.subject_type}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Proficiency Level */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Proficiency Level: {proficiencyLevel}/10
-                        </label>
-                        <input
-                          type="range"
-                          min="1"
-                          max="10"
-                          value={proficiencyLevel}
-                          onChange={(e) => setProficiencyLevel(Number(e.target.value))}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
-                          <span>Beginner</span>
-                          <span>Expert</span>
-                        </div>
-                      </div>
-
-                      {/* Preference Score */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Teaching Preference: {preferenceScore}/10
-                        </label>
-                        <input
-                          type="range"
-                          min="1"
-                          max="10"
-                          value={preferenceScore}
-                          onChange={(e) => setPreferenceScore(Number(e.target.value))}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
-                          <span>Low</span>
-                          <span>High</span>
-                        </div>
-                      </div>
-
-                      {/* Checkboxes */}
-                      <div className="space-y-2">
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={isPrimaryTeacher}
-                            onChange={(e) => setIsPrimaryTeacher(e.target.checked)}
-                            className="w-4 h-4 text-blue-600 rounded"
-                          />
-                          <span className="text-sm text-gray-700 dark:text-gray-300">
-                            Primary Teacher (Preferred for this subject)
-                          </span>
-                        </label>
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={canHandleLab}
-                            onChange={(e) => setCanHandleLab(e.target.checked)}
-                            className="w-4 h-4 text-blue-600 rounded"
-                          />
-                          <span className="text-sm text-gray-700 dark:text-gray-300">
-                            Can handle lab sessions
-                          </span>
-                        </label>
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={canHandleTutorial}
-                            onChange={(e) => setCanHandleTutorial(e.target.checked)}
-                            className="w-4 h-4 text-blue-600 rounded"
-                          />
-                          <span className="text-sm text-gray-700 dark:text-gray-300">
-                            Can handle tutorial sessions
-                          </span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Modal Actions */}
-                    <div className="flex gap-3 mt-6">
-                      <button
-                        onClick={() => {
-                          setShowAddModal(false);
-                          resetForm();
-                        }}
-                        className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
-                        disabled={saving}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleAddQualification}
-                        disabled={saving || !selectedFaculty || !selectedSubject}
-                        className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {saving ? 'Adding...' : 'Add Qualification'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+    <FacultyCreatorLayout activeTab="qualifications">
+      <div className="space-y-8">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">Qualifications</h1>
+            <p className="text-gray-600">Manage faculty subject qualifications</p>
           </div>
-        </main>
+          <div className="flex gap-3">
+            <button onClick={fetchData} className="flex items-center gap-2 px-4 py-3 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 bg-white shadow-sm transition-all hover:shadow-md">
+              <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+            </button>
+            <button onClick={() => setShowForm(true)} className="flex items-center gap-2 px-5 py-3 bg-[#4D869C] text-white rounded-xl font-semibold hover:shadow-lg transition-all hover:-translate-y-0.5">
+              <Plus size={18} /> Add Qualification
+            </button>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-purple-50"><Sparkles size={24} className="text-purple-600" /></div>
+            <div><p className="text-2xl font-bold text-gray-900">{qualifications.length}</p><p className="text-sm text-gray-500">Total Qualifications</p></div>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-blue-50"><Users size={24} className="text-blue-600" /></div>
+            <div><p className="text-2xl font-bold text-gray-900">{Object.keys(groupedByFaculty).length}</p><p className="text-sm text-gray-500">Qualified Faculty</p></div>
+          </div>
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-green-50"><BookOpen size={24} className="text-green-600" /></div>
+            <div><p className="text-2xl font-bold text-gray-900">{new Set(qualifications.map(q => q.subject_id)).size}</p><p className="text-sm text-gray-500">Subjects Covered</p></div>
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+          <div className="relative">
+            <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search by faculty name or subject..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none transition-all"
+            />
+          </div>
+        </div>
+
+        {/* Qualifications by Faculty */}
+        <div className="space-y-8">
+          {loading ? (
+            <div className="text-center py-12 text-gray-500">Loading data...</div>
+          ) : Object.keys(groupedByFaculty).length === 0 ? (
+            <div className="text-center py-12 text-gray-500 bg-white rounded-2xl shadow-sm border border-gray-100">
+              <Sparkles size={40} className="mx-auto mb-3 text-gray-300" />
+              <p>No qualifications found</p>
+            </div>
+          ) : (
+            Object.entries(groupedByFaculty).map(([fid, data], i) => (
+              <motion.div
+                key={fid}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.05 }}
+                className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
+              >
+                <div className="p-6 border-b border-gray-100 bg-gray-50/30">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-[#4D869C]/10 text-[#4D869C] flex items-center justify-center text-lg font-bold">
+                      {data.faculty?.first_name?.[0]}{data.faculty?.last_name?.[0]}
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-900 leading-tight">
+                        Dr. {data.faculty?.first_name} {data.faculty?.last_name}
+                      </h3>
+                      <div className="flex items-center gap-2 text-sm text-gray-500 mt-1">
+                        <span>{data.faculty?.email}</span>
+                        <span>•</span>
+                        <span>{data.qualifications.length} Qualifications</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-gray-50/50 text-left">
+                        <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Subject</th>
+                        <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Semester</th>
+                        <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
+                        <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider w-48">Proficiency</th>
+                        <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Capabilities</th>
+                        <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {data.qualifications.map((q) => (
+                        <tr key={q.id} className="hover:bg-gray-50/50 transition-colors group">
+                          <td className="px-6 py-4">
+                            <div>
+                              <div className="font-semibold text-gray-900">{q.subject?.name || q.subjects?.name}</div>
+                              <div className="text-xs text-gray-500 font-mono mt-0.5">{q.subject?.code || q.subjects?.code}</div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            {q.subject?.semester && (
+                              <span className="px-2.5 py-1 rounded-md bg-purple-50 text-purple-700 text-xs font-medium border border-purple-100">
+                                Sem {q.subject.semester}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="text-sm font-medium text-gray-600">{q.subject?.subject_type || 'THEORY'}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${getProficiencyColor(q.proficiency_level)}`}
+                                  style={{ width: `${q.proficiency_level * 10}%` }}
+                                />
+                              </div>
+                              <span className="text-sm font-medium text-gray-600 w-8">{q.proficiency_level}/10</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex gap-2">
+                              {q.is_primary_teacher && (
+                                <span className="px-2 py-1 rounded-md bg-purple-100 text-purple-700 text-xs font-semibold">Primary</span>
+                              )}
+                              {q.can_handle_lab && (
+                                <span className="px-2 py-1 rounded-md bg-green-100 text-green-700 text-xs font-semibold">Lab</span>
+                              )}
+                              {q.can_handle_tutorial && (
+                                <span className="px-2 py-1 rounded-md bg-blue-100 text-blue-700 text-xs font-semibold">Tutorial</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button
+                              onClick={() => handleDelete(q.id)}
+                              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </motion.div>
+            ))
+          )}
+        </div>
+
+        {/* Modal Form */}
+        <AnimatePresence>
+          {showForm && (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[2000] p-4">
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+              >
+                <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50/50 sticky top-0 z-10 backdrop-blur-md">
+                  <h3 className="text-xl font-bold text-gray-900">Add Faculty Qualification</h3>
+                  <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded-lg transition-colors"><X size={20} /></button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="p-6 space-y-5">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">Select Faculty *</label>
+                    <div className="relative">
+                      <select
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none appearance-none bg-white text-gray-900"
+                        value={form.faculty_id}
+                        onChange={(e) => setForm({ ...form, faculty_id: e.target.value })}
+                        required
+                      >
+                        <option value="">Choose faculty...</option>
+                        {facultyList.map(f => (
+                          <option key={f.id} value={f.id}>{f.first_name} {f.last_name} ({f.email})</option>
+                        ))}
+                      </select>
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                        <Search size={16} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">Select Course</label>
+                    <select
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none appearance-none bg-white text-gray-900"
+                      value={form.course_id}
+                      onChange={(e) => setForm({ ...form, course_id: e.target.value, subject_id: '' })}
+                    >
+                      <option value="">All Courses</option>
+                      {courses.map(c => (
+                        <option key={c.id} value={c.id}>{c.title} ({c.code})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">Select Semester</label>
+                    <select
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none appearance-none bg-white text-gray-900"
+                      value={form.semester}
+                      onChange={(e) => setForm({ ...form, semester: e.target.value, subject_id: '' })}
+                    >
+                      <option value="">All Semesters</option>
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map(s => (
+                        <option key={s} value={s}>Semester {s}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">Select Subject *</label>
+                    <select
+                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none appearance-none bg-white text-gray-900"
+                      value={form.subject_id}
+                      onChange={(e) => setForm({ ...form, subject_id: e.target.value })}
+                      required
+                    >
+                      <option value="">Choose subject...</option>
+                      {filteredSubjects.map(s => (
+                        <option key={s.id} value={s.id}>{s.name} ({s.code}) - Sem {s.semester}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Proficiency Slider */}
+                  <div>
+                    <div className="flex justify-between mb-2">
+                      <label className="text-sm font-semibold text-gray-700">Proficiency Level: {form.proficiency_level}/10</label>
+                    </div>
+                    <input
+                      type="range"
+                      min="1"
+                      max="10"
+                      value={form.proficiency_level}
+                      onChange={e => setForm({ ...form, proficiency_level: parseInt(e.target.value) })}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#0066FF]"
+                    />
+                    <div className="flex justify-between mt-1 text-xs text-gray-500">
+                      <span>Beginner</span>
+                      <span>Expert</span>
+                    </div>
+                  </div>
+
+                  {/* Teaching Preference Slider */}
+                  <div>
+                    <div className="flex justify-between mb-2">
+                      <label className="text-sm font-semibold text-gray-700">Teaching Preference: {form.preference_score}/10</label>
+                    </div>
+                    <input
+                      type="range"
+                      min="1"
+                      max="10"
+                      value={form.preference_score}
+                      onChange={e => setForm({ ...form, preference_score: parseInt(e.target.value) })}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#0066FF]"
+                    />
+                    <div className="flex justify-between mt-1 text-xs text-gray-500">
+                      <span>Low</span>
+                      <span>High</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-2">
+                    <label className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 border border-transparent hover:border-gray-200 transition-all cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form.is_primary_teacher}
+                        onChange={e => setForm({ ...form, is_primary_teacher: e.target.checked })}
+                        className="w-5 h-5 text-[#0066FF] rounded focus:ring-[#0066FF] border-gray-300"
+                      />
+                      <span className="text-gray-700 font-medium text-sm">Primary Teacher (Preferred for this subject)</span>
+                    </label>
+
+                    <label className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 border border-transparent hover:border-gray-200 transition-all cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form.can_handle_lab}
+                        onChange={e => setForm({ ...form, can_handle_lab: e.target.checked })}
+                        className="w-5 h-5 text-[#0066FF] rounded focus:ring-[#0066FF] border-gray-300"
+                      />
+                      <span className="text-gray-700 font-medium text-sm">Can handle lab sessions</span>
+                    </label>
+
+                    <label className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 border border-transparent hover:border-gray-200 transition-all cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form.can_handle_tutorial}
+                        onChange={e => setForm({ ...form, can_handle_tutorial: e.target.checked })}
+                        className="w-5 h-5 text-[#0066FF] rounded focus:ring-[#0066FF] border-gray-300"
+                      />
+                      <span className="text-gray-700 font-medium text-sm">Can handle tutorial sessions</span>
+                    </label>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-6 border-t mt-4 sticky bottom-0 bg-white pb-2">
+                    <button type="button" onClick={() => setShowForm(false)} className="px-6 py-2.5 text-gray-600 hover:bg-gray-100 rounded-xl font-medium transition-colors">Cancel</button>
+                    <button type="submit" disabled={submitting} className="px-8 py-2.5 bg-[#4D869C] text-white font-bold rounded-xl disabled:opacity-50 hover:shadow-lg transition-all">{submitting ? 'Adding...' : 'Add Qualification'}</button>
+                  </div>
+                </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
-    </>
+    </FacultyCreatorLayout>
   );
-}
+};
+
+export default QualificationsPage;

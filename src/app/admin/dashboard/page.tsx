@@ -13,7 +13,8 @@ import {
   TrendingUp,
   ArrowRight,
   Activity,
-  RefreshCw
+  RefreshCw,
+  Settings
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
@@ -26,6 +27,7 @@ interface DashboardStats {
   subjects: number;
   courses: number;
   students: number;
+  constraints: number;
 }
 
 const CollegeAdminDashboard: React.FC = () => {
@@ -37,10 +39,10 @@ const CollegeAdminDashboard: React.FC = () => {
     batches: 0,
     subjects: 0,
     courses: 0,
-    students: 0
+    students: 0,
+    constraints: 0
   });
   const [loading, setLoading] = useState(true);
-  const [collegeName, setCollegeName] = useState('');
 
   useEffect(() => {
     fetchStats();
@@ -65,24 +67,26 @@ const CollegeAdminDashboard: React.FC = () => {
         'Content-Type': 'application/json'
       };
 
-      const [deptRes, facultyRes, classroomRes, batchRes, subjectRes, courseRes, studentRes] = await Promise.all([
+      const [deptRes, facultyRes, classroomRes, batchRes, subjectRes, courseRes, studentRes, constraintRes] = await Promise.all([
         fetch(`/api/admin/departments${queryParam}`, { headers }).catch(() => ({ ok: false, json: () => Promise.resolve({ departments: [] }) } as Response)),
         fetch(`/api/admin/faculty${queryParam}`, { headers }).catch(() => ({ ok: false, json: () => Promise.resolve({ faculty: [] }) } as Response)),
         fetch(`/api/admin/classrooms${queryParam}`, { headers }).catch(() => ({ ok: false, json: () => Promise.resolve({ classrooms: [] }) } as Response)),
         fetch(`/api/admin/batches${queryParam}`, { headers }).catch(() => ({ ok: false, json: () => Promise.resolve({ batches: [] }) } as Response)),
         fetch(`/api/admin/subjects${queryParam}`, { headers }).catch(() => ({ ok: false, json: () => Promise.resolve({ subjects: [] }) } as Response)),
         fetch(`/api/admin/courses${queryParam}`, { headers }).catch(() => ({ ok: false, json: () => Promise.resolve({ courses: [] }) } as Response)),
-        fetch(`/api/admin/students${queryParam}`, { headers }).catch(() => ({ ok: false, json: () => Promise.resolve({ students: [] }) } as Response))
+        fetch(`/api/admin/students${queryParam}`, { headers }).catch(() => ({ ok: false, json: () => Promise.resolve({ students: [] }) } as Response)),
+        fetch('/api/admin/constraints', { headers }).catch(() => ({ ok: false, json: () => Promise.resolve({ data: [] }) } as Response))
       ]);
 
-      const [deptData, facultyData, classroomData, batchData, subjectData, courseData, studentData] = await Promise.all([
+      const [deptData, facultyData, classroomData, batchData, subjectData, courseData, studentData, constraintData] = await Promise.all([
         deptRes.ok ? deptRes.json() : { departments: [] },
         facultyRes.ok ? facultyRes.json() : { faculty: [] },
         classroomRes.ok ? classroomRes.json() : { classrooms: [] },
         batchRes.ok ? batchRes.json() : { batches: [] },
         subjectRes.ok ? subjectRes.json() : { subjects: [] },
         courseRes.ok ? courseRes.json() : { courses: [] },
-        studentRes.ok ? studentRes.json() : { students: [] }
+        studentRes.ok ? studentRes.json() : { students: [] },
+        constraintRes.ok ? constraintRes.json() : { data: [] }
       ]);
 
       setStats({
@@ -92,7 +96,8 @@ const CollegeAdminDashboard: React.FC = () => {
         batches: batchData.batches?.length || 0,
         subjects: subjectData.subjects?.length || 0,
         courses: courseData.courses?.length || 0,
-        students: studentData.students?.length || 0
+        students: studentData.students?.length || 0,
+        constraints: constraintData.data?.length || 0
       });
 
     } catch (error) {
@@ -110,6 +115,7 @@ const CollegeAdminDashboard: React.FC = () => {
     { icon: Layers, label: 'Batches', value: stats.batches, color: '#ED8936', path: '/admin/batches', description: 'Manage student batches' },
     { icon: BookOpen, label: 'Subjects', value: stats.subjects, color: '#48BB78', path: '/admin/subjects', description: 'Manage subjects' },
     { icon: GraduationCap, label: 'Courses', value: stats.courses, color: '#9F7AEA', path: '/admin/courses', description: 'Manage courses' },
+    { icon: Settings, label: 'Constraints', value: stats.constraints, color: '#E53E3E', path: '/admin/constraints', description: 'Manage rules' },
   ];
 
   return (

@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Upload, Plus, Trash2 } from 'lucide-react';
+import { X, Upload, Plus, Trash2, HelpCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface Option {
   id: string;
@@ -116,28 +117,37 @@ export default function QuestionModal({ isOpen, onClose, onSave, questionType = 
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-slate-700">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[2000] p-4">
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-100"
+      >
         {/* Header */}
-        <div className="sticky top-0 bg-slate-900 border-b border-slate-700 p-6 flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-white">Add Question</h2>
+        <div className="sticky top-0 bg-white/95 backdrop-blur-sm border-b border-gray-100 p-6 flex items-center justify-between z-10">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-[#4D869C]/10 rounded-lg">
+              <HelpCircle className="w-5 h-5 text-[#4D869C]" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900">Add Question</h2>
+          </div>
           <button
             onClick={handleClose}
-            className="p-2 hover:bg-slate-800 rounded-lg transition-colors text-gray-400 hover:text-white"
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-gray-600"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="p-6 space-y-5">
+        <div className="p-6 space-y-6">
           {/* Question Type */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Question Type</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Question Type</label>
             <select
               value={type}
               onChange={(e) => setType(e.target.value as any)}
-              className="w-full px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 focus:ring-2 focus:ring-[#4D869C] outline-none transition-all"
             >
               <option value="MCQ">Multiple Choice</option>
               <option value="MSQ">Multiple Select</option>
@@ -149,22 +159,22 @@ export default function QuestionModal({ isOpen, onClose, onSave, questionType = 
 
           {/* Question Title */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Question Title <span className="text-red-400">*</span>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Question Text <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
               value={questionText}
               onChange={(e) => setQuestionText(e.target.value)}
-              className="w-full px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-              placeholder="Enter question title"
+              className="w-full px-4 py-3 rounded-xl bg-white border border-gray-200 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#4D869C] outline-none transition-all"
+              placeholder="e.g. What is the capital of France?"
             />
           </div>
 
           {/* Question Image (Optional) */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Question Image (Optional)</label>
-            <div className="border-2 border-dashed border-slate-700 rounded-lg p-8 text-center hover:border-blue-500 transition-colors cursor-pointer">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Question Image (Optional)</label>
+            <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center hover:border-[#4D869C] hover:bg-[#4D869C]/5 transition-colors cursor-pointer group">
               <input
                 type="file"
                 accept="image/*"
@@ -172,64 +182,64 @@ export default function QuestionModal({ isOpen, onClose, onSave, questionType = 
                 className="hidden"
                 id="image-upload"
               />
-              <label htmlFor="image-upload" className="cursor-pointer">
-                <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                <p className="text-gray-400 text-sm">
-                  {imageFile ? imageFile.name : 'Click to upload image or drag and drop'}
+              <label htmlFor="image-upload" className="cursor-pointer w-full h-full block">
+                <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
+                  <Upload className="w-6 h-6" />
+                </div>
+                <p className="text-gray-600 font-medium text-sm">
+                  {imageFile ? imageFile.name : 'Click to upload image'}
                 </p>
-                <p className="text-gray-500 text-xs mt-1">PNG, JPG, GIF up to 10MB</p>
+                <p className="text-gray-400 text-xs mt-1">PNG, JPG, GIF up to 10MB</p>
               </label>
             </div>
           </div>
 
           {/* Question Description */}
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">Question Description</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Description / Instructions</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
-              className="w-full px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
-              placeholder="Enter question description or instructions"
+              className="w-full px-4 py-3 rounded-xl bg-white border border-gray-200 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#4D869C] outline-none transition-all resize-none"
+              placeholder="Add additional details or context..."
             />
           </div>
 
           {/* Answer Options (for MCQ/MSQ) */}
           {(type === 'MCQ' || type === 'MSQ') && (
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-3">Answer Options</label>
+            <div className="bg-gray-50 rounded-xl p-5 border border-gray-100">
+              <label className="block text-sm font-semibold text-gray-700 mb-4">Answer Options</label>
               <div className="space-y-3">
                 {options.map((option, index) => (
-                  <div key={option.id} className="flex items-center space-x-3">
+                  <div key={option.id} className="flex items-center gap-3">
                     {/* Radio/Checkbox */}
                     <div className="flex-shrink-0">
                       {type === 'MCQ' ? (
                         <button
                           type="button"
                           onClick={() => handleCorrectChange(option.id)}
-                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
-                            option.is_correct
-                              ? 'bg-blue-600 border-blue-600'
-                              : 'border-slate-600 hover:border-blue-500'
-                          }`}
+                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${option.is_correct
+                              ? 'bg-[#4D869C] border-[#4D869C] shadow-sm'
+                              : 'border-gray-300 hover:border-[#4D869C]'
+                            }`}
                         >
                           {option.is_correct && (
-                            <div className="w-3 h-3 bg-white rounded-full"></div>
+                            <div className="w-2.5 h-2.5 bg-white rounded-full"></div>
                           )}
                         </button>
                       ) : (
                         <button
                           type="button"
                           onClick={() => handleCorrectChange(option.id)}
-                          className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-all ${
-                            option.is_correct
-                              ? 'bg-blue-600 border-blue-600'
-                              : 'border-slate-600 hover:border-blue-500'
-                          }`}
+                          className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-all ${option.is_correct
+                              ? 'bg-[#4D869C] border-[#4D869C] shadow-sm'
+                              : 'border-gray-300 hover:border-[#4D869C]'
+                            }`}
                         >
                           {option.is_correct && (
-                            <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
+                            <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                             </svg>
                           )}
                         </button>
@@ -237,8 +247,8 @@ export default function QuestionModal({ isOpen, onClose, onSave, questionType = 
                     </div>
 
                     {/* Option Letter */}
-                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center">
-                      <span className="text-sm font-medium text-gray-300">
+                    <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white border border-gray-200 flex items-center justify-center shadow-sm">
+                      <span className="text-sm font-bold text-gray-500">
                         {String.fromCharCode(65 + index)}
                       </span>
                     </div>
@@ -248,7 +258,7 @@ export default function QuestionModal({ isOpen, onClose, onSave, questionType = 
                       type="text"
                       value={option.text}
                       onChange={(e) => handleOptionChange(option.id, e.target.value)}
-                      className="flex-1 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                      className="flex-1 px-4 py-2.5 rounded-lg bg-white border border-gray-200 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-[#4D869C] outline-none transition-all shadow-sm"
                       placeholder={`Option ${index + 1}`}
                     />
 
@@ -257,7 +267,7 @@ export default function QuestionModal({ isOpen, onClose, onSave, questionType = 
                       <button
                         type="button"
                         onClick={() => handleRemoveOption(option.id)}
-                        className="flex-shrink-0 p-2 hover:bg-red-500/10 rounded-lg transition-colors text-red-400 hover:text-red-300"
+                        className="flex-shrink-0 p-2 hover:bg-red-50 rounded-lg transition-colors text-gray-400 hover:text-red-500"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -270,7 +280,7 @@ export default function QuestionModal({ isOpen, onClose, onSave, questionType = 
               <button
                 type="button"
                 onClick={handleAddOption}
-                className="mt-3 flex items-center space-x-2 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-blue-400 hover:bg-slate-700 transition-all text-sm font-medium"
+                className="mt-4 flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-gray-200 text-[#4D869C] hover:bg-blue-50 hover:border-blue-100 transition-all text-sm font-bold shadow-sm"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Option</span>
@@ -279,42 +289,47 @@ export default function QuestionModal({ isOpen, onClose, onSave, questionType = 
           )}
 
           {/* Points and Difficulty */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-5">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Points</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Points</label>
               <input
                 type="number"
                 value={marks}
                 onChange={(e) => setMarks(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                className="w-full px-4 py-3 rounded-xl bg-white border border-gray-200 text-gray-900 focus:ring-2 focus:ring-[#4D869C] outline-none transition-all"
                 min="0"
                 step="0.5"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Difficulty</label>
-              <select
-                value={difficulty}
-                onChange={(e) => setDifficulty(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-              >
-                <option value="Easy">Easy</option>
-                <option value="Medium">Medium</option>
-                <option value="Hard">Hard</option>
-              </select>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Difficulty</label>
+              <div className="relative">
+                <select
+                  value={difficulty}
+                  onChange={(e) => setDifficulty(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl bg-white border border-gray-200 text-gray-900 focus:ring-2 focus:ring-[#4D869C] outline-none transition-all appearance-none"
+                >
+                  <option value="Easy">Easy</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Hard">Hard</option>
+                </select>
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Negative Marking (for MCQ/MSQ) */}
           {(type === 'MCQ' || type === 'MSQ') && (
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Negative Marking</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Negative Marking</label>
               <input
                 type="number"
                 value={negativeMarking}
                 onChange={(e) => setNegativeMarking(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                className="w-full px-4 py-3 rounded-xl bg-white border border-gray-200 text-gray-900 focus:ring-2 focus:ring-[#4D869C] outline-none transition-all"
                 min="0"
                 step="0.25"
               />
@@ -323,21 +338,21 @@ export default function QuestionModal({ isOpen, onClose, onSave, questionType = 
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-slate-900 border-t border-slate-700 p-6 flex justify-end space-x-3">
+        <div className="sticky bottom-0 bg-white border-t border-gray-100 p-6 flex justify-end gap-3 z-10 rounded-b-2xl">
           <button
             onClick={handleClose}
-            className="px-6 py-2.5 rounded-lg border border-slate-600 text-gray-300 hover:bg-slate-800 transition-all font-medium"
+            className="px-6 py-2.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition-all font-semibold"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-all shadow-lg shadow-blue-500/20"
+            className="px-8 py-2.5 rounded-xl bg-[#4D869C] hover:bg-[#3a6d80] text-white font-bold transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5"
           >
             Add Question
           </button>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

@@ -4,22 +4,27 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter, usePathname } from 'next/navigation';
 import {
-    Building2,
+    LayoutDashboard,
+    Calendar,
     Users,
+    Sparkles,
     BookOpen,
+    MapPin,
     GraduationCap,
-    DoorOpen,
-    Layers,
-    BarChart3,
-    LogOut,
+    CalendarDays,
+    FileText,
     Bell,
+    LogOut,
+    ChevronDown,
     Clock,
     CheckCircle2,
-    ChevronDown,
-    Settings,
     AlertTriangle,
-    ClipboardList,
-    CheckSquare
+    Settings,
+    Bot,
+    Zap,
+    Eye,
+    Cpu,
+    Building2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -32,17 +37,17 @@ interface Notification {
     created_at: string;
 }
 
-interface CollegeAdminLayoutProps {
+interface FacultyCreatorLayoutProps {
     children: React.ReactNode;
     activeTab: string;
 }
 
-const CollegeAdminLayout: React.FC<CollegeAdminLayoutProps> = ({ children, activeTab }) => {
+const FacultyCreatorLayout: React.FC<FacultyCreatorLayoutProps> = ({ children, activeTab }) => {
     const router = useRouter();
     const pathname = usePathname();
 
     const [user, setUser] = useState<any>(null);
-    const [college, setCollege] = useState<any>(null);
+    const [department, setDepartment] = useState<{ name: string; code: string } | null>(null);
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [showProfileDropdown, setShowProfileDropdown] = useState(false);
     const [showNotifications, setShowNotifications] = useState(false);
@@ -55,30 +60,26 @@ const CollegeAdminLayout: React.FC<CollegeAdminLayoutProps> = ({ children, activ
             return;
         }
         const parsedUser = JSON.parse(userData);
-        if (parsedUser.role !== 'college_admin' && parsedUser.role !== 'admin' && parsedUser.role !== 'super_admin') {
-            router.push('/login?message=Access denied. College admin only.');
+        if (parsedUser.role !== 'faculty') {
+            router.push('/login?message=Access denied. Faculty only.');
             return;
         }
         setUser(parsedUser);
-        fetchCollegeInfo(parsedUser);
         fetchNotifications(parsedUser.id);
+        if (parsedUser.department_id) {
+            fetchDepartment(parsedUser.department_id);
+        }
     }, [router]);
 
-    const fetchCollegeInfo = async (user: any) => {
-        if (!user.college_id) return;
+    const fetchDepartment = async (departmentId: string) => {
         try {
-            const authToken = Buffer.from(JSON.stringify(user)).toString('base64');
-            const res = await fetch(`/api/admin/colleges?college_id=${user.college_id}`, {
-                headers: { 'Authorization': `Bearer ${authToken}` }
-            });
-            if (res.ok) {
-                const data = await res.json();
-                if (data.colleges && data.colleges.length > 0) {
-                    setCollege(data.colleges[0]);
-                }
+            const res = await fetch(`/api/admin/departments/${departmentId}`);
+            const data = await res.json();
+            if (data.success && data.data) {
+                setDepartment({ name: data.data.name, code: data.data.code });
             }
         } catch (e) {
-            console.error('Error fetching college info');
+            console.error('Error fetching department');
         }
     };
 
@@ -112,19 +113,50 @@ const CollegeAdminLayout: React.FC<CollegeAdminLayoutProps> = ({ children, activ
         router.push('/');
     };
 
-    const navItems = [
-        { id: 'dashboard', icon: BarChart3, label: 'Dashboard', path: '/admin/dashboard' },
-        { id: 'departments', icon: Building2, label: 'Departments', path: '/admin/departments' },
-        { id: 'faculty', icon: Users, label: 'Faculty', path: '/admin/faculty' },
-        { id: 'classrooms', icon: DoorOpen, label: 'Classrooms', path: '/admin/classrooms' },
-        { id: 'batches', icon: Layers, label: 'Batches', path: '/admin/batches' },
-        { id: 'subjects', icon: BookOpen, label: 'Subjects', path: '/admin/subjects' },
-        { id: 'courses', icon: GraduationCap, label: 'Courses', path: '/admin/courses' },
-        { id: 'students', icon: Users, label: 'Students', path: '/admin/students' },
-        { id: 'buckets', icon: ClipboardList, label: 'Elective Buckets', path: '/admin/buckets' },
-        { id: 'subject-allotment', icon: CheckSquare, label: 'Subject Allotment', path: '/admin/subject-allotment' },
-        { id: 'constraints', icon: Settings, label: 'Constraints', path: '/admin/constraints' },
-    ];
+    const isCreator = user?.faculty_type === 'creator';
+    const isPublisher = user?.faculty_type === 'publisher';
+    const isGeneral = user?.faculty_type === 'general';
+
+    // Define nav items based on faculty type
+    const getNavItems = () => {
+        const items = [
+            { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', path: '/faculty/dashboard' },
+        ];
+
+        if (isCreator || isPublisher) {
+            items.push(
+                { id: 'timetables', icon: CalendarDays, label: 'Timetables', path: '/faculty/timetables' },
+                { id: 'events', icon: Calendar, label: 'Events', path: '/faculty/events' },
+                { id: 'classrooms', icon: MapPin, label: 'Classrooms', path: '/faculty/classrooms' },
+                { id: 'faculty', icon: Users, label: 'Faculty', path: '/faculty/faculty-list' },
+                { id: 'subjects', icon: BookOpen, label: 'Subjects', path: '/faculty/subjects' },
+                { id: 'batches', icon: GraduationCap, label: 'Batches', path: '/faculty/batches' },
+                { id: 'qualifications', icon: Sparkles, label: 'Qualifications', path: '/faculty/qualifications' },
+                { id: 'assignments', icon: FileText, label: 'Assignments', path: '/faculty/assignments' },
+            );
+        } else {
+            // General faculty navigation
+            items.push(
+                { id: 'timetables', icon: CalendarDays, label: 'Timetable', path: '/faculty/timetables' },
+                { id: 'assignments', icon: FileText, label: 'Assignments', path: '/faculty/assignments' },
+                { id: 'events', icon: Calendar, label: 'Events', path: '/faculty/events' },
+                { id: 'my-subjects', icon: BookOpen, label: 'My Subjects', path: '/faculty/my-subjects' },
+                { id: 'preferences', icon: Settings, label: 'Preferences', path: '/faculty/preferences' },
+            );
+        }
+
+        items.push({ id: 'notifications', icon: Bell, label: 'Notifications', path: '/faculty/notifications' });
+
+        return items;
+    };
+
+    const navItems = getNavItems();
+
+    const getRoleLabel = () => {
+        if (isCreator) return 'Timetable Creator';
+        if (isPublisher) return 'Timetable Publisher';
+        return 'Faculty';
+    };
 
     if (!user) {
         return (
@@ -147,13 +179,6 @@ const CollegeAdminLayout: React.FC<CollegeAdminLayoutProps> = ({ children, activ
                 </div>
 
                 <div className="flex items-center gap-6">
-                    {/* College Badge */}
-                    {college && (
-                        <div className="bg-white/20 px-4 py-2 rounded-xl text-white text-sm font-medium">
-                            <span className="opacity-80">College:</span> {college.name}
-                        </div>
-                    )}
-
                     {/* Notifications */}
                     <div className="relative">
                         <button
@@ -225,8 +250,12 @@ const CollegeAdminLayout: React.FC<CollegeAdminLayoutProps> = ({ children, activ
                             onClick={() => setShowProfileDropdown(!showProfileDropdown)}
                             className="flex items-center gap-3 bg-transparent border-none cursor-pointer focus:outline-none"
                         >
+                            <div className="flex flex-col items-end mr-2">
+                                <span className="text-white text-sm font-semibold">{user?.first_name} {user?.last_name}</span>
+                                <span className="text-white/70 text-xs">{getRoleLabel()}</span>
+                            </div>
                             <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-white font-bold border border-white/30 text-sm">
-                                {user?.first_name?.[0] || 'A'}
+                                {user?.first_name?.[0] || 'F'}
                             </div>
                             <ChevronDown size={16} className={`text-white transition-transform duration-200 ${showProfileDropdown ? 'rotate-180' : ''}`} />
                         </button>
@@ -237,35 +266,54 @@ const CollegeAdminLayout: React.FC<CollegeAdminLayoutProps> = ({ children, activ
                                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                                     animate={{ opacity: 1, y: 0, scale: 1 }}
                                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                    className="absolute top-[50px] right-0 bg-white rounded-2xl shadow-xl w-[260px] overflow-hidden z-50 border border-gray-100"
+                                    className="absolute top-[50px] right-0 bg-white rounded-2xl shadow-xl w-[300px] overflow-hidden z-50 border border-gray-100"
                                 >
-                                    <div className="p-5 border-b border-gray-100 bg-gray-50/50">
-                                        <div className="flex items-center gap-3 mb-3">
-                                            <div className="w-10 h-10 rounded-full bg-[#4D869C] text-white flex items-center justify-center font-bold text-lg">
-                                                {user?.first_name?.[0] || 'A'}
-                                            </div>
-                                            <div>
-                                                <p className="font-bold text-gray-800 text-sm m-0">{user?.first_name} {user?.last_name}</p>
-                                                <p className="text-xs text-gray-500 m-0 truncate w-[140px]">{user?.email}</p>
-                                            </div>
+                                    {/* Profile Header */}
+                                    <div className="p-6 flex flex-col items-center border-b border-gray-100">
+                                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#4D869C] to-[#7AB2B2] text-white flex items-center justify-center font-bold text-2xl mb-3">
+                                            {user?.first_name?.[0]}{user?.last_name?.[0]}
                                         </div>
-                                        <div className="space-y-1">
-                                            <div className="flex justify-between items-center text-xs">
-                                                <span className="text-gray-500">UID:</span>
-                                                <span className="font-mono bg-gray-100 px-2 py-0.5 rounded text-gray-700 text-[10px] break-all">{user?.college_uid || 'Unknown'}</span>
-                                            </div>
-                                            <div className="flex justify-between items-center text-xs">
-                                                <span className="text-gray-500">Role:</span>
-                                                <span className="text-[#4D869C] font-bold bg-[#4D869C]/10 px-2 py-0.5 rounded">College Admin</span>
-                                            </div>
+                                        <h3 className="font-bold text-gray-900 text-lg">
+                                            {user?.first_name} {user?.last_name}
+                                        </h3>
+                                        <p className="text-sm text-gray-500">{user?.email}</p>
+
+                                        {/* Role Badges */}
+                                        <div className="flex gap-2 mt-3">
+                                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-[#4D869C] text-white text-xs font-semibold rounded-full">
+                                                <Users size={12} /> Faculty
+                                            </span>
+                                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-[#4D869C] text-white text-xs font-semibold rounded-full">
+                                                <GraduationCap size={12} /> {isCreator ? 'Creator' : isPublisher ? 'Publisher' : 'General'}
+                                            </span>
                                         </div>
                                     </div>
-                                    <div className="p-2">
+
+                                    {/* Details Section */}
+                                    <div className="p-4 space-y-4">
+                                        <div>
+                                            <p className="text-xs text-gray-500 mb-1">College UID</p>
+                                            <p className="font-bold text-gray-900">{user?.college_uid || 'N/A'}</p>
+                                        </div>
+
+                                        <div>
+                                            <p className="text-xs text-gray-500 mb-1">Department</p>
+                                            <p className="font-bold text-gray-900">
+                                                {department?.name || 'Loading...'}
+                                            </p>
+                                            {department?.code && (
+                                                <p className="text-sm text-gray-500">{department.code}</p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Logout Button */}
+                                    <div className="p-4 border-t border-gray-100">
                                         <button
                                             onClick={handleLogout}
                                             className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl transition-all font-medium text-sm"
                                         >
-                                            <LogOut size={18} /> Sign Out
+                                            <LogOut size={18} /> Log out
                                         </button>
                                     </div>
                                 </motion.div>
@@ -282,11 +330,11 @@ const CollegeAdminLayout: React.FC<CollegeAdminLayoutProps> = ({ children, activ
                 transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                 onMouseEnter={() => setSidebarOpen(true)}
                 onMouseLeave={() => setSidebarOpen(false)}
-                className="fixed top-[70px] left-0 h-[calc(100vh-70px)] bg-white/80 backdrop-blur-lg shadow-xl z-40 overflow-y-auto no-scrollbar"
+                className="fixed top-[70px] left-0 h-[calc(100vh-70px)] bg-white/80 backdrop-blur-lg shadow-xl z-40 overflow-hidden flex flex-col"
             >
-                <div className="relative flex items-center p-6 mb-2 h-[80px]">
+                <div className="relative flex items-center p-6 h-[80px] flex-shrink-0">
                     <div className="min-w-[42px] flex justify-center items-center">
-                        <Building2 size={32} className="text-[#4D869C]" />
+                        <Cpu size={32} className="text-[#4D869C]" />
                     </div>
                     <motion.div
                         initial={{ opacity: 0 }}
@@ -294,11 +342,13 @@ const CollegeAdminLayout: React.FC<CollegeAdminLayoutProps> = ({ children, activ
                         transition={{ duration: 0.2 }}
                         className="ml-4 whitespace-nowrap overflow-hidden"
                     >
-                        <h2 className="text-xl font-bold text-gray-800 m-0">College Admin</h2>
+                        <h2 className="text-xl font-bold text-gray-800 m-0">
+                            {isCreator ? 'Faculty Creator' : isPublisher ? 'Faculty Publisher' : 'Faculty Portal'}
+                        </h2>
                     </motion.div>
                 </div>
 
-                <nav className="flex flex-col gap-1 px-3 pb-4">
+                <nav className="flex flex-col gap-1 px-3 flex-1 overflow-y-auto">
                     {navItems.map(({ id, icon: Icon, label, path }) => (
                         <button
                             key={id}
@@ -315,13 +365,36 @@ const CollegeAdminLayout: React.FC<CollegeAdminLayoutProps> = ({ children, activ
                             <motion.span
                                 animate={{ opacity: sidebarOpen ? 1 : 0 }}
                                 transition={{ duration: 0.2 }}
-                                className="font-medium"
+                                className="font-medium text-sm"
                             >
                                 {label}
                             </motion.span>
                         </button>
                     ))}
                 </nav>
+
+                {/* Settings at bottom */}
+                <div className="px-3 pb-4 flex-shrink-0 border-t border-gray-100 pt-2">
+                    <button
+                        onClick={() => router.push('/faculty/settings')}
+                        className={`group flex items-center gap-4 px-3 py-2.5 rounded-xl transition-all cursor-pointer border-none overflow-hidden whitespace-nowrap w-full ${activeTab === 'settings'
+                            ? 'bg-gradient-to-r from-[#4D869C] to-[#7AB2B2] text-white shadow-md'
+                            : 'bg-transparent text-gray-700 hover:bg-gray-100'
+                            }`}
+                        title={!sidebarOpen ? 'Settings' : ''}
+                    >
+                        <div className="min-w-[42px] flex justify-center">
+                            <Settings size={20} className={activeTab === 'settings' ? 'text-white' : 'text-gray-500 group-hover:text-[#4D869C]'} />
+                        </div>
+                        <motion.span
+                            animate={{ opacity: sidebarOpen ? 1 : 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="font-medium text-sm"
+                        >
+                            Settings
+                        </motion.span>
+                    </button>
+                </div>
             </motion.aside>
 
             {/* Main Content */}
@@ -343,4 +416,4 @@ const CollegeAdminLayout: React.FC<CollegeAdminLayoutProps> = ({ children, activ
     );
 };
 
-export default CollegeAdminLayout;
+export default FacultyCreatorLayout;

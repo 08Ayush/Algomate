@@ -24,7 +24,7 @@ async function getAuthenticatedUser(request: NextRequest) {
   try {
     const userString = Buffer.from(token, 'base64').toString();
     const user = JSON.parse(userString);
-    
+
     const { data: dbUser, error } = await supabaseAdmin
       .from('users')
       .select('id, college_id, role, is_active')
@@ -40,6 +40,42 @@ async function getAuthenticatedUser(request: NextRequest) {
     return dbUser;
   } catch {
     return null;
+  }
+}
+
+// GET - Fetch single department by ID (accessible to any authenticated user)
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const id = params.id;
+
+    // Fetch department by ID
+    const { data: department, error } = await supabaseAdmin
+      .from('departments')
+      .select('id, name, code, description, college_id')
+      .eq('id', id)
+      .single();
+
+    if (error || !department) {
+      return NextResponse.json(
+        { success: false, error: 'Department not found' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: department
+    });
+
+  } catch (error: any) {
+    console.error('Department fetch API error:', error);
+    return NextResponse.json(
+      { success: false, error: error.message || 'Internal server error' },
+      { status: 500 }
+    );
   }
 }
 

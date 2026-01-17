@@ -17,7 +17,7 @@ async function getAuthenticatedUser(request: NextRequest) {
   try {
     const userString = Buffer.from(token, 'base64').toString();
     const user = JSON.parse(userString);
-    
+
     // Verify user exists and is active - include department_id
     const { data: dbUser, error } = await supabase
       .from('users')
@@ -71,17 +71,17 @@ export async function GET(request: NextRequest) {
 
       if (deptError) {
         console.error('Error fetching department:', deptError);
-        return NextResponse.json({ 
-          success: false, 
+        return NextResponse.json({
+          success: false,
           error: 'Department not found',
-          data: [] 
+          data: []
         });
       }
 
       deptId = deptData?.id;
     }
 
-    // Build query to fetch batches - simplified without joins
+    // Build query to fetch batches
     let query = supabase
       .from('batches')
       .select(`
@@ -93,6 +93,7 @@ export async function GET(request: NextRequest) {
         division,
         department_id,
         college_id,
+        course_id,
         expected_strength,
         actual_strength,
         max_hours_per_day,
@@ -100,7 +101,14 @@ export async function GET(request: NextRequest) {
         preferred_end_time,
         is_active,
         created_at,
-        class_coordinator
+        class_coordinator,
+        departments:departments(name, code),
+        courses:courses(title, code),
+        elective_buckets:elective_buckets(
+          id, 
+          bucket_name,
+          subjects:subjects(id, name, code)
+        )
       `)
       .eq('is_active', true);
 
@@ -113,16 +121,16 @@ export async function GET(request: NextRequest) {
 
     if (batchesError) {
       console.error('Error fetching batches:', batchesError);
-      return NextResponse.json({ 
-        success: false, 
+      return NextResponse.json({
+        success: false,
         error: batchesError.message,
-        data: [] 
+        data: []
       }, { status: 500 });
     }
 
     console.log(`Found ${batchesData?.length || 0} batches`);
 
-    // Transform data - simplified without joins
+    // Transform data
     const transformedData = batchesData?.map((batch: any) => ({
       id: batch.id,
       name: batch.name,
@@ -134,12 +142,16 @@ export async function GET(request: NextRequest) {
       college_id: batch.college_id,
       expected_strength: batch.expected_strength,
       actual_strength: batch.actual_strength,
+      strength: batch.actual_strength || batch.expected_strength,
       max_hours_per_day: batch.max_hours_per_day,
       preferred_start_time: batch.preferred_start_time,
       preferred_end_time: batch.preferred_end_time,
       is_active: batch.is_active,
       created_at: batch.created_at,
-      class_coordinator: batch.class_coordinator
+      class_coordinator: batch.class_coordinator,
+      departments: batch.departments,
+      courses: batch.courses,
+      elective_buckets: batch.elective_buckets
     })) || [];
 
     // Calculate statistics
@@ -150,8 +162,8 @@ export async function GET(request: NextRequest) {
       return acc;
     }, {});
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       data: transformedData,
       statistics: {
         totalBatches,
@@ -162,8 +174,8 @@ export async function GET(request: NextRequest) {
     });
   } catch (error: any) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ 
-      success: false, 
+    return NextResponse.json({
+      success: false,
       error: 'Internal server error',
       data: []
     }, { status: 500 });
@@ -174,13 +186,13 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { 
-      name, 
-      semester, 
-      academic_year, 
-      section, 
+    const {
+      name,
+      semester,
+      academic_year,
+      section,
       division,
-      expected_strength, 
+      expected_strength,
       actual_strength,
       department_code,
       department_id
@@ -196,14 +208,14 @@ export async function POST(request: NextRequest) {
         .select('id, college_id')
         .eq('code', department_code)
         .single();
-      
+
       deptId = deptData?.id;
     }
 
     if (!deptId) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Department not found' 
+      return NextResponse.json({
+        success: false,
+        error: 'Department not found'
       }, { status: 400 });
     }
 
@@ -236,24 +248,24 @@ export async function POST(request: NextRequest) {
 
     if (batchError) {
       console.error('Error creating batch:', batchError);
-      return NextResponse.json({ 
-        success: false, 
-        error: batchError.message 
+      return NextResponse.json({
+        success: false,
+        error: batchError.message
       }, { status: 500 });
     }
 
     console.log('Batch created successfully:', batchData);
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       data: batchData,
       message: 'Batch created successfully'
     });
   } catch (error: any) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ 
-      success: false, 
-      error: 'Internal server error' 
+    return NextResponse.json({
+      success: false,
+      error: 'Internal server error'
     }, { status: 500 });
   }
 }
@@ -265,9 +277,9 @@ export async function DELETE(request: NextRequest) {
     const batchId = searchParams.get('id');
 
     if (!batchId) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Batch ID is required' 
+      return NextResponse.json({
+        success: false,
+        error: 'Batch ID is required'
       }, { status: 400 });
     }
 
@@ -281,23 +293,23 @@ export async function DELETE(request: NextRequest) {
 
     if (deleteError) {
       console.error('Error deleting batch:', deleteError);
-      return NextResponse.json({ 
-        success: false, 
-        error: deleteError.message 
+      return NextResponse.json({
+        success: false,
+        error: deleteError.message
       }, { status: 500 });
     }
 
     console.log('Batch deleted successfully');
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       message: 'Batch deleted successfully'
     });
   } catch (error: any) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ 
-      success: false, 
-      error: 'Internal server error' 
+    return NextResponse.json({
+      success: false,
+      error: 'Internal server error'
     }, { status: 500 });
   }
 }
