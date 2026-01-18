@@ -7,10 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SubmissionResultDialog } from "@/components/assignment/SubmissionResultDialog";
 import { AlreadySubmittedDialog } from "@/components/assignment/AlreadySubmittedDialog";
-import { 
-  Clock, 
-  ChevronLeft, 
-  ChevronRight, 
+import {
+  Clock,
+  ChevronLeft,
+  ChevronRight,
   AlertTriangle,
   CheckCircle,
   Circle,
@@ -112,7 +112,7 @@ export default function AssignmentPage() {
         const newViolations = violations + 1;
         setViolations(newViolations);
         setShowWarning(true);
-        
+
         setTimeout(() => setShowWarning(false), 3000);
 
         if (newViolations >= (assignment?.max_violations || 3)) {
@@ -141,7 +141,7 @@ export default function AssignmentPage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        
+
         // Check if already submitted
         if (errorData.alreadySubmitted) {
           setExistingSubmission({
@@ -153,14 +153,14 @@ export default function AssignmentPage() {
           setShowAlreadySubmittedDialog(true);
           return;
         }
-        
+
         throw new Error(errorData.error || 'Failed to fetch assignment');
       }
 
       const data = await response.json();
       setAssignment(data.assignment);
       setQuestions(data.questions || []);
-      
+
       // Set initial time
       if (data.assignment.duration_minutes) {
         setTimeRemaining(data.assignment.duration_minutes * 60);
@@ -203,7 +203,7 @@ export default function AssignmentPage() {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
-    
+
     if (hours > 0) {
       return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
@@ -258,9 +258,9 @@ export default function AssignmentPage() {
       }
 
       const data = await response.json();
-      
+
       exitFullScreen();
-      
+
       // Show modern submission dialog
       setSubmissionResult({
         score: data.submission.score,
@@ -283,7 +283,7 @@ export default function AssignmentPage() {
   const isQuestionAnswered = (questionId: string) => {
     const answer = answers[questionId];
     if (!answer) return false;
-    
+
     if (Array.isArray(answer)) return answer.length > 0;
     if (typeof answer === 'string') return answer.trim().length > 0;
     return true;
@@ -300,7 +300,7 @@ export default function AssignmentPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4D869C] mx-auto mb-4"></div>
           <p className="text-gray-600">Loading assignment...</p>
         </div>
       </div>
@@ -362,16 +362,21 @@ export default function AssignmentPage() {
           <div className="flex items-center justify-between">
             <div className="flex-1">
               <h1 className="text-xl font-bold text-gray-900">{assignment.title}</h1>
-              <p className="text-sm text-gray-600">
-                {assignment.subjects?.name} • {assignment.total_marks} marks
-              </p>
+              <div className="flex gap-4 text-sm text-gray-600 mt-1">
+                <span>{assignment.subjects?.name} • {assignment.total_marks} marks</span>
+                {assignment.scheduled_end && (
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-4 h-4" />
+                    Ends: {new Date(assignment.scheduled_end).toLocaleString()}
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Timer */}
             <div className="flex items-center gap-4">
-              <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
-                timeRemaining < 300 ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
-              }`}>
+              <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${timeRemaining < 300 ? 'bg-red-100 text-red-700' : 'bg-[#CDE8E5] text-[#4D869C]'
+                }`}>
                 <Clock className="h-5 w-5" />
                 <span className="font-mono text-lg font-bold">
                   {formatTime(timeRemaining)}
@@ -424,11 +429,10 @@ export default function AssignmentPage() {
                     {currentQuestion.question_data.options?.map((option) => (
                       <label
                         key={option.id}
-                        className={`flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                          answers[currentQuestion.id] === option.id
-                            ? 'border-blue-500 bg-blue-50'
-                            : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
-                        }`}
+                        className={`flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${answers[currentQuestion.id] === option.id
+                          ? 'border-[#4D869C] bg-[#CDE8E5]'
+                          : 'border-gray-200 hover:border-[#7AB2B2] hover:bg-gray-50'
+                          }`}
                       >
                         <input
                           type="radio"
@@ -436,7 +440,7 @@ export default function AssignmentPage() {
                           value={option.id}
                           checked={answers[currentQuestion.id] === option.id}
                           onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
-                          className="h-4 w-4 text-blue-600"
+                          className="h-4 w-4 text-[#4D869C]"
                         />
                         <span className="flex-1 text-gray-800">{option.text}</span>
                       </label>
@@ -450,26 +454,26 @@ export default function AssignmentPage() {
                     {currentQuestion.question_data.options?.map((option) => {
                       const selectedOptions = answers[currentQuestion.id] || [];
                       const isSelected = selectedOptions.includes(option.id);
-                      
+
                       return (
                         <label
                           key={option.id}
-                          className={`flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                            isSelected
-                              ? 'border-blue-500 bg-blue-50'
-                              : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
-                          }`}
+                          className={`flex items-center gap-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${isSelected
+                            ? 'border-[#4D869C] bg-[#CDE8E5]'
+                            : 'border-gray-200 hover:border-[#7AB2B2] hover:bg-gray-50'
+                            }`}
                         >
                           <input
                             type="checkbox"
+                            value={option.id}
                             checked={isSelected}
                             onChange={(e) => {
-                              const newSelection = e.target.checked
+                              const newSelected = e.target.checked
                                 ? [...selectedOptions, option.id]
                                 : selectedOptions.filter((id: string) => id !== option.id);
-                              handleAnswerChange(currentQuestion.id, newSelection);
+                              handleAnswerChange(currentQuestion.id, newSelected);
                             }}
-                            className="h-4 w-4 text-blue-600 rounded"
+                            className="h-4 w-4 text-[#4D869C] rounded"
                           />
                           <span className="flex-1 text-gray-800">{option.text}</span>
                         </label>
@@ -483,23 +487,23 @@ export default function AssignmentPage() {
                   <textarea
                     value={answers[currentQuestion.id] || ''}
                     onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
-                    placeholder="Type your answer here..."
-                    className="w-full min-h-[300px] p-4 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none resize-y"
+                    placeholder="Type your essay answer here..."
+                    className="w-full h-48 p-4 border-2 border-gray-200 rounded-lg focus:border-[#4D869C] focus:outline-none resize-none"
                   />
                 )}
 
                 {/* Coding Type */}
                 {currentQuestion.question_type === 'CODING' && (
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm text-gray-600 bg-gray-100 px-3 py-2 rounded-t-lg">
-                      <span>Language: {currentQuestion.question_data.language || 'Python'}</span>
+                    <div className="bg-gray-800 text-gray-200 py-2 px-4 rounded-t-lg text-sm font-mono">
+                      {currentQuestion.question_data.language || 'Code'}
                     </div>
                     <textarea
                       value={answers[currentQuestion.id] || currentQuestion.question_data.starter_code || ''}
                       onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
                       placeholder="Write your code here..."
-                      className="w-full min-h-[400px] p-4 border-2 border-gray-200 rounded-b-lg focus:border-blue-500 focus:outline-none font-mono text-sm resize-y"
-                      spellCheck={false}
+                      className="w-full h-64 p-4 border-2 border-gray-200 rounded-b-lg font-mono bg-gray-50 focus:border-[#4D869C] focus:outline-none focus:bg-white resize-none"
+                      spellCheck="false"
                     />
                   </div>
                 )}
@@ -511,7 +515,7 @@ export default function AssignmentPage() {
                     value={answers[currentQuestion.id] || ''}
                     onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
                     placeholder="Type your answer here..."
-                    className="w-full p-4 border-2 border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                    className="w-full p-4 border-2 border-gray-200 rounded-lg focus:border-[#4D869C] focus:outline-none"
                   />
                 )}
               </div>
@@ -563,13 +567,12 @@ export default function AssignmentPage() {
                   <button
                     key={question.id}
                     onClick={() => setCurrentQuestionIndex(index)}
-                    className={`h-10 rounded-lg font-semibold transition-all ${
-                      index === currentQuestionIndex
-                        ? 'bg-blue-600 text-white ring-2 ring-blue-400'
-                        : isQuestionAnswered(question.id)
+                    className={`h-10 rounded-lg font-semibold transition-all ${index === currentQuestionIndex
+                      ? 'bg-[#4D869C] text-white ring-2 ring-[#7AB2B2]'
+                      : isQuestionAnswered(question.id)
                         ? 'bg-green-100 text-green-700 hover:bg-green-200'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                      }`}
                   >
                     {question.question_order}
                   </button>
@@ -579,7 +582,7 @@ export default function AssignmentPage() {
               {/* Legend */}
               <div className="space-y-2 text-sm border-t pt-4">
                 <div className="flex items-center gap-2">
-                  <div className="h-6 w-6 bg-blue-600 rounded"></div>
+                  <div className="h-6 w-6 bg-[#4D869C] rounded"></div>
                   <span>Current</span>
                 </div>
                 <div className="flex items-center gap-2">

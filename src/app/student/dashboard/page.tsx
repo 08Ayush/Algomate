@@ -1,1379 +1,35 @@
-// 'use client';
-
-// import React, { useState, useEffect } from 'react';
-// import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-// import { Badge } from "@/components/ui/badge";
-// import { Button } from "@/components/ui/button";
-// import { useRouter } from 'next/navigation';
-// import { Header } from '@/components/Header';
-// import { 
-//   Calendar, 
-//   Clock, 
-//   MapPin,
-//   BookOpen,
-//   GraduationCap,
-//   Building,
-//   FileText,
-//   FileSpreadsheet,
-//   ChevronDown,
-//   Loader2
-// } from "lucide-react";
-
-// // Types
-// interface FacultyMember {
-//   id: string;
-//   first_name: string;
-//   last_name: string;
-//   email: string;
-//   college_uid: string;
-//   faculty_type?: string;
-//   department_id: string;
-//   departments?: {
-//     name: string;
-//     code: string;
-//   };
-// }
-
-// interface DashboardData {
-//   user: any;
-//   additionalData: {
-//     batch?: any;
-//     batchId?: string;
-//     facultyCount?: number;
-//     facultyMembers?: FacultyMember[];
-//   };
-//   events: any[];
-// }
-
-// interface PublishedTimetable {
-//   id: string;
-//   title: string;
-//   academic_year: string;
-//   semester: number;
-//   fitness_score: number;
-//   batches: {
-//     id: string;
-//     name: string;
-//     section: string;
-//     semester: number;
-//   };
-// }
-
-// interface TimetableClass {
-//   id: string;
-//   subjectCode: string;
-//   subjectName: string;
-//   subjectType: string;
-//   facultyName: string;
-//   classroomName: string;
-//   building: string;
-//   day: string;
-//   startTime: string;
-//   endTime: string;
-//   isBreak: boolean;
-//   isLunch: boolean;
-//   isLab: boolean;
-//   isContinuation: boolean;
-// }
-
-// interface ElectiveBucket {
-//   id: string;
-//   bucket_name: string;
-//   description?: string;
-//   max_selection: number;
-//   min_selection: number;
-//   batch_id: string;
-//   batches?: {
-//     name: string;
-//     semester: number;
-//   };
-//   created_at: string;
-// }
-
-// interface Subject {
-//   id: string;
-//   code: string;
-//   name: string;
-//   credits?: number;
-//   credit_value?: number;
-//   nep_category: string;
-//   subject_type: string;
-//   course_group_id: string;
-//   semester: number;
-//   description?: string;
-// }
-
-// interface StudentSelection {
-//   id: string;
-//   student_id: string;
-//   subject_id: string;
-//   semester: number;
-//   academic_year: string;
-//   selection_date: string;
-//   subjects?: Subject;
-// }
-
-// export default function StudentDashboard() {
-//   const router = useRouter();
-//   const [user, setUser] = useState<any>(null);
-//   const [loading, setLoading] = useState(true);
-//   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
-//   const [publishedTimetables, setPublishedTimetables] = useState<PublishedTimetable[]>([]);
-//   const [availableBatches, setAvailableBatches] = useState<any[]>([]);
-//   const hasFetchedData = React.useRef(false);
-//   const [selectedTimetable, setSelectedTimetable] = useState<PublishedTimetable | null>(null);
-//   const [timetableClasses, setTimetableClasses] = useState<TimetableClass[]>([]);
-//   const [timeSlots, setTimeSlots] = useState<string[]>([]);
-//   const [days] = useState(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
-//   const [loadingTimetable, setLoadingTimetable] = useState(false);
-//   const [showFacultyList, setShowFacultyList] = useState(false);
-
-//   // NEP Curriculum Selection States
-//   const [electiveBuckets, setElectiveBuckets] = useState<ElectiveBucket[]>([]);
-//   const [bucketSubjects, setBucketSubjects] = useState<{ [bucketId: string]: Subject[] }>({});
-//   const [studentSelections, setStudentSelections] = useState<StudentSelection[]>([]);
-//   const [selectedSubjects, setSelectedSubjects] = useState<{ [bucketId: string]: string[] }>({});
-//   const [loadingBuckets, setLoadingBuckets] = useState(false);
-//   const [loadingSelections, setLoadingSelections] = useState(false);
-//   const [showNepCurriculum, setShowNepCurriculum] = useState(false);
-
-//   useEffect(() => {
-//     // Prevent duplicate fetches
-//     if (hasFetchedData.current) {
-//       return;
-//     }
-
-//     const userData = localStorage.getItem('user');
-//     if (!userData) {
-//       router.push('/login');
-//       return;
-//     }
-
-//     const parsedUser = JSON.parse(userData);
-    
-//     // Allow students and general/guest faculty to access this dashboard
-//     const isStudent = parsedUser.role === 'student';
-//     const isGeneralFaculty = parsedUser.role === 'faculty' && 
-//                             (parsedUser.faculty_type === 'general' || 
-//                              parsedUser.faculty_type === 'guest' || 
-//                              !parsedUser.faculty_type);
-    
-//     if (!isStudent && !isGeneralFaculty) {
-//       router.push('/login');
-//       return;
-//     }
-
-//     setUser(parsedUser);
-//     fetchDashboardData(parsedUser);
-//     hasFetchedData.current = true;
-//   }, [router]);
-
-//   // Fetch NEP curriculum data when dashboard data is loaded
-//   useEffect(() => {
-//     if (user?.role === 'student' && dashboardData?.additionalData?.batch && !loadingBuckets && electiveBuckets.length === 0 && hasFetchedData.current) {
-//       console.log('🎓 Fetching NEP curriculum data...');
-//       fetchNepCurriculumData(user);
-//     }
-//   }, [user?.id, dashboardData?.additionalData?.batchId, loadingBuckets, electiveBuckets.length]);
-
-//   const fetchDashboardData = async (user: any) => {
-//     try {
-//       setLoading(true);
-      
-//       // Fetch user profile and events
-//       const response = await fetch(
-//         `/api/student/dashboard?userId=${user.id}&role=${user.role}`
-//       );
-      
-//       if (!response.ok) {
-//         throw new Error('Failed to fetch dashboard data');
-//       }
-      
-//       const data = await response.json();
-//       console.log('📥 Dashboard data received:', data);
-//       setDashboardData(data);
-
-//       // Update localStorage with complete user data including course info
-//       let finalUser = user;
-//       if (data.user) {
-//         const updatedUser = {
-//           ...user,
-//           college_uid: data.user.college_uid,
-//           current_semester: data.user.current_semester || data.additionalData?.batch?.semester,
-//           course: data.user.course,
-//           course_id: data.user.course_id
-//         };
-//         console.log('🔄 User course_id from API:', data.user.course_id, 'vs localStorage:', user.course_id);
-//         localStorage.setItem('user', JSON.stringify(updatedUser));
-//         finalUser = updatedUser;
-//         setUser(updatedUser);
-//       } else {
-//         console.warn('⚠️ No user data in API response, keeping original user');
-//       }
-
-//       // Fetch published timetables for the course - use finalUser to ensure we have the latest course_id
-//       const courseIdToUse = finalUser.course_id || user.course_id;
-//       console.log('🔍 Fetching timetables with courseId:', courseIdToUse);
-//       const timetablesResponse = await fetch(
-//         `/api/student/published-timetables?courseId=${courseIdToUse}${user.role === 'student' && data.additionalData.batch ? `&semester=${data.additionalData.batch.semester}` : ''}`
-//       );
-      
-//       if (timetablesResponse.ok) {
-//         const timetablesData = await timetablesResponse.json();
-//         console.log('📚 Published timetables received:', {
-//           count: timetablesData.timetables?.length || 0,
-//           timetables: timetablesData.timetables,
-//           batches: timetablesData.batches?.length || 0
-//         });
-        
-//         // Only update if we actually got data
-//         if (timetablesData.timetables) {
-//           setPublishedTimetables(timetablesData.timetables);
-//         }
-//         if (timetablesData.batches) {
-//           setAvailableBatches(timetablesData.batches);
-//         }
-        
-//         // Auto-select student's own timetable or first available
-//         if (user.role === 'student' && data.additionalData.batchId) {
-//           const studentTimetable = timetablesData.timetables.find(
-//             (tt: PublishedTimetable) => tt.batches?.id === data.additionalData.batchId
-//           );
-//           if (studentTimetable) {
-//             console.log('✅ Auto-selecting student timetable:', studentTimetable.id);
-//             setSelectedTimetable(studentTimetable);
-//             fetchTimetableClasses(studentTimetable.id);
-//           } else {
-//             console.warn('⚠️ No timetable found for student batch:', data.additionalData.batchId);
-//           }
-//         } else if (timetablesData.timetables.length > 0) {
-//           console.log('✅ Auto-selecting first timetable:', timetablesData.timetables[0].id);
-//           setSelectedTimetable(timetablesData.timetables[0]);
-//           fetchTimetableClasses(timetablesData.timetables[0].id);
-//         } else {
-//           console.warn('⚠️ No published timetables available');
-//         }
-//       } else {
-//         console.error('❌ Failed to fetch published timetables:', timetablesResponse.status);
-//       }
-//     } catch (error) {
-//       console.error('Error fetching dashboard data:', error);
-//     } finally {
-//       setLoading(false);
-//     }
-//   };
-
-//   const fetchTimetableClasses = async (timetableId: string) => {
-//     try {
-//       setLoadingTimetable(true);
-//       console.log('📅 Fetching timetable classes for timetableId:', timetableId);
-//       const response = await fetch(
-//         `/api/student/timetable-classes?timetableId=${timetableId}`
-//       );
-      
-//       if (!response.ok) {
-//         console.error('❌ Failed to fetch timetable classes:', response.status, response.statusText);
-//         throw new Error('Failed to fetch timetable classes');
-//       }
-      
-//       const data = await response.json();
-//       console.log('✅ Timetable classes received:', {
-//         classesCount: data.classes?.length || 0,
-//         timeSlotsCount: data.timeSlots?.length || 0
-//       });
-//       setTimetableClasses(data.classes || []);
-//       setTimeSlots(data.timeSlots || []);
-//     } catch (error) {
-//       console.error('❌ Error fetching timetable classes:', error);
-//     } finally {
-//       setLoadingTimetable(false);
-//     }
-//   };
-
-//   const handleTimetableChange = (timetable: PublishedTimetable) => {
-//     setSelectedTimetable(timetable);
-//     fetchTimetableClasses(timetable.id);
-//   };
-
-//   // NEP Curriculum Functions
-//   const fetchNepCurriculumData = async (user: any) => {
-//     console.log('🎯 fetchNepCurriculumData called with user:', {
-//       userId: user.id,
-//       course_id: user.course_id,
-//       email: user.email,
-//       role: user.role
-//     });
-    
-//     if (!dashboardData?.additionalData?.batch) {
-//       console.error('❌ No batch data found in dashboardData:', dashboardData);
-//       return;
-//     }
-    
-//     try {
-//       setLoadingBuckets(true);
-      
-//       // Get user's current semester from batch
-//       const semester = dashboardData.additionalData.batch.semester;
-//       const batchInfo = dashboardData.additionalData.batch;
-      
-//       console.log('📚 Fetching buckets with params:', {
-//         courseId: user.course_id,
-//         semester: semester,
-//         studentId: user.id,
-//         batchInfo: batchInfo
-//       });
-      
-//       // Fetch elective buckets for student's semester using batchId
-//       const bucketsResponse = await fetch(
-//         `/api/nep/buckets?batchId=${dashboardData.additionalData.batchId}&studentId=${user.id}`
-//       );
-      
-//       console.log('📡 Buckets API response status:', bucketsResponse.status);
-      
-//       if (bucketsResponse.ok) {
-//         const bucketsData = await bucketsResponse.json();
-//         console.log('✅ Buckets data received:', {
-//           count: Array.isArray(bucketsData) ? bucketsData.length : 0,
-//           data: bucketsData
-//         });
-        
-//         setElectiveBuckets(bucketsData || []);
-        
-//         // Extract subjects from buckets response (subjects are already included)
-//         const subjectsMap = (bucketsData || []).reduce((acc: any, bucket: any) => {
-//           acc[bucket.id] = bucket.subjects || [];
-//           console.log(`  Bucket "${bucket.bucket_name}" has ${bucket.subjects?.length || 0} subjects`);
-//           return acc;
-//         }, {} as { [bucketId: string]: Subject[] });
-        
-//         setBucketSubjects(subjectsMap);
-//         console.log('✅ Final state:', {
-//           bucketsCount: bucketsData.length,
-//           totalSubjects: Object.values(subjectsMap).reduce((sum: number, subjects: any) => sum + subjects.length, 0)
-//         });
-//       } else {
-//         const errorData = await bucketsResponse.json();
-//         console.error('❌ Buckets API error:', errorData);
-//       }
-      
-//       // Fetch student's existing selections
-//       const selectionsResponse = await fetch(
-//         `/api/student/selections?studentId=${user.id}&semester=${semester}`
-//       );
-      
-//       if (selectionsResponse.ok) {
-//         const selectionsData = await selectionsResponse.json();
-//         setStudentSelections(selectionsData.selections || []);
-        
-//         // Initialize selected subjects state
-//         const initialSelections = (selectionsData.selections || []).reduce((acc: any, selection: StudentSelection) => {
-//           if (selection.subjects?.course_group_id) {
-//             if (!acc[selection.subjects.course_group_id]) {
-//               acc[selection.subjects.course_group_id] = [];
-//             }
-//             acc[selection.subjects.course_group_id].push(selection.subject_id);
-//           }
-//           return acc;
-//         }, {});
-        
-//         setSelectedSubjects(initialSelections);
-//       }
-//     } catch (error) {
-//       console.error('Error fetching NEP curriculum data:', error);
-//     } finally {
-//       setLoadingBuckets(false);
-//     }
-//   };
-
-//   const handleSubjectSelection = async (bucketId: string, subjectId: string, isSelected: boolean) => {
-//     try {
-//       setLoadingSelections(true);
-      
-//       const bucket = electiveBuckets.find(b => b.id === bucketId);
-//       if (!bucket) return;
-      
-//       const currentSelections = selectedSubjects[bucketId] || [];
-      
-//       if (isSelected) {
-//         // Check if we can add more selections
-//         if (currentSelections.length >= bucket.max_selection) {
-//           alert(`You can only select ${bucket.max_selection} subjects from this bucket.`);
-//           return;
-//         }
-        
-//         // Add selection
-//         const response = await fetch('/api/student/selections', {
-//           method: 'POST',
-//           headers: { 'Content-Type': 'application/json' },
-//           body: JSON.stringify({
-//             student_id: user.id,
-//             subject_id: subjectId,
-//             semester: dashboardData?.additionalData?.batch?.semester,
-//             academic_year: dashboardData?.additionalData?.batch?.academic_year || '2025-26'
-//           })
-//         });
-        
-//         if (response.ok) {
-//           setSelectedSubjects(prev => ({
-//             ...prev,
-//             [bucketId]: [...currentSelections, subjectId]
-//           }));
-//         }
-//       } else {
-//         // Remove selection
-//         const response = await fetch('/api/student/selections', {
-//           method: 'DELETE',
-//           headers: { 'Content-Type': 'application/json' },
-//           body: JSON.stringify({
-//             student_id: user.id,
-//             subject_id: subjectId
-//           })
-//         });
-        
-//         if (response.ok) {
-//           setSelectedSubjects(prev => ({
-//             ...prev,
-//             [bucketId]: currentSelections.filter(id => id !== subjectId)
-//           }));
-//         }
-//       }
-//     } catch (error) {
-//       console.error('Error handling subject selection:', error);
-//     } finally {
-//       setLoadingSelections(false);
-//     }
-//   };
-
-//   const getClassForSlot = (day: string, timeSlot: string): TimetableClass | undefined => {
-//     const [startTime] = timeSlot.split('-');
-//     const normalizeTime = (time: string) => time.substring(0, 5);
-    
-//     return timetableClasses.find(
-//       cls => cls.day === day && normalizeTime(cls.startTime) === normalizeTime(startTime)
-//     );
-//   };
-
-//   const getClassColor = (subjectType: string, index: number) => {
-//     const colors = [
-//       'bg-blue-100 text-blue-800',
-//       'bg-green-100 text-green-800',
-//       'bg-purple-100 text-purple-800',
-//       'bg-orange-100 text-orange-800',
-//       'bg-red-100 text-red-800',
-//       'bg-indigo-100 text-indigo-800',
-//       'bg-teal-100 text-teal-800',
-//       'bg-pink-100 text-pink-800',
-//     ];
-    
-//     if (subjectType === 'LAB') {
-//       return 'bg-indigo-100 text-indigo-800';
-//     }
-    
-//     return colors[index % colors.length];
-//   };
-
-//   // Export to PDF function
-//   const exportToPDF = () => {
-//     if (!selectedTimetable) return;
-    
-//     let htmlContent = `
-//       <html>
-//         <head>
-//           <title>Class Timetable - ${selectedTimetable.batches?.name} ${selectedTimetable.batches?.section}</title>
-//           <style>
-//             body { font-family: Arial, sans-serif; margin: 20px; }
-//             h1 { color: #333; text-align: center; margin-bottom: 30px; }
-//             table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-//             th, td { border: 1px solid #ddd; padding: 12px; text-align: center; }
-//             th { background-color: #f5f5f5; font-weight: bold; }
-//             .subject-cell { background-color: #f8f9fa; padding: 8px; }
-//             .break-cell { background-color: #e9ecef; font-style: italic; }
-//             .course-code { font-weight: bold; font-size: 0.9em; }
-//             .course-title { font-size: 0.8em; margin: 2px 0; }
-//             .faculty { font-size: 0.7em; color: #666; }
-//             .room { font-size: 0.7em; color: #888; }
-//           </style>
-//         </head>
-//         <body>
-//           <h1>Weekly Class Schedule</h1>
-//           <p style="text-align: center; margin-bottom: 20px;">
-//             ${dashboardData?.user.department?.name} • Batch ${selectedTimetable.batches?.name} ${selectedTimetable.batches?.section} • ${selectedTimetable.academic_year}
-//           </p>
-//           <table>
-//             <thead>
-//               <tr>
-//                 <th>Time / Day</th>`;
-    
-//     days.forEach(day => {
-//       htmlContent += `<th>${day}</th>`;
-//     });
-    
-//     htmlContent += `</tr></thead><tbody>`;
-    
-//     timeSlots.forEach(timeSlot => {
-//       htmlContent += `<tr><td style="font-weight: bold; background-color: #f5f5f5;">${timeSlot}</td>`;
-      
-//       days.forEach(day => {
-//         const slot = getClassForSlot(day, timeSlot);
-//         if (!slot) {
-//           htmlContent += '<td>-</td>';
-//         } else if (slot.isBreak || slot.isLunch) {
-//           htmlContent += `<td class="break-cell">${slot.isLunch ? 'Lunch Break' : 'Break'}</td>`;
-//         } else {
-//           htmlContent += `
-//             <td class="subject-cell">
-//               <div class="course-code">${slot.subjectCode}</div>
-//               <div class="course-title">${slot.subjectName}</div>
-//               <div class="faculty">${slot.facultyName}</div>
-//               <div class="room">${slot.classroomName}</div>
-//             </td>
-//           `;
-//         }
-//       });
-      
-//       htmlContent += '</tr>';
-//     });
-    
-//     htmlContent += `</tbody></table></body></html>`;
-
-//     const blob = new Blob([htmlContent], { type: 'text/html' });
-//     const url = URL.createObjectURL(blob);
-//     const link = document.createElement('a');
-//     link.href = url;
-//     link.download = `timetable-${selectedTimetable.batches?.name}-${selectedTimetable.batches?.section}.html`;
-//     document.body.appendChild(link);
-//     link.click();
-//     document.body.removeChild(link);
-//     URL.revokeObjectURL(url);
-//   };
-
-//   // Export to Excel (CSV format)
-//   const exportToExcel = () => {
-//     if (!selectedTimetable) return;
-    
-//     let csvContent = `Weekly Class Schedule - ${selectedTimetable.batches?.name} ${selectedTimetable.batches?.section}\n`;
-//     csvContent += `${dashboardData?.user.department?.name} • ${selectedTimetable.academic_year}\n\n`;
-    
-//     csvContent += 'Time / Day,' + days.join(',') + '\n';
-    
-//     timeSlots.forEach(timeSlot => {
-//       let row = timeSlot;
-//       days.forEach(day => {
-//         const slot = getClassForSlot(day, timeSlot);
-//         if (!slot) {
-//           row += ',-';
-//         } else if (slot.isBreak || slot.isLunch) {
-//           row += `,"${slot.isLunch ? 'Lunch Break' : 'Break'}"`;
-//         } else {
-//           row += `,"${slot.subjectCode} - ${slot.subjectName} (${slot.facultyName}, ${slot.classroomName})"`;
-//         }
-//       });
-//       csvContent += row + '\n';
-//     });
-
-//     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-//     const url = URL.createObjectURL(blob);
-//     const link = document.createElement('a');
-//     link.href = url;
-//     link.download = `timetable-${selectedTimetable.batches?.name}-${selectedTimetable.batches?.section}.csv`;
-//     document.body.appendChild(link);
-//     link.click();
-//     document.body.removeChild(link);
-//     URL.revokeObjectURL(url);
-//   };
-
-//   const getEventTypeColor = (type: string) => {
-//     switch (type.toLowerCase()) {
-//       case 'workshop': return 'bg-blue-100 text-blue-800 border-blue-200';
-//       case 'event': return 'bg-green-100 text-green-800 border-green-200';
-//       case 'seminar': return 'bg-purple-100 text-purple-800 border-purple-200';
-//       case 'academic': return 'bg-orange-100 text-orange-800 border-orange-200';
-//       default: return 'bg-gray-100 text-gray-800 border-gray-200';
-//     }
-//   };
-
-//   if (!user || loading) {
-//     return (
-//       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-//         <div className="text-center">
-//           <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
-//           <p className="text-gray-600 dark:text-gray-300">Loading dashboard...</p>
-//         </div>
-//       </div>
-//     );
-//   }
-
-//   return (
-//     <>
-//       <Header />
-//       <div className="space-y-6 p-6">
-//         {/* Welcome Section */}
-//         <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-950/20 dark:via-indigo-950/20 dark:to-purple-950/20 rounded-2xl p-6 border border-blue-100 dark:border-blue-800">
-//         <div className="flex items-center gap-4">
-//           <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-//             <GraduationCap className="h-8 w-8 text-white" />
-//           </div>
-//           <div className="flex-1">
-//             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-//               Welcome back, {user?.first_name || user?.name || (user?.role === 'faculty' ? 'Faculty' : 'Student')}! 👋
-//             </h1>
-//             <p className="text-gray-600 dark:text-gray-300 mt-1">
-//               {user?.role === 'faculty' 
-//                 ? 'View your teaching schedule and department information'
-//                 : 'Ready to explore your Computer Science Engineering dashboard'}
-//             </p>
-//             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-//               {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-//             </p>
-//           </div>
-//           <div className="text-right">
-//             <div className="text-sm text-gray-500 dark:text-gray-400">Your Course</div>
-//             <Badge className="bg-blue-500 text-white mt-1">
-//               {dashboardData?.user.course?.code || 'N/A'}
-//             </Badge>
-//             {user?.role === 'student' && dashboardData?.additionalData.batch?.semester && (
-//               <div className="mt-2">
-//                 <div className="text-sm text-gray-500 dark:text-gray-400">Current Semester</div>
-//                 <Badge className="bg-green-500 text-white mt-1">
-//                   Semester {dashboardData.additionalData.batch.semester}
-//                 </Badge>
-//               </div>
-//             )}
-//           </div>
-//         </div>
-//       </div>
-
-//       {/* Course Info Card */}
-//       <Card className="border-blue-200 dark:border-blue-800">
-//         <CardHeader>
-//           <CardTitle className="flex items-center gap-2">
-//             <BookOpen className="h-5 w-5 text-blue-600" />
-//             {dashboardData?.user.course?.title || 'Course'}
-//           </CardTitle>
-//           <div className="text-sm text-gray-600 dark:text-gray-300">
-//             {dashboardData?.user.college?.name || 'College'} • {dashboardData?.user.course?.nature_of_course || 'Program'}
-//           </div>
-//         </CardHeader>
-//         <CardContent>
-//           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-//             {user?.role === 'student' && (
-//               <>
-//                 <div className="text-center">
-//                   <div className="text-2xl font-bold text-blue-600">
-//                     {dashboardData?.additionalData.batch?.semester || user.current_semester || '-'}
-//                   </div>
-//                   <div className="text-sm text-gray-500">Current Semester</div>
-//                 </div>
-//                 <div className="text-center">
-//                   <div className="text-2xl font-bold text-green-600">
-//                     {dashboardData?.additionalData.batch?.course?.code
-//                       ? `${dashboardData.additionalData.batch.course.code}-${dashboardData.additionalData.batch.section || 'A'}`
-//                       : dashboardData?.additionalData.batch?.name && dashboardData?.additionalData.batch?.section 
-//                       ? `${dashboardData.additionalData.batch.name} ${dashboardData.additionalData.batch.section}`
-//                       : '-'}
-//                   </div>
-//                   <div className="text-sm text-gray-500">Batch</div>
-//                 </div>
-//                 <div className="text-center">
-//                   <div className="text-2xl font-bold text-purple-600">
-//                     {dashboardData?.user.college_uid?.toUpperCase() || user.college_uid?.toUpperCase() || user.email?.split('@')[0]?.toUpperCase() || '-'}
-//                   </div>
-//                   <div className="text-sm text-gray-500">UID</div>
-//                 </div>
-//               </>
-//             )}
-//             {user?.role === 'faculty' && (
-//               <>
-//                 <div className="text-center">
-//                   <div className="text-2xl font-bold text-purple-600">
-//                     {user.college_uid?.toUpperCase() || user.uid?.toUpperCase() || '-'}
-//                   </div>
-//                   <div className="text-sm text-gray-500">College UID</div>
-//                 </div>
-//                 <div className="text-center">
-//                   <div className="text-2xl font-bold text-blue-600">
-//                     {user.faculty_type?.toUpperCase() || 'GENERAL'}
-//                   </div>
-//                   <div className="text-sm text-gray-500">Faculty Type</div>
-//                 </div>
-//                 <div className="text-center">
-//                   <div className="text-2xl font-bold text-green-600">
-//                     {dashboardData?.user.department?.name || user.department_name || '-'}
-//                   </div>
-//                   <div className="text-sm text-gray-500">Department</div>
-//                 </div>
-//               </>
-//             )}
-//             <div className="text-center">
-//               <div className="text-2xl font-bold text-orange-600 cursor-pointer hover:text-orange-700 transition-colors" onClick={() => setShowFacultyList(!showFacultyList)}>
-//                 {dashboardData?.additionalData.facultyCount || 0}
-//               </div>
-//               <div className="text-sm text-gray-500">
-//                 Faculty Members
-//                 <button 
-//                   onClick={() => setShowFacultyList(!showFacultyList)}
-//                   className="ml-1 text-xs text-blue-600 hover:text-blue-700"
-//                 >
-//                   {showFacultyList ? '▼' : '▶'}
-//                 </button>
-//               </div>
-//             </div>
-//           </div>
-          
-//           {/* Faculty Members List */}
-//           {showFacultyList && dashboardData?.additionalData.facultyMembers && dashboardData.additionalData.facultyMembers.length > 0 && (
-//             <div className="mt-6 pt-6 border-t">
-//               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-//                 <GraduationCap className="h-5 w-5 text-orange-600" />
-//                 Faculty Members ({dashboardData.additionalData.facultyCount})
-//               </h3>
-//               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-//                 {dashboardData.additionalData.facultyMembers.map((faculty: FacultyMember) => (
-//                   <div key={faculty.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:shadow-md transition-shadow">
-//                     <div className="h-10 w-10 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white font-semibold">
-//                       {faculty.first_name.charAt(0)}{faculty.last_name.charAt(0)}
-//                     </div>
-//                     <div className="flex-1 min-w-0">
-//                       <div className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
-//                         {faculty.first_name} {faculty.last_name}
-//                       </div>
-//                       <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-//                         {faculty.email}
-//                       </div>
-//                       <div className="flex items-center gap-2 mt-1">
-//                         {faculty.faculty_type && (
-//                           <Badge variant="outline" className="text-xs py-0 px-1">
-//                             {faculty.faculty_type}
-//                           </Badge>
-//                         )}
-//                         {faculty.departments && (
-//                           <span className="text-xs text-gray-500 dark:text-gray-400">
-//                             {faculty.departments.code}
-//                           </span>
-//                         )}
-//                       </div>
-//                     </div>
-//                   </div>
-//                 ))}
-//               </div>
-//             </div>
-//           )}
-//         </CardContent>
-//       </Card>
-
-//       {/* Upcoming Events Section */}
-//       <Card>
-//         <CardHeader>
-//           <CardTitle className="flex items-center gap-2">
-//             <Calendar className="h-5 w-5" />
-//             Upcoming Events & Workshops
-//             <Badge variant="secondary" className="ml-auto">
-//               {dashboardData?.events.length || 0} Events
-//             </Badge>
-//           </CardTitle>
-//           <div className="text-sm text-gray-600 dark:text-gray-300">
-//             Important upcoming activities and events in {dashboardData?.user.department?.name}
-//           </div>
-//         </CardHeader>
-//         <CardContent>
-//           {dashboardData?.events && dashboardData.events.length > 0 ? (
-//             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-//               {dashboardData.events.map((event: any) => (
-//                 <Card key={event.id} className="hover:shadow-md transition-shadow">
-//                   <CardContent className="p-4">
-//                     <div className="space-y-3">
-//                       <div className="flex items-center justify-between">
-//                         <Badge className={getEventTypeColor(event.event_type || 'other')}>
-//                           {event.event_type || 'Event'}
-//                         </Badge>
-//                         <Badge variant="outline" className="text-green-600 border-green-200">
-//                           {event.status || 'Published'}
-//                         </Badge>
-//                       </div>
-                      
-//                       <div>
-//                         <h4 className="font-medium text-sm leading-tight">{event.title}</h4>
-//                         {event.description && (
-//                           <p className="text-xs text-gray-500 mt-1 line-clamp-2">{event.description}</p>
-//                         )}
-//                       </div>
-                      
-//                       <div className="space-y-1">
-//                         <div className="flex items-center gap-2 text-xs text-gray-600">
-//                           <Calendar className="h-3 w-3" />
-//                           <span>{new Date(event.start_date).toLocaleDateString()}</span>
-//                         </div>
-//                         <div className="flex items-center gap-2 text-xs text-gray-600">
-//                           <Clock className="h-3 w-3" />
-//                           <span>{event.start_time?.substring(0, 5)} - {event.end_time?.substring(0, 5)}</span>
-//                         </div>
-//                         <div className="flex items-center gap-2 text-xs text-gray-600">
-//                           <MapPin className="h-3 w-3" />
-//                           <span>{event.venue || 'TBA'}</span>
-//                         </div>
-//                       </div>
-                      
-//                       {event.creator && (
-//                         <div className="text-xs text-gray-500 pt-2 border-t">
-//                           By: {event.creator.first_name} {event.creator.last_name}
-//                           {event.creator.faculty_type && (
-//                             <Badge variant="outline" className="ml-1 text-xs">
-//                               {event.creator.faculty_type}
-//                             </Badge>
-//                           )}
-//                         </div>
-//                       )}
-//                     </div>
-//                   </CardContent>
-//                 </Card>
-//               ))}
-//             </div>
-//           ) : (
-//             <div className="text-center py-8 text-gray-500">
-//               <Calendar className="h-12 w-12 mx-auto mb-2 opacity-50" />
-//               <p>No upcoming events available</p>
-//             </div>
-//           )}
-//         </CardContent>
-//       </Card>
-
-//       {/* Weekly Timetable Section */}
-//       <Card>
-//         <CardHeader>
-//           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-//             <div className="flex-1">
-//               <CardTitle className="flex items-center gap-2">
-//                 <Clock className="h-5 w-5" />
-//                 Published Timetables
-//               </CardTitle>
-//               <p className="text-sm text-muted-foreground mt-1">
-//                 {selectedTimetable 
-//                   ? `${selectedTimetable.batches?.name} ${selectedTimetable.batches?.section} • ${selectedTimetable.academic_year}`
-//                   : 'Select a batch to view timetable'}
-//               </p>
-//             </div>
-            
-//             {/* Batch Selector */}
-//             <div className="flex items-center gap-2 flex-wrap">
-//               {publishedTimetables.length > 1 && (
-//                 <div className="relative">
-//                   <select
-//                     value={selectedTimetable?.id || ''}
-//                     onChange={(e) => {
-//                       const selected = publishedTimetables.find(tt => tt.id === e.target.value);
-//                       if (selected) handleTimetableChange(selected);
-//                     }}
-//                     className="px-3 py-2 pr-8 border border-gray-300 rounded-md text-sm appearance-none bg-white dark:bg-gray-800 dark:border-gray-600 cursor-pointer"
-//                   >
-//                     {publishedTimetables.map((tt) => (
-//                       <option key={tt.id} value={tt.id}>
-//                         Batch {tt.batches?.name} {tt.batches?.section} (Sem {tt.semester})
-//                       </option>
-//                     ))}
-//                   </select>
-//                   <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 pointer-events-none" />
-//                 </div>
-//               )}
-              
-//               {selectedTimetable && (
-//                 <>
-//                   <Button 
-//                     variant="outline" 
-//                     size="sm"
-//                     onClick={exportToPDF}
-//                     disabled={loadingTimetable}
-//                     className="flex items-center gap-1"
-//                   >
-//                     <FileText className="h-4 w-4" />
-//                     PDF
-//                   </Button>
-//                   <Button 
-//                     variant="outline" 
-//                     size="sm"
-//                     onClick={exportToExcel}
-//                     disabled={loadingTimetable}
-//                     className="flex items-center gap-1"
-//                   >
-//                     <FileSpreadsheet className="h-4 w-4" />
-//                     Excel
-//                   </Button>
-//                   <Badge variant="secondary">
-//                     {timetableClasses.filter(c => !c.isBreak && !c.isLunch).length} classes
-//                   </Badge>
-//                 </>
-//               )}
-//             </div>
-//           </div>
-//         </CardHeader>
-//         <CardContent>
-//           {loadingTimetable ? (
-//             <div className="text-center py-12">
-//               <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-2" />
-//               <p className="text-gray-500">Loading timetable...</p>
-//             </div>
-//           ) : !selectedTimetable ? (
-//             <div className="text-center py-12 text-gray-500">
-//               <Clock className="h-12 w-12 mx-auto mb-2 opacity-50" />
-//               <p className="font-medium">No published timetables available</p>
-//               <p className="text-sm mt-1">Timetables will appear here once published by faculty</p>
-//             </div>
-//           ) : (
-//             <div className="overflow-x-auto">
-//               <table className="w-full border-collapse border border-gray-300 dark:border-gray-600">
-//                 <thead>
-//                   <tr className="bg-gray-50 dark:bg-gray-800">
-//                     <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left font-medium min-w-[120px] text-gray-900 dark:text-gray-100">
-//                       Time / Day
-//                     </th>
-//                     {days.map((day: string) => (
-//                       <th key={day} className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center font-medium min-w-[160px] text-gray-900 dark:text-gray-100">
-//                         {day}
-//                       </th>
-//                     ))}
-//                   </tr>
-//                 </thead>
-//                 <tbody>
-//                   {timeSlots.map((timeSlot: string, slotIndex: number) => (
-//                     <tr key={timeSlot} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-//                       <td className="border border-gray-300 dark:border-gray-600 px-4 py-3 font-medium bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100">
-//                         {timeSlot}
-//                       </td>
-//                       {days.map((day: string) => {
-//                         const slot = getClassForSlot(day, timeSlot);
-//                         return (
-//                           <td key={`${day}-${timeSlot}`} className="border border-gray-300 dark:border-gray-600 p-2">
-//                             {slot ? (
-//                               slot.isBreak || slot.isLunch ? (
-//                                 <div className="text-center py-2 text-gray-500 dark:text-gray-400 italic bg-gray-100 dark:bg-gray-800 rounded">
-//                                   {slot.isLunch ? '🍽️ Lunch Break' : '☕ Break'}
-//                                 </div>
-//                               ) : (
-//                                 <div className={`p-3 rounded-md text-center ${getClassColor(slot.subjectType, slotIndex)}`}>
-//                                   <div className="font-semibold text-sm flex items-center justify-center gap-1">
-//                                     {slot.subjectCode}
-//                                     {slot.isLab && <Badge variant="secondary" className="text-xs">LAB</Badge>}
-//                                   </div>
-//                                   <div className="text-xs mt-1 line-clamp-1">{slot.subjectName}</div>
-//                                   <div className="text-xs mt-1 opacity-75">{slot.facultyName}</div>
-//                                   <div className="text-xs mt-1 flex items-center justify-center gap-1">
-//                                     <Building className="h-3 w-3" />
-//                                     {slot.classroomName}
-//                                   </div>
-//                                 </div>
-//                               )
-//                             ) : (
-//                               <div className="text-center py-6 text-gray-400 dark:text-gray-500">-</div>
-//                             )}
-//                           </td>
-//                         );
-//                       })}
-//                     </tr>
-//                   ))}
-//                 </tbody>
-//               </table>
-//             </div>
-//           )}
-//         </CardContent>
-//       </Card>
-
-//       {/* NEP Curriculum Selection Section - Only for Students */}
-//       {user?.role === 'student' && (
-//         <Card>
-//           <CardHeader>
-//             <div className="flex items-center justify-between">
-//               <div>
-//                 <CardTitle className="flex items-center gap-2">
-//                   <BookOpen className="h-5 w-5" />
-//                   NEP 2020 Curriculum Selection
-//                 </CardTitle>
-//                 <p className="text-sm text-muted-foreground mt-1">
-//                   Choose your elective subjects from available buckets
-//                 </p>
-//               </div>
-//               <div className="flex items-center gap-2">
-//                 <Badge variant="outline">
-//                   {electiveBuckets.length} Buckets Available
-//                 </Badge>
-//                 <Button
-//                   variant="outline"
-//                   size="sm"
-//                   onClick={() => setShowNepCurriculum(!showNepCurriculum)}
-//                   className="flex items-center gap-2"
-//                 >
-//                   {showNepCurriculum ? 'Hide' : 'Show'} Selections
-//                   <ChevronDown className={`h-4 w-4 transition-transform ${showNepCurriculum ? 'rotate-180' : ''}`} />
-//                 </Button>
-//               </div>
-//             </div>
-//           </CardHeader>
-//           <CardContent>
-//             {loadingBuckets ? (
-//               <div className="text-center py-8">
-//                 <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-2" />
-//                 <p className="text-gray-500">Loading curriculum options...</p>
-//               </div>
-//             ) : electiveBuckets.length === 0 ? (
-//               <div className="text-center py-8 text-gray-500">
-//                 <BookOpen className="h-12 w-12 mx-auto mb-2 opacity-50" />
-//                 <p className="font-medium">No elective buckets available</p>
-//                 <p className="text-sm mt-1">Elective options will appear here when available for your semester</p>
-//               </div>
-//             ) : (
-//               <div className="space-y-6">
-//                 {!showNepCurriculum && (
-//                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-//                     <div className="flex items-center gap-3">
-//                       <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
-//                         <BookOpen className="h-6 w-6 text-blue-600" />
-//                       </div>
-//                       <div className="flex-1">
-//                         <h4 className="font-semibold text-blue-900">Subject Selection Summary</h4>
-//                         <p className="text-sm text-blue-700 mt-1">
-//                           You have {Object.values(selectedSubjects).reduce((acc, arr) => acc + arr.length, 0)} subjects selected from {electiveBuckets.length} available buckets
-//                         </p>
-//                         <div className="flex flex-wrap gap-2 mt-2">
-//                           {electiveBuckets.map(bucket => {
-//                             const selections = selectedSubjects[bucket.id] || [];
-//                             return (
-//                               <Badge key={bucket.id} variant="secondary" className="text-xs">
-//                                 {bucket.bucket_name}: {selections.length}/{bucket.max_selection}
-//                               </Badge>
-//                             );
-//                           })}
-//                         </div>
-//                       </div>
-//                     </div>
-//                   </div>
-//                 )}
-
-//                 {showNepCurriculum && (
-//                   <div className="space-y-6">
-//                     {electiveBuckets.map((bucket) => {
-//                       const subjects = bucketSubjects[bucket.id] || [];
-//                       const currentSelections = selectedSubjects[bucket.id] || [];
-                      
-//                       return (
-//                         <Card key={bucket.id} className="border-l-4 border-l-blue-500">
-//                           <CardHeader className="pb-3">
-//                             <div className="flex items-center justify-between">
-//                               <div>
-//                                 <h4 className="font-semibold text-gray-900">{bucket.bucket_name}</h4>
-//                                 {bucket.description && (
-//                                   <p className="text-sm text-gray-600 mt-1">{bucket.description}</p>
-//                                 )}
-//                               </div>
-//                               <div className="text-right">
-//                                 <Badge className={`${
-//                                   currentSelections.length >= bucket.min_selection 
-//                                     ? 'bg-green-100 text-green-800 border-green-200' 
-//                                     : 'bg-yellow-100 text-yellow-800 border-yellow-200'
-//                                 }`}>
-//                                   {currentSelections.length}/{bucket.max_selection} Selected
-//                                 </Badge>
-//                                 <p className="text-xs text-gray-500 mt-1">
-//                                   Min: {bucket.min_selection} • Max: {bucket.max_selection}
-//                                 </p>
-//                               </div>
-//                             </div>
-//                           </CardHeader>
-//                           <CardContent>
-//                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-//                               {subjects.map((subject) => {
-//                                 const isSelected = currentSelections.includes(subject.id);
-//                                 const canSelect = currentSelections.length < bucket.max_selection;
-                                
-//                                 // Debug logging
-//                                 console.log('Subject selection debug:', {
-//                                   subjectId: subject.id,
-//                                   subjectName: subject.name,
-//                                   bucketId: bucket.id,
-//                                   bucketName: bucket.bucket_name,
-//                                   currentSelections: currentSelections,
-//                                   isSelected: isSelected,
-//                                   canSelect: canSelect,
-//                                   maxSelections: bucket.max_selection,
-//                                   minSelections: bucket.min_selection
-//                                 });
-                                
-//                                 return (
-//                                   <div
-//                                     key={subject.id}
-//                                     className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-//                                       isSelected
-//                                         ? 'border-blue-500 bg-blue-50'
-//                                         : canSelect
-//                                         ? 'border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50'
-//                                         : 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
-//                                     }`}
-//                                     onClick={() => {
-//                                       if (isSelected || canSelect) {
-//                                         handleSubjectSelection(bucket.id, subject.id, !isSelected);
-//                                       }
-//                                     }}
-//                                   >
-//                                     <div className="flex items-center justify-between mb-2">
-//                                       <Badge variant="outline" className="text-xs">
-//                                         {subject.code}
-//                                       </Badge>
-//                                       <div className="flex items-center gap-2">
-//                                         <Badge className="text-xs bg-purple-100 text-purple-800">
-//                                           {subject.credit_value} Credits
-//                                         </Badge>
-//                                         {isSelected && (
-//                                           <div className="h-5 w-5 rounded-full bg-blue-500 flex items-center justify-center">
-//                                             <svg className="h-3 w-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-//                                               <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-//                                             </svg>
-//                                           </div>
-//                                         )}
-//                                       </div>
-//                                     </div>
-//                                     <h5 className="font-medium text-sm text-gray-900 line-clamp-2">
-//                                       {subject.name}
-//                                     </h5>
-//                                     {subject.description && (
-//                                       <p className="text-xs text-gray-600 mt-1 line-clamp-2">
-//                                         {subject.description}
-//                                       </p>
-//                                     )}
-//                                     <div className="flex items-center gap-2 mt-2">
-//                                       <Badge variant="outline" className="text-xs">
-//                                         {subject.nep_category}
-//                                       </Badge>
-//                                       <Badge variant="outline" className="text-xs">
-//                                         {subject.subject_type}
-//                                       </Badge>
-//                                     </div>
-//                                   </div>
-//                                 );
-//                               })}
-//                             </div>
-                            
-//                             {subjects.length === 0 && (
-//                               <div className="text-center py-8 text-gray-500">
-//                                 <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
-//                                 <p className="text-sm">No subjects available in this bucket</p>
-//                               </div>
-//                             )}
-//                           </CardContent>
-//                         </Card>
-//                       );
-//                     })}
-//                   </div>
-//                 )}
-//               </div>
-//             )}
-//           </CardContent>
-//         </Card>
-//       )}
-
-//       {/* Assignment Information Section */}
-//       <Card>
-//         <CardHeader>
-//           <CardTitle className="flex items-center gap-2">
-//             <BookOpen className="h-5 w-5" />
-//             Assignment Deadlines
-//           </CardTitle>
-//           <p className="text-sm text-muted-foreground">
-//             Upcoming assignments and submission deadlines
-//           </p>
-//         </CardHeader>
-//         <CardContent>
-//           <div className="space-y-4">
-//             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-//               <div className="flex items-start justify-between mb-3">
-//                 <div>
-//                   <h4 className="font-semibold text-blue-900">Database Design and Implementation</h4>
-//                   <p className="text-sm text-blue-700">Database Management Systems</p>
-//                 </div>
-//                 <Badge className="bg-red-100 text-red-800 border-red-300">Due Soon</Badge>
-//               </div>
-//               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-//                 <div>
-//                   <span className="font-medium text-blue-800">Due Date:</span>
-//                   <p className="text-blue-700">October 15, 2025</p>
-//                 </div>
-//                 <div>
-//                   <span className="font-medium text-blue-800">Due Time:</span>
-//                   <p className="text-blue-700">11:59 PM</p>
-//                 </div>
-//                 <div>
-//                   <span className="font-medium text-blue-800">Maximum Marks:</span>
-//                   <p className="text-blue-700">100 points</p>
-//                 </div>
-//               </div>
-//               <div className="mt-3">
-//                 <p className="text-sm text-blue-700">
-//                   <span className="font-medium">Description:</span> Describe the assignment requirements, objectives, and guidelines. Include what students need to accomplish, learning outcomes, and any specific requirements.
-//                 </p>
-//               </div>
-//               <div className="mt-3">
-//                 <p className="text-sm text-blue-700">
-//                   <span className="font-medium">Submission Format:</span> PDF document with code snippets, ZIP file containing source code and report
-//                 </p>
-//               </div>
-//             </div>
-
-//             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-//               <div className="flex items-start justify-between mb-3">
-//                 <div>
-//                   <h4 className="font-semibold text-green-900">Data Structures Implementation</h4>
-//                   <p className="text-sm text-green-700">Data Structures and Algorithms</p>
-//                 </div>
-//                 <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300">Upcoming</Badge>
-//               </div>
-//               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-//                 <div>
-//                   <span className="font-medium text-green-800">Due Date:</span>
-//                   <p className="text-green-700">October 22, 2025</p>
-//                 </div>
-//                 <div>
-//                   <span className="font-medium text-green-800">Due Time:</span>
-//                   <p className="text-green-700">5:00 PM</p>
-//                 </div>
-//                 <div>
-//                   <span className="font-medium text-green-800">Maximum Marks:</span>
-//                   <p className="text-green-700">80 points</p>
-//                 </div>
-//               </div>
-//               <div className="mt-3">
-//                 <p className="text-sm text-green-700">
-//                   <span className="font-medium">Description:</span> Implement various data structures including linked lists, stacks, queues, trees, and graphs with proper documentation.
-//                 </p>
-//               </div>
-//               <div className="mt-3">
-//                 <p className="text-sm text-green-700">
-//                   <span className="font-medium">Submission Format:</span> Source code with documentation, test cases, and performance analysis report
-//                 </p>
-//               </div>
-//             </div>
-//           </div>
-//         </CardContent>
-//       </Card>
-
-//       {/* Examination Information Section */}
-//       <Card>
-//         <CardHeader>
-//           <CardTitle className="flex items-center gap-2">
-//             <GraduationCap className="h-5 w-5" />
-//             Examination Schedule
-//           </CardTitle>
-//           <p className="text-sm text-muted-foreground">
-//             Upcoming examinations and important details
-//           </p>
-//         </CardHeader>
-//         <CardContent>
-//           <div className="space-y-4">
-//             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-//               <div className="flex items-start justify-between mb-3">
-//                 <div>
-//                   <h4 className="font-semibold text-red-900">Mid-term Examination</h4>
-//                   <p className="text-sm text-red-700">Data Structures and Algorithms</p>
-//                 </div>
-//                 <Badge className="bg-red-100 text-red-800 border-red-300">Upcoming</Badge>
-//               </div>
-//               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-//                 <div>
-//                   <span className="font-medium text-red-800">Exam Date:</span>
-//                   <p className="text-red-700">October 18, 2025</p>
-//                 </div>
-//                 <div>
-//                   <span className="font-medium text-red-800">Start Time:</span>
-//                   <p className="text-red-700">10:00 AM</p>
-//                 </div>
-//                 <div>
-//                   <span className="font-medium text-red-800">Duration:</span>
-//                   <p className="text-red-700">90 minutes</p>
-//                 </div>
-//               </div>
-//               <div className="mt-3">
-//                 <p className="text-sm text-red-700">
-//                   <span className="font-medium">Topics/Syllabus Coverage:</span> List the topics that will be covered in the exam (e.g., Arrays, Linked Lists, Stacks, Queues, Trees, Graphs)
-//                 </p>
-//               </div>
-//               <div className="mt-3">
-//                 <p className="text-sm text-red-700">
-//                   <span className="font-medium">Instructions & Guidelines:</span> Special instructions for students (e.g., Bring calculator, No mobile phones allowed, Open book exam, etc.)
-//                 </p>
-//               </div>
-//             </div>
-
-//             <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-//               <div className="flex items-start justify-between mb-3">
-//                 <div>
-//                   <h4 className="font-semibold text-purple-900">Final Examination</h4>
-//                   <p className="text-sm text-purple-700">Database Management Systems</p>
-//                 </div>
-//                 <Badge className="bg-purple-100 text-purple-800 border-purple-300">Scheduled</Badge>
-//               </div>
-//               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-//                 <div>
-//                   <span className="font-medium text-purple-800">Exam Date:</span>
-//                   <p className="text-purple-700">November 25, 2025</p>
-//                 </div>
-//                 <div>
-//                   <span className="font-medium text-purple-800">Start Time:</span>
-//                   <p className="text-purple-700">2:00 PM</p>
-//                 </div>
-//                 <div>
-//                   <span className="font-medium text-purple-800">Duration:</span>
-//                   <p className="text-purple-700">3 hours</p>
-//                 </div>
-//               </div>
-//               <div className="mt-3">
-//                 <p className="text-sm text-purple-700">
-//                   <span className="font-medium">Topics/Syllabus Coverage:</span> Comprehensive coverage including SQL queries, database design, normalization, transactions, and advanced topics
-//                 </p>
-//               </div>
-//               <div className="mt-3">
-//                 <p className="text-sm text-purple-700">
-//                   <span className="font-medium">Instructions & Guidelines:</span> Closed book examination, scientific calculator permitted, no electronic devices allowed
-//                 </p>
-//               </div>
-//             </div>
-//           </div>
-//         </CardContent>
-//       </Card>
-//       </div>
-//     </>
-//   );
-// }
-
-
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
-import { Header } from '@/components/Header';
-import { 
-  Calendar, 
-  Clock, 
-  MapPin,
+import {
+  Calendar,
+  Clock,
   BookOpen,
+  Users,
+  ChevronRight,
+  MapPin,
   GraduationCap,
-  Building,
   FileText,
-  FileSpreadsheet,
-  ChevronDown,
-  Loader2
-} from "lucide-react";
+  Sparkles,
+  Building2,
+  Layers
+} from 'lucide-react';
+import toast from 'react-hot-toast';
+import StudentLayout from '@/components/student/StudentLayout';
 
-// Types
-interface FacultyMember {
+interface TimetableClass {
   id: string;
-  first_name: string;
-  last_name: string;
-  email: string;
-  college_uid: string;
-  faculty_type?: string;
-  department_id: string;
-  departments?: {
-    name: string;
-    code: string;
-  };
+  subjectName: string;
+  subjectCode: string;
+  subjectType: string;
+  facultyName: string;
+  classroomName: string;
+  building: string;
+  day: string;
+  startTime: string;
+  endTime: string;
 }
 
 interface DashboardData {
@@ -1382,112 +38,8 @@ interface DashboardData {
     batch?: any;
     batchId?: string;
     facultyCount?: number;
-    facultyMembers?: FacultyMember[];
   };
   events: any[];
-}
-
-interface PublishedTimetable {
-  id: string;
-  title: string;
-  academic_year: string;
-  semester: number;
-  fitness_score: number;
-  batches: {
-    id: string;
-    name: string;
-    section: string;
-    semester: number;
-  };
-}
-
-interface TimetableClass {
-  id: string;
-  subjectCode: string;
-  subjectName: string;
-  subjectType: string;
-  facultyName: string;
-  classroomName: string;
-  building: string;
-  day: string;
-  startTime: string;
-  endTime: string;
-  isBreak: boolean;
-  isLunch: boolean;
-  isLab: boolean;
-  isContinuation: boolean;
-}
-
-interface Assignment {
-  id: string;
-  title: string;
-  description: string;
-  type: string;
-  status: string;
-  total_marks: number;
-  passing_marks: number;
-  duration_minutes: number;
-  scheduled_start: string;
-  scheduled_end: string;
-  max_attempts: number;
-  proctoring_enabled: boolean;
-  show_results_immediately: boolean;
-  is_published: boolean;
-  has_submitted?: boolean;
-  submission?: {
-    id: string;
-    score: number;
-    percentage: number;
-    submission_status: string;
-    submitted_at: string;
-  };
-  batches?: {
-    name: string;
-    semester: number;
-  };
-  subjects?: {
-    name: string;
-    code: string;
-  };
-  created_at: string;
-}
-
-interface ElectiveBucket {
-  id: string;
-  bucket_name: string;
-  bucket_type?: 'MAJOR' | 'MINOR' | 'OPEN_ELECTIVE' | 'MULTIDISCIPLINARY' | 'AEC' | 'VAC' | 'GENERAL';
-  description?: string;
-  max_selection: number;
-  min_selection: number;
-  batch_id: string;
-  batches?: {
-    name: string;
-    semester: number;
-  };
-  created_at: string;
-}
-
-interface Subject {
-  id: string;
-  code: string;
-  name: string;
-  credits?: number;
-  credit_value?: number;
-  nep_category: string;
-  subject_type: string;
-  course_group_id: string;
-  semester: number;
-  description?: string;
-}
-
-interface StudentSelection {
-  id: string;
-  student_id: string;
-  subject_id: string;
-  semester: number;
-  academic_year: string;
-  selection_date: string;
-  subjects?: Subject;
 }
 
 export default function StudentDashboard() {
@@ -1495,25 +47,8 @@ export default function StudentDashboard() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
-  const [publishedTimetables, setPublishedTimetables] = useState<PublishedTimetable[]>([]);
-  const [availableBatches, setAvailableBatches] = useState<any[]>([]);
-  const [selectedTimetable, setSelectedTimetable] = useState<PublishedTimetable | null>(null);
-  const [timetableClasses, setTimetableClasses] = useState<TimetableClass[]>([]);
-  const [timeSlots, setTimeSlots] = useState<string[]>([]);
-  const [days] = useState(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
-  const [loadingTimetable, setLoadingTimetable] = useState(false);
-  const [showFacultyList, setShowFacultyList] = useState(false);
-
-  // NEP Curriculum Selection States
-  const [electiveBuckets, setElectiveBuckets] = useState<ElectiveBucket[]>([]);
-  const [bucketSubjects, setBucketSubjects] = useState<{ [bucketId: string]: Subject[] }>({});
-  const [studentSelections, setStudentSelections] = useState<StudentSelection[]>([]);
-  const [selectedSubjects, setSelectedSubjects] = useState<{ [bucketId: string]: string[] }>({});
-  const [loadingBuckets, setLoadingBuckets] = useState(false);
-  const [loadingSelections, setLoadingSelections] = useState(false);
-  const [showNepCurriculum, setShowNepCurriculum] = useState(false);
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [loadingAssignments, setLoadingAssignments] = useState(false);
+  const [todayClasses, setTodayClasses] = useState<TimetableClass[]>([]);
+  const [upcomingClass, setUpcomingClass] = useState<TimetableClass | null>(null);
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -1521,51 +56,29 @@ export default function StudentDashboard() {
       router.push('/login');
       return;
     }
-
     const parsedUser = JSON.parse(userData);
-    
-    // Allow students and general/guest faculty to access this dashboard
-    const isStudent = parsedUser.role === 'student';
-    const isGeneralFaculty = parsedUser.role === 'faculty' && 
-                            (parsedUser.faculty_type === 'general' || 
-                             parsedUser.faculty_type === 'guest' || 
-                             !parsedUser.faculty_type);
-    
-    if (!isStudent && !isGeneralFaculty) {
+    if (parsedUser.role !== 'student') {
       router.push('/login');
       return;
     }
-
     setUser(parsedUser);
     fetchDashboardData(parsedUser);
   }, [router]);
 
-  // Fetch NEP curriculum data when dashboard data is loaded - optimized dependencies
-  useEffect(() => {
-    if (user?.role === 'student' && dashboardData?.additionalData?.batch && !loadingBuckets && electiveBuckets.length === 0) {
-      fetchNepCurriculumData(user);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, dashboardData?.additionalData?.batchId]);
-
-  const fetchDashboardData = useCallback(async (user: any) => {
+  const fetchDashboardData = async (user: any) => {
     try {
       setLoading(true);
-      
-      // Fetch dashboard data first
-      const dashboardResponse = await fetch(`/api/student/dashboard?userId=${user.id}&role=${user.role}`);
-      
-      if (!dashboardResponse.ok) {
-        throw new Error('Failed to fetch dashboard data');
-      }
-      
-      const data = await dashboardResponse.json();
+
+      // Fetch dashboard data
+      const response = await fetch(`/api/student/dashboard?userId=${user.id}&role=${user.role}`);
+      if (!response.ok) throw new Error('Failed to fetch dashboard');
+
+      const data = await response.json();
       setDashboardData(data);
 
-      // Update localStorage and user state
-      let updatedUser = user;
+      // Update localStorage with complete user data
       if (data.user) {
-        updatedUser = {
+        const updatedUser = {
           ...user,
           college_uid: data.user.college_uid,
           current_semester: data.user.current_semester || data.additionalData?.batch?.semester,
@@ -1576,1629 +89,370 @@ export default function StudentDashboard() {
         setUser(updatedUser);
       }
 
-      // Fetch timetables with updated course_id
-      const timetablesResponse = await fetch(
-        `/api/student/published-timetables?courseId=${updatedUser.course_id}${updatedUser.role === 'student' && data.additionalData?.batch ? `&semester=${data.additionalData.batch.semester}` : ''}`
-      );
-      
-      if (timetablesResponse.ok) {
-        const timetablesData = await timetablesResponse.json();
-        setPublishedTimetables(timetablesData.timetables || []);
-        setAvailableBatches(timetablesData.batches || []);
-        
-        // Auto-select timetable
-        if (updatedUser.role === 'student' && data.additionalData?.batchId) {
-          const studentTimetable = timetablesData.timetables.find(
-            (tt: PublishedTimetable) => tt.batches?.id === data.additionalData.batchId
+      // Fetch published timetables
+      if (data.additionalData?.batchId) {
+        const timetablesRes = await fetch(
+          `/api/student/published-timetables?courseId=${user.course_id}&semester=${data.additionalData.batch?.semester}`
+        );
+
+        if (timetablesRes.ok) {
+          const ttData = await timetablesRes.json();
+          const studentTimetable = ttData.timetables?.find(
+            (tt: any) => tt.batches?.id === data.additionalData.batchId
           );
+
           if (studentTimetable) {
-            setSelectedTimetable(studentTimetable);
-            fetchTimetableClasses(studentTimetable.id);
+            // Fetch today's classes
+            const classesRes = await fetch(`/api/student/timetable-classes?timetableId=${studentTimetable.id}`);
+            if (classesRes.ok) {
+              const classesData = await classesRes.json();
+              const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+              const todaysClasses = classesData.classes?.filter((c: TimetableClass) => c.day === today) || [];
+              setTodayClasses(todaysClasses);
+
+              // Find upcoming class
+              const now = new Date();
+              const currentTime = now.toTimeString().slice(0, 5);
+              const upcoming = todaysClasses.find((c: TimetableClass) => c.startTime > currentTime);
+              setUpcomingClass(upcoming || null);
+            }
           }
-        } else if (timetablesData.timetables.length > 0) {
-          setSelectedTimetable(timetablesData.timetables[0]);
-          fetchTimetableClasses(timetablesData.timetables[0].id);
         }
       }
-      
-      // Fetch assignments for student's batch
-      if (updatedUser.role === 'student' && data.additionalData?.batchId) {
-        fetchAssignments(updatedUser, data.additionalData.batchId);
-      }
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+      console.error('Dashboard error:', error);
+      toast.error('Failed to load dashboard');
     } finally {
       setLoading(false);
     }
-  }, []);
-  
-  const fetchAssignments = useCallback(async (user: any, batchId: string) => {
-    try {
-      setLoadingAssignments(true);
-      const token = btoa(JSON.stringify({
-        user_id: user.id,
-        id: user.id,
-        role: user.role,
-        college_id: user.college_id
-      }));
-      
-      const response = await fetch(
-        `/api/student/assignments?batchId=${batchId}`,
-        {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }
-      );
-      
-      if (response.ok) {
-        const data = await response.json();
-        setAssignments(data.assignments || []);
-      }
-    } catch (error) {
-      console.error('Error fetching assignments:', error);
-    } finally {
-      setLoadingAssignments(false);
-    }
-  }, []);
-
-  const fetchTimetableClasses = useCallback(async (timetableId: string) => {
-    try {
-      setLoadingTimetable(true);
-      const response = await fetch(
-        `/api/student/timetable-classes?timetableId=${timetableId}`
-      );
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch timetable classes');
-      }
-      
-      const data = await response.json();
-      setTimetableClasses(data.classes || []);
-      setTimeSlots(data.timeSlots || []);
-    } catch (error) {
-      console.error('Error fetching timetable classes:', error);
-    } finally {
-      setLoadingTimetable(false);
-    }
-  }, []);
-
-  const handleTimetableChange = useCallback((timetable: PublishedTimetable) => {
-    setSelectedTimetable(timetable);
-    fetchTimetableClasses(timetable.id);
-  }, [fetchTimetableClasses]);
-
-  // NEP Curriculum Functions
-  const fetchNepCurriculumData = async (user: any) => {
-    console.log('🎯 fetchNepCurriculumData called with user:', {
-      userId: user.id,
-      course_id: user.course_id,
-      email: user.email,
-      role: user.role
-    });
-    
-    if (!dashboardData?.additionalData?.batch) {
-      console.error('❌ No batch data found in dashboardData:', dashboardData);
-      return;
-    }
-    
-    try {
-      setLoadingBuckets(true);
-      
-      // Get user's current semester from batch
-      const semester = dashboardData.additionalData.batch.semester;
-      const batchInfo = dashboardData.additionalData.batch;
-      
-      console.log('📚 Fetching buckets with params:', {
-        courseId: user.course_id,
-        semester: semester,
-        studentId: user.id,
-        batchInfo: batchInfo
-      });
-      
-      // Fetch elective buckets for student's semester using batchId
-      const bucketsResponse = await fetch(
-        `/api/nep/buckets?batchId=${dashboardData.additionalData.batchId}&studentId=${user.id}`
-      );
-      
-      console.log('📡 Buckets API response status:', bucketsResponse.status);
-      
-      if (bucketsResponse.ok) {
-        const bucketsData = await bucketsResponse.json();
-        console.log('✅ Buckets data received:', {
-          count: Array.isArray(bucketsData) ? bucketsData.length : 0,
-          data: bucketsData
-        });
-        
-        setElectiveBuckets(bucketsData || []);
-        
-        // Extract subjects from buckets response (subjects are already included)
-        const subjectsMap = (bucketsData || []).reduce((acc: any, bucket: any) => {
-          acc[bucket.id] = bucket.subjects || [];
-          console.log(`  Bucket "${bucket.bucket_name}" has ${bucket.subjects?.length || 0} subjects`);
-          return acc;
-        }, {} as { [bucketId: string]: Subject[] });
-        
-        setBucketSubjects(subjectsMap);
-        console.log('✅ Final state:', {
-          bucketsCount: bucketsData.length,
-          totalSubjects: Object.values(subjectsMap).reduce((sum: number, subjects: any) => sum + subjects.length, 0)
-        });
-      } else {
-        const errorData = await bucketsResponse.json();
-        console.error('❌ Buckets API error:', errorData);
-      }
-      
-      // Fetch student's existing selections
-      const selectionsResponse = await fetch(
-        `/api/student/selections?studentId=${user.id}&semester=${semester}`
-      );
-      
-      if (selectionsResponse.ok) {
-        const selectionsData = await selectionsResponse.json();
-        setStudentSelections(selectionsData.selections || []);
-        
-        // Initialize selected subjects state
-        const initialSelections = (selectionsData.selections || []).reduce((acc: any, selection: StudentSelection) => {
-          if (selection.subjects?.course_group_id) {
-            if (!acc[selection.subjects.course_group_id]) {
-              acc[selection.subjects.course_group_id] = [];
-            }
-            acc[selection.subjects.course_group_id].push(selection.subject_id);
-          }
-          return acc;
-        }, {});
-        
-        setSelectedSubjects(initialSelections);
-      }
-    } catch (error) {
-      console.error('Error fetching NEP curriculum data:', error);
-    } finally {
-      setLoadingBuckets(false);
-    }
   };
 
-  // Check if major and minor selections are complete
-  const areSelectionsComplete = () => {
-    const majorBuckets = electiveBuckets.filter(b => b.bucket_type === 'MAJOR');
-    const minorBuckets = electiveBuckets.filter(b => b.bucket_type === 'MINOR');
-    
-    const majorComplete = majorBuckets.length === 0 || majorBuckets.every(bucket => {
-      const selections = selectedSubjects[bucket.id] || [];
-      return selections.length >= bucket.min_selection;
-    });
-    
-    const minorComplete = minorBuckets.length === 0 || minorBuckets.every(bucket => {
-      const selections = selectedSubjects[bucket.id] || [];
-      return selections.length >= bucket.min_selection;
-    });
-    
-    return majorComplete && minorComplete;
+  const formatTime = (time: string) => {
+    if (!time) return '';
+    const [hours, minutes] = time.split(':');
+    const h = parseInt(hours);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    return `${h12}:${minutes} ${ampm}`;
   };
 
-  const handleSubjectSelection = async (bucketId: string, subjectId: string, isSelected: boolean) => {
-    try {
-      setLoadingSelections(true);
-      
-      const bucket = electiveBuckets.find(b => b.id === bucketId);
-      if (!bucket) return;
-      
-      const currentSelections = selectedSubjects[bucketId] || [];
-      
-      if (isSelected) {
-        // Check if we can add more selections
-        if (currentSelections.length >= bucket.max_selection) {
-          alert(`You can only select ${bucket.max_selection} subjects from this bucket.`);
-          return;
-        }
-        
-        // Add selection
-        const response = await fetch('/api/student/selections', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            student_id: user.id,
-            subject_id: subjectId,
-            semester: dashboardData?.additionalData?.batch?.semester,
-            academic_year: dashboardData?.additionalData?.batch?.academic_year || '2025-26'
-          })
-        });
-        
-        if (response.ok) {
-          setSelectedSubjects(prev => ({
-            ...prev,
-            [bucketId]: [...currentSelections, subjectId]
-          }));
-        }
-      } else {
-        // Remove selection
-        const response = await fetch('/api/student/selections', {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            student_id: user.id,
-            subject_id: subjectId
-          })
-        });
-        
-        if (response.ok) {
-          setSelectedSubjects(prev => ({
-            ...prev,
-            [bucketId]: currentSelections.filter(id => id !== subjectId)
-          }));
-        }
-      }
-    } catch (error) {
-      console.error('Error handling subject selection:', error);
-    } finally {
-      setLoadingSelections(false);
-    }
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good Morning';
+    if (hour < 17) return 'Good Afternoon';
+    return 'Good Evening';
   };
 
-  // Memoized helper functions for better performance
-  const getClassForSlot = useCallback((day: string, timeSlot: string): TimetableClass | undefined => {
-    const [startTime] = timeSlot.split('-');
-    const normalizeTime = (time: string) => time.substring(0, 5);
-    
-    return timetableClasses.find(
-      cls => cls.day === day && normalizeTime(cls.startTime) === normalizeTime(startTime)
-    );
-  }, [timetableClasses]);
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
 
-  const getClassColor = useCallback((subjectType: string, index: number) => {
-    const colors = [
-      'bg-blue-100 text-blue-800',
-      'bg-green-100 text-green-800',
-      'bg-purple-100 text-purple-800',
-      'bg-orange-100 text-orange-800',
-      'bg-red-100 text-red-800',
-      'bg-indigo-100 text-indigo-800',
-      'bg-teal-100 text-teal-800',
-      'bg-pink-100 text-pink-800',
-    ];
-    
-    if (subjectType === 'LAB') {
-      return 'bg-indigo-100 text-indigo-800';
-    }
-    
-    return colors[index % colors.length];
-  }, []);
-
-  const getEventTypeColor = useCallback((type: string) => {
-    switch (type.toLowerCase()) {
-      case 'workshop': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'event': return 'bg-green-100 text-green-800 border-green-200';
-      case 'seminar': return 'bg-purple-100 text-purple-800 border-purple-200';
-      case 'academic': return 'bg-orange-100 text-orange-800 border-orange-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  }, []);
-
-  // Memoize expensive calculations
-  const totalSelectedSubjects = useMemo(() => {
-    return Object.values(selectedSubjects).reduce((acc, arr) => acc + arr.length, 0);
-  }, [selectedSubjects]);
-
-  const totalClassesCount = useMemo(() => {
-    return timetableClasses.filter(c => !c.isBreak && !c.isLunch).length;
-  }, [timetableClasses]);
-
-  // Export to PDF function
-  const exportToPDF = () => {
-    if (!selectedTimetable) return;
-    
-    let htmlContent = `
-      <html>
-        <head>
-          <title>Class Timetable - ${selectedTimetable.batches?.name} ${selectedTimetable.batches?.section}</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            h1 { color: #333; text-align: center; margin-bottom: 30px; }
-            table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-            th, td { border: 1px solid #ddd; padding: 12px; text-align: center; }
-            th { background-color: #f5f5f5; font-weight: bold; }
-            .subject-cell { background-color: #f8f9fa; padding: 8px; }
-            .break-cell { background-color: #e9ecef; font-style: italic; }
-            .course-code { font-weight: bold; font-size: 0.9em; }
-            .course-title { font-size: 0.8em; margin: 2px 0; }
-            .faculty { font-size: 0.7em; color: #666; }
-            .room { font-size: 0.7em; color: #888; }
-          </style>
-        </head>
-        <body>
-          <h1>Weekly Class Schedule</h1>
-          <p style="text-align: center; margin-bottom: 20px;">
-            ${dashboardData?.user.department?.name} • Batch ${selectedTimetable.batches?.name} ${selectedTimetable.batches?.section} • ${selectedTimetable.academic_year}
-          </p>
-          <table>
-            <thead>
-              <tr>
-                <th>Time / Day</th>`;
-    
-    days.forEach(day => {
-      htmlContent += `<th>${day}</th>`;
-    });
-    
-    htmlContent += `</tr></thead><tbody>`;
-    
-    timeSlots.forEach(timeSlot => {
-      htmlContent += `<tr><td style="font-weight: bold; background-color: #f5f5f5;">${timeSlot}</td>`;
-      
-      days.forEach(day => {
-        const slot = getClassForSlot(day, timeSlot);
-        if (!slot) {
-          htmlContent += '<td>-</td>';
-        } else if (slot.isBreak || slot.isLunch) {
-          htmlContent += `<td class="break-cell">${slot.isLunch ? 'Lunch Break' : 'Break'}</td>`;
-        } else {
-          htmlContent += `
-            <td class="subject-cell">
-              <div class="course-code">${slot.subjectCode}</div>
-              <div class="course-title">${slot.subjectName}</div>
-              <div class="faculty">${slot.facultyName}</div>
-              <div class="room">${slot.classroomName}</div>
-            </td>
-          `;
-        }
-      });
-      
-      htmlContent += '</tr>';
-    });
-    
-    htmlContent += `</tbody></table></body></html>`;
-
-    const blob = new Blob([htmlContent], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `timetable-${selectedTimetable.batches?.name}-${selectedTimetable.batches?.section}.html`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
-  // Export to Excel (CSV format)
-  const exportToExcel = () => {
-    if (!selectedTimetable) return;
-    
-    let csvContent = `Weekly Class Schedule - ${selectedTimetable.batches?.name} ${selectedTimetable.batches?.section}\n`;
-    csvContent += `${dashboardData?.user.department?.name} • ${selectedTimetable.academic_year}\n\n`;
-    
-    csvContent += 'Time / Day,' + days.join(',') + '\n';
-    
-    timeSlots.forEach(timeSlot => {
-      let row = timeSlot;
-      days.forEach(day => {
-        const slot = getClassForSlot(day, timeSlot);
-        if (!slot) {
-          row += ',-';
-        } else if (slot.isBreak || slot.isLunch) {
-          row += `,"${slot.isLunch ? 'Lunch Break' : 'Break'}"`;
-        } else {
-          row += `,"${slot.subjectCode} - ${slot.subjectName} (${slot.facultyName}, ${slot.classroomName})"`;
-        }
-      });
-      csvContent += row + '\n';
-    });
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `timetable-${selectedTimetable.batches?.name}-${selectedTimetable.batches?.section}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
-  if (!user || loading) {
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="text-center">
-          <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-300">Loading dashboard...</p>
+      <StudentLayout activeTab="dashboard">
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#4D869C] border-t-transparent mx-auto mb-4"></div>
+            <p className="text-gray-500">Loading your dashboard...</p>
+          </div>
         </div>
-      </div>
+      </StudentLayout>
     );
   }
 
   return (
-    <>
-      <Header />
-      <div className="space-y-6 p-6">
+    <StudentLayout activeTab="dashboard">
+      <div className="space-y-6 pb-20 lg:pb-8">
         {/* Welcome Section */}
-        <div className="bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-950/20 dark:via-indigo-950/20 dark:to-purple-950/20 rounded-2xl p-6 border border-blue-100 dark:border-blue-800">
-        <div className="flex items-center gap-4">
-          <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-            <GraduationCap className="h-8 w-8 text-white" />
-          </div>
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-              Welcome back, {user?.first_name || user?.name || (user?.role === 'faculty' ? 'Faculty' : 'Student')}! 👋
-            </h1>
-            <p className="text-gray-600 dark:text-gray-300 mt-1">
-              {user?.role === 'faculty' 
-                ? 'View your teaching schedule and department information'
-                : 'Ready to explore your Computer Science Engineering dashboard'}
-            </p>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-            </p>
-          </div>
-          <div className="text-right">
-            <div className="text-sm text-gray-500 dark:text-gray-400">Your Course</div>
-            <Badge className="bg-blue-500 text-white mt-1">
-              {dashboardData?.user.course?.code || 'N/A'}
-            </Badge>
-            {user?.role === 'student' && dashboardData?.additionalData.batch?.semester && (
-              <div className="mt-2">
-                <div className="text-sm text-gray-500 dark:text-gray-400">Current Semester</div>
-                <Badge className="bg-green-500 text-white mt-1">
-                  Semester {dashboardData.additionalData.batch.semester}
-                </Badge>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative overflow-hidden bg-gradient-to-r from-[#4D869C] to-[#7AB2B2] rounded-2xl lg:rounded-3xl p-6 lg:p-8 text-white"
+        >
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-32 translate-x-32 blur-3xl"></div>
+          <div className="absolute bottom-0 left-0 w-48 h-48 bg-[#CDE8E5]/20 rounded-full translate-y-24 -translate-x-24 blur-2xl"></div>
 
-      {/* Course Info Card */}
-      <Card className="border-blue-200 dark:border-blue-800">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BookOpen className="h-5 w-5 text-blue-600" />
-            {dashboardData?.user.course?.title || 'Course'}
-          </CardTitle>
-          <div className="text-sm text-gray-600 dark:text-gray-300">
-            {dashboardData?.user.college?.name || 'College'} • {dashboardData?.user.course?.nature_of_course || 'Program'}
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {user?.role === 'student' && (
-              <>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600">
-                    {dashboardData?.additionalData.batch?.semester || user.current_semester || '-'}
-                  </div>
-                  <div className="text-sm text-gray-500">Current Semester</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600">
-                    {dashboardData?.additionalData.batch?.course?.code
-                      ? `${dashboardData.additionalData.batch.course.code}-${dashboardData.additionalData.batch.section || 'A'}`
-                      : dashboardData?.additionalData.batch?.name && dashboardData?.additionalData.batch?.section 
-                      ? `${dashboardData.additionalData.batch.name} ${dashboardData.additionalData.batch.section}`
-                      : '-'}
-                  </div>
-                  <div className="text-sm text-gray-500">Batch</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-purple-600">
-                    {dashboardData?.user.college_uid?.toUpperCase() || user.college_uid?.toUpperCase() || user.email?.split('@')[0]?.toUpperCase() || '-'}
-                  </div>
-                  <div className="text-sm text-gray-500">UID</div>
-                </div>
-              </>
-            )}
-            {user?.role === 'faculty' && (
-              <>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-purple-600">
-                    {user.college_uid?.toUpperCase() || user.uid?.toUpperCase() || '-'}
-                  </div>
-                  <div className="text-sm text-gray-500">College UID</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-blue-600">
-                    {user.faculty_type?.toUpperCase() || 'GENERAL'}
-                  </div>
-                  <div className="text-sm text-gray-500">Faculty Type</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-green-600">
-                    {dashboardData?.user.department?.name || user.department_name || '-'}
-                  </div>
-                  <div className="text-sm text-gray-500">Department</div>
-                </div>
-              </>
-            )}
-            <div className="text-center">
-              <div className="text-2xl font-bold text-orange-600 cursor-pointer hover:text-orange-700 transition-colors" onClick={() => setShowFacultyList(!showFacultyList)}>
-                {dashboardData?.additionalData.facultyCount || 0}
+          <div className="relative z-10">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-white/80 text-sm lg:text-base flex items-center gap-2">
+                  <Sparkles size={16} />
+                  {getGreeting()}
+                </p>
+                <h1 className="text-2xl lg:text-4xl font-bold mt-1">
+                  {user?.first_name || 'Student'}! 👋
+                </h1>
+                <p className="text-white/70 mt-2 text-sm lg:text-base">{today}</p>
               </div>
-              <div className="text-sm text-gray-500">
-                Faculty Members
-                <button 
-                  onClick={() => setShowFacultyList(!showFacultyList)}
-                  className="ml-1 text-xs text-blue-600 hover:text-blue-700"
-                >
-                  {showFacultyList ? '▼' : '▶'}
-                </button>
+              <div className="hidden lg:block text-right">
+                <div className="bg-white/20 backdrop-blur-sm rounded-2xl px-5 py-4">
+                  <p className="text-white/80 text-xs">Semester</p>
+                  <p className="text-3xl font-bold">{dashboardData?.additionalData?.batch?.semester || user?.current_semester || '?'}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Stats - Mobile */}
+            <div className="grid grid-cols-3 gap-3 mt-6 lg:hidden">
+              <div className="bg-white/20 backdrop-blur-sm rounded-xl p-3 text-center">
+                <p className="text-2xl font-bold">{dashboardData?.additionalData?.batch?.semester || '?'}</p>
+                <p className="text-xs text-white/80">Semester</p>
+              </div>
+              <div className="bg-white/20 backdrop-blur-sm rounded-xl p-3 text-center">
+                <p className="text-2xl font-bold">{todayClasses.length}</p>
+                <p className="text-xs text-white/80">Classes Today</p>
+              </div>
+              <div className="bg-white/20 backdrop-blur-sm rounded-xl p-3 text-center">
+                <p className="text-2xl font-bold">{dashboardData?.additionalData?.facultyCount || 0}</p>
+                <p className="text-xs text-white/80">Faculty</p>
               </div>
             </div>
           </div>
-          
-          {/* Faculty Members List */}
-          {showFacultyList && dashboardData?.additionalData.facultyMembers && dashboardData.additionalData.facultyMembers.length > 0 && (
-            <div className="mt-6 pt-6 border-t">
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <GraduationCap className="h-5 w-5 text-orange-600" />
-                Faculty Members ({dashboardData.additionalData.facultyCount})
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {dashboardData.additionalData.facultyMembers.map((faculty: FacultyMember) => (
-                  <div key={faculty.id} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:shadow-md transition-shadow">
-                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white font-semibold">
-                      {faculty.first_name.charAt(0)}{faculty.last_name.charAt(0)}
+        </motion.div>
+
+        {/* Quick Info Cards - Desktop */}
+        <div className="hidden lg:grid grid-cols-4 gap-4">
+          {[
+            {
+              icon: BookOpen,
+              label: 'Course',
+              value: dashboardData?.user?.course?.code || 'N/A',
+              bgColor: 'bg-blue-50',
+              iconBg: 'bg-gradient-to-br from-blue-500 to-blue-600'
+            },
+            {
+              icon: Layers,
+              label: 'Batch',
+              value: `${dashboardData?.additionalData?.batch?.name || ''} - Sem ${dashboardData?.additionalData?.batch?.semester || '?'}`,
+              bgColor: 'bg-purple-50',
+              iconBg: 'bg-gradient-to-br from-purple-500 to-purple-600'
+            },
+            {
+              icon: Calendar,
+              label: 'Academic Year',
+              value: dashboardData?.additionalData?.batch?.academic_year || user?.academic_year || '2025-26',
+              bgColor: 'bg-orange-50',
+              iconBg: 'bg-gradient-to-br from-orange-500 to-orange-600'
+            },
+            {
+              icon: Users,
+              label: 'Student UID',
+              value: user?.college_uid || dashboardData?.user?.college_uid || 'N/A',
+              bgColor: 'bg-green-50',
+              iconBg: 'bg-gradient-to-br from-green-500 to-green-600'
+            },
+          ].map((item, index) => (
+            <motion.div
+              key={item.label}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.1 }}
+              className={`${item.bgColor} rounded-2xl p-5 border border-gray-100`}
+            >
+              <div className={`w-10 h-10 rounded-xl ${item.iconBg} flex items-center justify-center mb-3`}>
+                <item.icon size={20} className="text-white" />
+              </div>
+              <p className="text-2xl font-bold text-gray-900 truncate">{item.value}</p>
+              <p className="text-sm text-gray-500">{item.label}</p>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Today's Schedule */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
+        >
+          <div className="p-5 lg:p-6 border-b border-gray-100 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg lg:text-xl font-bold text-gray-900">Today's Classes</h2>
+              <p className="text-sm text-gray-500">{new Date().toLocaleDateString('en-US', { weekday: 'long' })}</p>
+            </div>
+            <button
+              onClick={() => router.push('/student/timetable')}
+              className="text-[#4D869C] text-sm font-medium flex items-center gap-1 hover:underline"
+            >
+              Full Timetable
+              <ChevronRight size={16} />
+            </button>
+          </div>
+
+          {todayClasses.length === 0 ? (
+            <div className="p-8 text-center">
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Calendar size={28} className="text-gray-400" />
+              </div>
+              <p className="text-gray-500 font-medium">No classes scheduled for today</p>
+              <p className="text-gray-400 text-sm mt-1">Enjoy your free day! 🎉</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {todayClasses.map((cls, index) => {
+                const now = new Date();
+                const currentTime = now.toTimeString().slice(0, 5);
+                const isPast = cls.endTime < currentTime;
+                const isCurrent = cls.startTime <= currentTime && cls.endTime > currentTime;
+
+                return (
+                  <motion.div
+                    key={cls.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className={`p-4 lg:p-5 flex items-start gap-4 ${isPast ? 'opacity-50' : ''} ${isCurrent ? 'bg-[#4D869C]/5' : ''}`}
+                  >
+                    <div className={`w-12 h-12 lg:w-14 lg:h-14 rounded-xl flex items-center justify-center flex-shrink-0 ${isCurrent
+                      ? 'bg-gradient-to-br from-[#4D869C] to-[#7AB2B2] text-white'
+                      : isPast
+                        ? 'bg-gray-100 text-gray-400'
+                        : 'bg-gray-100 text-gray-600'
+                      }`}>
+                      <BookOpen size={20} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
-                        {faculty.first_name} {faculty.last_name}
-                      </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                        {faculty.email}
-                      </div>
-                      <div className="flex items-center gap-2 mt-1">
-                        {faculty.faculty_type && (
-                          <Badge variant="outline" className="text-xs py-0 px-1">
-                            {faculty.faculty_type}
-                          </Badge>
-                        )}
-                        {faculty.departments && (
-                          <span className="text-xs text-gray-500 dark:text-gray-400">
-                            {faculty.departments.code}
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 className="font-semibold text-gray-900 truncate">{cls.subjectName}</h4>
+                          <p className="text-sm text-gray-500">{cls.subjectCode}</p>
+                        </div>
+                        {isCurrent && (
+                          <span className="px-2 py-1 bg-[#4D869C] text-white text-xs font-semibold rounded-lg flex-shrink-0">
+                            Now
                           </span>
                         )}
                       </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* NEP 2020 Curriculum Selection Card */}
-      {user?.role === 'student' && dashboardData?.additionalData.batch?.semester >= 3 && (
-        <Card className="border-indigo-200 dark:border-indigo-800 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <h3 className="text-xl font-bold text-indigo-900 dark:text-indigo-100 flex items-center gap-2 mb-2">
-                  <BookOpen className="h-6 w-6" />
-                  NEP 2020 Curriculum Selection
-                </h3>
-                <p className="text-sm text-indigo-700 dark:text-indigo-300 mb-4">
-                  Choose your MAJOR and MINOR subjects for Semester {dashboardData && dashboardData.additionalData.batch.semester}
-                </p>
-                <div className="flex items-center gap-4 text-sm text-indigo-600 dark:text-indigo-400 mb-4">
-                  <div className="flex items-center gap-1">
-                    <div className="h-2 w-2 rounded-full bg-purple-500"></div>
-                    <span>MAJOR subjects (locked after selection)</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="h-2 w-2 rounded-full bg-green-500"></div>
-                    <span>MINOR subjects (changeable)</span>
-                  </div>
-                </div>
-                <Button
-                  onClick={() => router.push('/student/nep-selection')}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white"
-                >
-                  Select Subjects
-                  <ChevronDown className="ml-2 h-4 w-4 rotate-[-90deg]" />
-                </Button>
-              </div>
-              <div className="hidden md:block">
-                <div className="text-6xl">📚</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Upcoming Events Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calendar className="h-5 w-5" />
-            Upcoming Events & Workshops
-            <Badge variant="secondary" className="ml-auto">
-              {dashboardData?.events.length || 0} Events
-            </Badge>
-          </CardTitle>
-          <div className="text-sm text-gray-600 dark:text-gray-300">
-            Important upcoming activities and events in {dashboardData?.user.department?.name}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {dashboardData?.events && dashboardData.events.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {dashboardData.events.map((event: any) => (
-                <Card key={event.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-4">
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <Badge className={getEventTypeColor(event.event_type || 'other')}>
-                          {event.event_type || 'Event'}
-                        </Badge>
-                        <Badge variant="outline" className="text-green-600 border-green-200">
-                          {event.status || 'Published'}
-                        </Badge>
-                      </div>
-                      
-                      <div>
-                        <h4 className="font-medium text-sm leading-tight">{event.title}</h4>
-                        {event.description && (
-                          <p className="text-xs text-gray-500 mt-1 line-clamp-2">{event.description}</p>
-                        )}
-                      </div>
-                      
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 text-xs text-gray-600">
-                          <Calendar className="h-3 w-3" />
-                          <span>{new Date(event.start_date).toLocaleDateString()}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-gray-600">
-                          <Clock className="h-3 w-3" />
-                          <span>{event.start_time?.substring(0, 5)} - {event.end_time?.substring(0, 5)}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-gray-600">
-                          <MapPin className="h-3 w-3" />
-                          <span>{event.venue || 'TBA'}</span>
-                        </div>
-                      </div>
-                      
-                      {event.creator && (
-                        <div className="text-xs text-gray-500 pt-2 border-t">
-                          By: {event.creator.first_name} {event.creator.last_name}
-                          {event.creator.faculty_type && (
-                            <Badge variant="outline" className="ml-1 text-xs">
-                              {event.creator.faculty_type}
-                            </Badge>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-gray-500">
-              <Calendar className="h-12 w-12 mx-auto mb-2 opacity-50" />
-              <p>No upcoming events available</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Weekly Timetable Section */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex-1">
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Published Timetables
-              </CardTitle>
-              <p className="text-sm text-muted-foreground mt-1">
-                {selectedTimetable 
-                  ? `${selectedTimetable.batches?.name} ${selectedTimetable.batches?.section} • ${selectedTimetable.academic_year}`
-                  : 'Select a batch to view timetable'}
-              </p>
-            </div>
-            
-            {/* Batch Selector */}
-            <div className="flex items-center gap-2 flex-wrap">
-              {publishedTimetables.length > 1 && (
-                <div className="relative">
-                  <select
-                    aria-label="Select batch timetable"
-                    value={selectedTimetable?.id || ''}
-                    onChange={(e) => {
-                      const selected = publishedTimetables.find(tt => tt.id === e.target.value);
-                      if (selected) handleTimetableChange(selected);
-                    }}
-                    className="px-3 py-2 pr-8 border border-gray-300 rounded-md text-sm appearance-none bg-white dark:bg-gray-800 dark:border-gray-600 cursor-pointer"
-                  >
-                    {publishedTimetables.map((tt) => (
-                      <option key={tt.id} value={tt.id}>
-                        Batch {tt.batches?.name} {tt.batches?.section} (Sem {tt.semester})
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 pointer-events-none" />
-                </div>
-              )}
-              
-              {selectedTimetable && (
-                <>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={exportToPDF}
-                    disabled={loadingTimetable}
-                    className="flex items-center gap-1"
-                  >
-                    <FileText className="h-4 w-4" />
-                    PDF
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={exportToExcel}
-                    disabled={loadingTimetable}
-                    className="flex items-center gap-1"
-                  >
-                    <FileSpreadsheet className="h-4 w-4" />
-                    Excel
-                  </Button>
-                  <Badge variant="secondary">
-                    {totalClassesCount} classes
-                  </Badge>
-                </>
-              )}
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loadingTimetable ? (
-            <div className="text-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-2" />
-              <p className="text-gray-500">Loading timetable...</p>
-            </div>
-          ) : !selectedTimetable ? (
-            <div className="text-center py-12 text-gray-500">
-              <Clock className="h-12 w-12 mx-auto mb-2 opacity-50" />
-              <p className="font-medium">No published timetables available</p>
-              <p className="text-sm mt-1">Timetables will appear here once published by faculty</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-gray-300 dark:border-gray-600">
-                <thead>
-                  <tr className="bg-gray-50 dark:bg-gray-800">
-                    <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left font-medium min-w-[120px] text-gray-900 dark:text-gray-100">
-                      Time / Day
-                    </th>
-                    {days.map((day: string) => (
-                      <th key={day} className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center font-medium min-w-[160px] text-gray-900 dark:text-gray-100">
-                        {day}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {timeSlots.map((timeSlot: string, slotIndex: number) => (
-                    <tr key={timeSlot} className="hover:bg-gray-50 dark:hover:bg-gray-800">
-                      <td className="border border-gray-300 dark:border-gray-600 px-4 py-3 font-medium bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100">
-                        {timeSlot}
-                      </td>
-                      {days.map((day: string) => {
-                        const slot = getClassForSlot(day, timeSlot);
-                        return (
-                          <td key={`${day}-${timeSlot}`} className="border border-gray-300 dark:border-gray-600 p-2">
-                            {slot ? (
-                              slot.isBreak || slot.isLunch ? (
-                                <div className="text-center py-2 text-gray-500 dark:text-gray-400 italic bg-gray-100 dark:bg-gray-800 rounded">
-                                  {slot.isLunch ? '🍽️ Lunch Break' : '☕ Break'}
-                                </div>
-                              ) : (
-                                <div className={`p-3 rounded-md text-center ${getClassColor(slot.subjectType, slotIndex)}`}>
-                                  <div className="font-semibold text-sm flex items-center justify-center gap-1">
-                                    {slot.subjectCode}
-                                    {slot.isLab && <Badge variant="secondary" className="text-xs">LAB</Badge>}
-                                  </div>
-                                  <div className="text-xs mt-1 line-clamp-1">{slot.subjectName}</div>
-                                  <div className="text-xs mt-1 opacity-75">{slot.facultyName}</div>
-                                  <div className="text-xs mt-1 flex items-center justify-center gap-1">
-                                    <Building className="h-3 w-3" />
-                                    {slot.classroomName}
-                                  </div>
-                                </div>
-                              )
-                            ) : (
-                              <div className="text-center py-6 text-gray-400 dark:text-gray-500">-</div>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Assignment Information Section */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <BookOpen className="h-5 w-5" />
-                My Assignments
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Available assignments and deadlines
-              </p>
-            </div>
-            <Badge variant="secondary">
-              {assignments.length} Assignments
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loadingAssignments ? (
-            <div className="text-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-2" />
-              <p className="text-gray-500">Loading assignments...</p>
-            </div>
-          ) : assignments.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <BookOpen className="h-12 w-12 mx-auto mb-2 opacity-50" />
-              <p className="font-medium">No assignments available</p>
-              <p className="text-sm mt-1">Assignments will appear here when published by faculty</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {assignments.map((assignment) => {
-                const isScheduled = assignment.scheduled_start && assignment.scheduled_end;
-                const now = new Date();
-                const startTime = isScheduled ? new Date(assignment.scheduled_start) : null;
-                const endTime = isScheduled ? new Date(assignment.scheduled_end) : null;
-                
-                const isAvailable = !isScheduled || (startTime && now >= startTime && endTime && now <= endTime);
-                const isExpired = endTime && now > endTime;
-                const isDueSoon = endTime && (endTime.getTime() - now.getTime()) < 24 * 60 * 60 * 1000;
-                
-                return (
-                  <div 
-                    key={assignment.id} 
-                    className={`border rounded-lg p-4 ${
-                      assignment.has_submitted ? 'bg-green-50 border-green-300' :
-                      isExpired ? 'bg-gray-50 border-gray-300' :
-                      isDueSoon ? 'bg-red-50 border-red-200' :
-                      'bg-blue-50 border-blue-200'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-1">
-                        <h4 className={`font-semibold ${
-                          assignment.has_submitted ? 'text-green-900' :
-                          isExpired ? 'text-gray-900' :
-                          isDueSoon ? 'text-red-900' :
-                          'text-blue-900'
-                        }`}>
-                          {assignment.title}
-                        </h4>
-                        <p className={`text-sm ${
-                          assignment.has_submitted ? 'text-green-700' :
-                          isExpired ? 'text-gray-700' :
-                          isDueSoon ? 'text-red-700' :
-                          'text-blue-700'
-                        }`}>
-                          {assignment.subjects?.name || 'General Assignment'} • {assignment.subjects?.code || ''}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {assignment.has_submitted && assignment.submission && (
-                          <Badge className="bg-green-100 text-green-800 border-green-300">✓ Submitted</Badge>
-                        )}
-                        {!assignment.has_submitted && isExpired && (
-                          <Badge className="bg-gray-100 text-gray-800 border-gray-300">Expired</Badge>
-                        )}
-                        {!assignment.has_submitted && !isExpired && isDueSoon && (
-                          <Badge className="bg-red-100 text-red-800 border-red-300">Due Soon</Badge>
-                        )}
-                        {!assignment.has_submitted && !isExpired && !isDueSoon && isScheduled && (
-                          <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300">Upcoming</Badge>
-                        )}
-                        {assignment.proctoring_enabled && (
-                          <Badge className="bg-purple-100 text-purple-800 border-purple-300">Proctored</Badge>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm mb-3">
-                      {assignment.has_submitted && assignment.submission ? (
-                        <>
-                          <div>
-                            <span className="font-medium text-green-800">Your Score:</span>
-                            <p className="text-green-700 font-bold text-lg">
-                              {assignment.submission.score}/{assignment.total_marks}
-                            </p>
-                          </div>
-                          <div>
-                            <span className="font-medium text-green-800">Percentage:</span>
-                            <p className="text-green-700 font-bold text-lg">
-                              {assignment.submission.percentage?.toFixed(2)}%
-                            </p>
-                          </div>
-                          <div>
-                            <span className="font-medium text-green-800">Submitted At:</span>
-                            <p className="text-green-700">
-                              {new Date(assignment.submission.submitted_at).toLocaleDateString()}
-                            </p>
-                          </div>
-                          <div>
-                            <span className="font-medium text-green-800">Status:</span>
-                            <p className="text-green-700">
-                              {assignment.submission.submission_status}
-                            </p>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          {isScheduled && startTime && (
-                            <div>
-                              <span className={`font-medium ${
-                                isExpired ? 'text-gray-800' :
-                                isDueSoon ? 'text-red-800' :
-                                'text-blue-800'
-                              }`}>Start Time:</span>
-                              <p className={isExpired ? 'text-gray-700' : isDueSoon ? 'text-red-700' : 'text-blue-700'}>
-                                {startTime.toLocaleDateString()} {startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </p>
-                            </div>
-                          )}
-                          {isScheduled && endTime && (
-                            <div>
-                              <span className={`font-medium ${
-                                isExpired ? 'text-gray-800' :
-                                isDueSoon ? 'text-red-800' :
-                                'text-blue-800'
-                              }`}>Due Date:</span>
-                              <p className={isExpired ? 'text-gray-700' : isDueSoon ? 'text-red-700' : 'text-blue-700'}>
-                                {endTime.toLocaleDateString()} {endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </p>
-                            </div>
-                          )}
-                          <div>
-                            <span className={`font-medium ${
-                              isExpired ? 'text-gray-800' :
-                              isDueSoon ? 'text-red-800' :
-                              'text-blue-800'
-                            }`}>Duration:</span>
-                            <p className={isExpired ? 'text-gray-700' : isDueSoon ? 'text-red-700' : 'text-blue-700'}>
-                              {assignment.duration_minutes} minutes
-                            </p>
-                          </div>
-                          <div>
-                            <span className={`font-medium ${
-                              isExpired ? 'text-gray-800' :
-                              isDueSoon ? 'text-red-800' :
-                              'text-blue-800'
-                            }`}>Total Marks:</span>
-                            <p className={isExpired ? 'text-gray-700' : isDueSoon ? 'text-red-700' : 'text-blue-700'}>
-                              {assignment.total_marks} points
-                            </p>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                    
-                    {assignment.description && (
-                      <div className="mt-3">
-                        <p className={`text-sm ${
-                          isExpired ? 'text-gray-700' :
-                          isDueSoon ? 'text-red-700' :
-                          'text-blue-700'
-                        }`}>
-                          <span className="font-medium">Description:</span> {assignment.description}
-                        </p>
-                      </div>
-                    )}
-                    
-                    <div className="mt-4 flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-sm">
-                        <Clock className="h-4 w-4" />
-                        <span className={assignment.has_submitted ? 'text-green-600' : isExpired ? 'text-gray-600' : isDueSoon ? 'text-red-600' : 'text-blue-600'}>
-                          Attempts: {assignment.max_attempts}
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-gray-500">
+                        <span className="flex items-center gap-1">
+                          <Clock size={12} />
+                          {formatTime(cls.startTime)} - {formatTime(cls.endTime)}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <MapPin size={12} />
+                          {cls.classroomName}
                         </span>
                       </div>
-                      {assignment.has_submitted ? (
-                        <Button 
-                          disabled
-                          variant="outline"
-                          className="bg-green-50 text-green-700 border-green-300"
-                        >
-                          ✓ Already Submitted
-                        </Button>
-                      ) : isAvailable && !isExpired ? (
-                        <Button 
-                          onClick={() => router.push(`/student/assignments/${assignment.id}`)}
-                          className="bg-blue-600 hover:bg-blue-700 text-white"
-                        >
-                          Start Assignment →
-                        </Button>
-                      ) : isExpired ? (
-                        <Button disabled variant="outline">
-                          Expired
-                        </Button>
-                      ) : (
-                        <Button disabled variant="outline">
-                          Not Available Yet
-                        </Button>
-                      )}
+                      <p className="text-sm text-gray-400 mt-1">{cls.facultyName}</p>
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </motion.div>
 
-      {/* NEP Curriculum Selection Section - Only for Students */}
-      {user?.role === 'student' && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <BookOpen className="h-5 w-5" />
-                  NEP 2020 Curriculum Selection
-                </CardTitle>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Choose your elective subjects from available buckets
-                </p>
+        {/* Quick Actions */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4"
+        >
+          {[
+            { icon: Calendar, label: 'Full Timetable', path: '/student/timetable', color: 'from-blue-500 to-blue-600' },
+            { icon: BookOpen, label: 'My Subjects', path: '/student/subjects', color: 'from-purple-500 to-purple-600' },
+            { icon: FileText, label: 'Assignments', path: '/student/assignments', color: 'from-orange-500 to-orange-600' },
+            { icon: GraduationCap, label: 'NEP Selection', path: '/student/nep-selection', color: 'from-green-500 to-green-600' },
+          ].map((item, index) => (
+            <motion.button
+              key={item.label}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => router.push(item.path)}
+              className="bg-white rounded-xl lg:rounded-2xl p-4 lg:p-5 border border-gray-100 shadow-sm hover:shadow-md transition-all text-left"
+            >
+              <div className={`w-10 h-10 lg:w-12 lg:h-12 rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center mb-3`}>
+                <item.icon size={20} className="text-white" />
               </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline">
-                  {electiveBuckets.length} Buckets Available
-                </Badge>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowNepCurriculum(!showNepCurriculum)}
-                  className="flex items-center gap-2"
-                >
-                  {showNepCurriculum ? 'Hide' : 'Show'} Selections
-                  <ChevronDown className={`h-4 w-4 transition-transform ${showNepCurriculum ? 'rotate-180' : ''}`} />
-                </Button>
-              </div>
+              <p className="font-semibold text-gray-900 text-sm lg:text-base">{item.label}</p>
+            </motion.button>
+          ))}
+        </motion.div>
+
+        {/* Events Section */}
+        {dashboardData?.events && dashboardData.events.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+            className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
+          >
+            <div className="p-5 lg:p-6 border-b border-gray-100">
+              <h2 className="text-lg lg:text-xl font-bold text-gray-900">Upcoming Events</h2>
+              <p className="text-sm text-gray-500">Stay updated with college activities</p>
             </div>
-          </CardHeader>
-          <CardContent>
-            {loadingBuckets ? (
-              <div className="text-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-2" />
-                <p className="text-gray-500">Loading curriculum options...</p>
-              </div>
-            ) : electiveBuckets.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <BookOpen className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p className="font-medium">No elective buckets available</p>
-                <p className="text-sm mt-1">Elective options will appear here when available for your semester</p>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {!showNepCurriculum && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center">
-                        <BookOpen className="h-6 w-6 text-blue-600" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-5 lg:p-6">
+              {dashboardData.events.slice(0, 6).map((event: any, index) => (
+                <div key={event.id} className="bg-white rounded-xl border border-gray-100 p-5 hover:shadow-md transition-shadow">
+                  {/* Event Type and Status Badges */}
+                  <div className="flex items-center justify-between mb-4">
+                    <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${event.event_type === 'workshop' ? 'bg-blue-100 text-blue-700' :
+                        event.event_type === 'seminar' ? 'bg-purple-100 text-purple-700' :
+                          event.event_type === 'cultural' ? 'bg-pink-100 text-pink-700' :
+                            event.event_type === 'sports' ? 'bg-orange-100 text-orange-700' :
+                              event.event_type === 'academic' ? 'bg-green-100 text-green-700' :
+                                'bg-gray-100 text-gray-600'
+                      }`}>
+                      {event.event_type || 'event'}
+                    </span>
+                    <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${event.status === 'published' ? 'bg-green-100 text-green-700' :
+                        event.status === 'draft' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-gray-100 text-gray-600'
+                      }`}>
+                      {event.status || 'upcoming'}
+                    </span>
+                  </div>
+
+                  {/* Event Title & Description */}
+                  <h4 className="font-bold text-gray-900 text-lg mb-1">{event.title}</h4>
+                  {event.description && (
+                    <p className="text-sm text-gray-500 mb-4 line-clamp-2">{event.description}</p>
+                  )}
+
+                  {/* Event Details */}
+                  <div className="space-y-2 text-sm text-gray-600 mb-4">
+                    {event.event_date && (
+                      <div className="flex items-center gap-2">
+                        <Calendar size={14} className="text-gray-400" />
+                        <span>{new Date(event.event_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'numeric', year: 'numeric' })}</span>
                       </div>
-                      <div className="flex-1">
-                        <h4 className="font-semibold text-blue-900">Subject Selection Summary</h4>
-                        <p className="text-sm text-blue-700 mt-1">
-                          You have {totalSelectedSubjects} subjects selected from {electiveBuckets.length} available buckets
-                        </p>
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {electiveBuckets.map(bucket => {
-                            const selections = selectedSubjects[bucket.id] || [];
-                            return (
-                              <Badge key={bucket.id} variant="secondary" className="text-xs">
-                                {bucket.bucket_name}: {selections.length}/{bucket.max_selection}
-                              </Badge>
-                            );
-                          })}
-                        </div>
+                    )}
+                    {(event.event_time || event.end_time) && (
+                      <div className="flex items-center gap-2">
+                        <Clock size={14} className="text-gray-400" />
+                        <span>
+                          {event.event_time?.slice(0, 5) || ''}
+                          {event.end_time ? ` - ${event.end_time.slice(0, 5)}` : ''}
+                        </span>
                       </div>
+                    )}
+                    {event.location && (
+                      <div className="flex items-center gap-2">
+                        <MapPin size={14} className="text-gray-400" />
+                        <span>{event.location}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Creator Info */}
+                  {event.creator && (
+                    <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
+                      <span className="text-sm text-gray-500">
+                        By: {event.creator.faculty_type === 'professor' ? 'Prof.' : event.creator.faculty_type === 'hod' ? 'HOD' : ''} {event.creator.first_name} {event.creator.last_name}
+                      </span>
+                      <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-md">creator</span>
                     </div>
-                  </div>
-                )}
-
-                {showNepCurriculum && (
-                  <div className="space-y-6">
-                    {/* Display Selected Courses Summary */}
-                    {totalSelectedSubjects > 0 && (
-                      <Card className="border-2 border-green-500 bg-gradient-to-r from-green-50 to-emerald-50">
-                        <CardHeader className="pb-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
-                                <BookOpen className="h-5 w-5 text-green-600" />
-                              </div>
-                              <div>
-                                <h4 className="font-semibold text-green-900">Your Selected Courses</h4>
-                                <p className="text-sm text-green-700">
-                                  {areSelectionsComplete() 
-                                    ? '✅ Selection Complete - These are locked for the semester' 
-                                    : 'These selections are saved for the entire semester'
-                                  }
-                                </p>
-                              </div>
-                            </div>
-                            {areSelectionsComplete() && (
-                              <Badge className="bg-green-600 text-white px-4 py-2">
-                                ✓ Confirmed
-                              </Badge>
-                            )}
-                          </div>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {electiveBuckets.map(bucket => {
-                              const selections = selectedSubjects[bucket.id] || [];
-                              const selectedSubjectsData = (bucketSubjects[bucket.id] || []).filter(s => selections.includes(s.id));
-                              if (selectedSubjectsData.length === 0) return null;
-                              
-                              const bucketTypeLabel = bucket.bucket_type === 'MAJOR' ? '🎓 Major' : 
-                                                     bucket.bucket_type === 'MINOR' ? '📚 Minor' : 
-                                                     bucket.bucket_name;
-                              
-                              return (
-                                <div key={bucket.id} className="bg-white rounded-lg p-4 border border-green-200">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <h5 className="font-semibold text-gray-900">{bucketTypeLabel}</h5>
-                                    <Badge className="bg-green-100 text-green-800">
-                                      {selections.length} selected
-                                    </Badge>
-                                  </div>
-                                  <div className="space-y-2">
-                                    {selectedSubjectsData.map(subject => (
-                                      <div key={subject.id} className="flex items-center gap-2 text-sm">
-                                        <div className="h-2 w-2 rounded-full bg-green-500"></div>
-                                        <span className="font-medium text-gray-700">{subject.code}:</span>
-                                        <span className="text-gray-600">{subject.name}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Major Courses Section - Only show if selections not complete */}
-                    {!areSelectionsComplete() && electiveBuckets.some(b => b.bucket_type === 'MAJOR') && (
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-3">
-                          <div className="h-1 flex-1 bg-gradient-to-r from-indigo-200 to-indigo-400 rounded"></div>
-                          <h3 className="text-xl font-bold text-indigo-900 flex items-center gap-2">
-                            🎓 Major Courses
-                          </h3>
-                          <div className="h-1 flex-1 bg-gradient-to-l from-indigo-200 to-indigo-400 rounded"></div>
-                        </div>
-                        {electiveBuckets
-                          .filter(bucket => bucket.bucket_type === 'MAJOR')
-                          .map((bucket) => {
-                            const subjects = bucketSubjects[bucket.id] || [];
-                            const currentSelections = selectedSubjects[bucket.id] || [];
-                            
-                            return (
-                              <Card key={bucket.id} className="border-l-4 border-l-indigo-500">
-                                <CardHeader className="pb-3 bg-indigo-50">
-                                  <div className="flex items-center justify-between">
-                                    <div>
-                                      <h4 className="font-semibold text-indigo-900">{bucket.bucket_name}</h4>
-                                      {bucket.description && (
-                                        <p className="text-sm text-indigo-700 mt-1">{bucket.description}</p>
-                                      )}
-                                    </div>
-                                    <div className="text-right">
-                                      <Badge className={`${
-                                        currentSelections.length >= bucket.min_selection 
-                                          ? 'bg-green-100 text-green-800 border-green-200' 
-                                          : 'bg-yellow-100 text-yellow-800 border-yellow-200'
-                                      }`}>
-                                        {currentSelections.length}/{bucket.max_selection} Selected
-                                      </Badge>
-                                      <p className="text-xs text-indigo-600 mt-1">
-                                        Min: {bucket.min_selection} • Max: {bucket.max_selection}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </CardHeader>
-                                <CardContent>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                    {subjects.map((subject) => {
-                                      const isSelected = currentSelections.includes(subject.id);
-                                      const canSelect = currentSelections.length < bucket.max_selection;
-                                      
-                                      return (
-                                        <div
-                                          key={subject.id}
-                                          className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                                            isSelected
-                                              ? 'border-indigo-500 bg-indigo-50'
-                                        : canSelect
-                                              ? 'border-gray-200 bg-white hover:border-indigo-300 hover:bg-indigo-50'
-                                              : 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
-                                          }`}
-                                          onClick={() => {
-                                            if (isSelected || canSelect) {
-                                              handleSubjectSelection(bucket.id, subject.id, !isSelected);
-                                            }
-                                          }}
-                                        >
-                                          <div className="flex items-center justify-between mb-2">
-                                            <Badge variant="outline" className="text-xs">
-                                              {subject.code}
-                                            </Badge>
-                                            <div className="flex items-center gap-2">
-                                              <Badge className="text-xs bg-purple-100 text-purple-800">
-                                                {subject.credit_value} Credits
-                                              </Badge>
-                                              {isSelected && (
-                                                <div className="h-5 w-5 rounded-full bg-indigo-500 flex items-center justify-center">
-                                                  <svg className="h-3 w-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                                  </svg>
-                                                </div>
-                                              )}
-                                            </div>
-                                          </div>
-                                          <h5 className="font-medium text-sm text-gray-900 line-clamp-2">
-                                            {subject.name}
-                                          </h5>
-                                          {subject.description && (
-                                            <p className="text-xs text-gray-600 mt-1 line-clamp-2">
-                                              {subject.description}
-                                            </p>
-                                          )}
-                                          <div className="flex items-center gap-2 mt-2">
-                                            <Badge variant="outline" className="text-xs">
-                                              {subject.nep_category}
-                                            </Badge>
-                                            <Badge variant="outline" className="text-xs">
-                                              {subject.subject_type}
-                                            </Badge>
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                  
-                                  {subjects.length === 0 && (
-                                    <div className="text-center py-8 text-gray-500">
-                                      <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                                      <p className="text-sm">No subjects available in this bucket</p>
-                                    </div>
-                                  )}
-                                </CardContent>
-                              </Card>
-                            );
-                          })}
-                      </div>
-                    )}
-
-                    {/* Minor Courses Section - Only show if selections not complete */}
-                    {!areSelectionsComplete() && electiveBuckets.some(b => b.bucket_type === 'MINOR') && (
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-3">
-                          <div className="h-1 flex-1 bg-gradient-to-r from-pink-200 to-pink-400 rounded"></div>
-                          <h3 className="text-xl font-bold text-pink-900 flex items-center gap-2">
-                            📚 Minor Courses
-                          </h3>
-                          <div className="h-1 flex-1 bg-gradient-to-l from-pink-200 to-pink-400 rounded"></div>
-                        </div>
-                        {electiveBuckets
-                          .filter(bucket => bucket.bucket_type === 'MINOR')
-                          .map((bucket) => {
-                            const subjects = bucketSubjects[bucket.id] || [];
-                            const currentSelections = selectedSubjects[bucket.id] || [];
-                            
-                            return (
-                              <Card key={bucket.id} className="border-l-4 border-l-pink-500">
-                                <CardHeader className="pb-3 bg-pink-50">
-                                  <div className="flex items-center justify-between">
-                                    <div>
-                                      <h4 className="font-semibold text-pink-900">{bucket.bucket_name}</h4>
-                                      {bucket.description && (
-                                        <p className="text-sm text-pink-700 mt-1">{bucket.description}</p>
-                                      )}
-                                    </div>
-                                    <div className="text-right">
-                                      <Badge className={`${
-                                        currentSelections.length >= bucket.min_selection 
-                                          ? 'bg-green-100 text-green-800 border-green-200' 
-                                          : 'bg-yellow-100 text-yellow-800 border-yellow-200'
-                                      }`}>
-                                        {currentSelections.length}/{bucket.max_selection} Selected
-                                      </Badge>
-                                      <p className="text-xs text-pink-600 mt-1">
-                                        Min: {bucket.min_selection} • Max: {bucket.max_selection}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </CardHeader>
-                                <CardContent>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                    {subjects.map((subject) => {
-                                      const isSelected = currentSelections.includes(subject.id);
-                                      const canSelect = currentSelections.length < bucket.max_selection;
-                                      
-                                      return (
-                                        <div
-                                          key={subject.id}
-                                          className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                                            isSelected
-                                              ? 'border-pink-500 bg-pink-50'
-                                              : canSelect
-                                              ? 'border-gray-200 bg-white hover:border-pink-300 hover:bg-pink-50'
-                                              : 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
-                                          }`}
-                                          onClick={() => {
-                                            if (isSelected || canSelect) {
-                                              handleSubjectSelection(bucket.id, subject.id, !isSelected);
-                                            }
-                                          }}
-                                        >
-                                          <div className="flex items-center justify-between mb-2">
-                                            <Badge variant="outline" className="text-xs">
-                                              {subject.code}
-                                            </Badge>
-                                            <div className="flex items-center gap-2">
-                                              <Badge className="text-xs bg-purple-100 text-purple-800">
-                                                {subject.credit_value} Credits
-                                              </Badge>
-                                              {isSelected && (
-                                                <div className="h-5 w-5 rounded-full bg-pink-500 flex items-center justify-center">
-                                                  <svg className="h-3 w-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                                  </svg>
-                                                </div>
-                                              )}
-                                            </div>
-                                          </div>
-                                          <h5 className="font-medium text-sm text-gray-900 line-clamp-2">
-                                            {subject.name}
-                                          </h5>
-                                          {subject.description && (
-                                            <p className="text-xs text-gray-600 mt-1 line-clamp-2">
-                                              {subject.description}
-                                            </p>
-                                          )}
-                                          <div className="flex items-center gap-2 mt-2">
-                                            <Badge variant="outline" className="text-xs">
-                                              {subject.nep_category}
-                                            </Badge>
-                                            <Badge variant="outline" className="text-xs">
-                                              {subject.subject_type}
-                                            </Badge>
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                  
-                                  {subjects.length === 0 && (
-                                    <div className="text-center py-8 text-gray-500">
-                                      <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                                      <p className="text-sm">No subjects available in this bucket</p>
-                                    </div>
-                                  )}
-                                </CardContent>
-                              </Card>
-                            );
-                          })}
-                      </div>
-                    )}
-
-                    {/* Other Buckets (non-Major/Minor) - Only show if selections not complete */}
-                    {!areSelectionsComplete() && electiveBuckets.some(b => b.bucket_type !== 'MAJOR' && b.bucket_type !== 'MINOR') && (
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-3">
-                          <div className="h-1 flex-1 bg-gradient-to-r from-blue-200 to-blue-400 rounded"></div>
-                          <h3 className="text-xl font-bold text-blue-900 flex items-center gap-2">
-                            📖 Other Electives
-                          </h3>
-                          <div className="h-1 flex-1 bg-gradient-to-l from-blue-200 to-blue-400 rounded"></div>
-                        </div>
-                        {electiveBuckets
-                          .filter(bucket => bucket.bucket_type !== 'MAJOR' && bucket.bucket_type !== 'MINOR')
-                          .map((bucket) => {
-                            const subjects = bucketSubjects[bucket.id] || [];
-                            const currentSelections = selectedSubjects[bucket.id] || [];
-                            
-                            return (
-                              <Card key={bucket.id} className="border-l-4 border-l-blue-500">
-                                <CardHeader className="pb-3">
-                                  <div className="flex items-center justify-between">
-                                    <div>
-                                      <h4 className="font-semibold text-gray-900">{bucket.bucket_name}</h4>
-                                      {bucket.description && (
-                                        <p className="text-sm text-gray-600 mt-1">{bucket.description}</p>
-                                      )}
-                                    </div>
-                                    <div className="text-right">
-                                      <Badge className={`${
-                                        currentSelections.length >= bucket.min_selection 
-                                          ? 'bg-green-100 text-green-800 border-green-200' 
-                                          : 'bg-yellow-100 text-yellow-800 border-yellow-200'
-                                      }`}>
-                                        {currentSelections.length}/{bucket.max_selection} Selected
-                                      </Badge>
-                                      <p className="text-xs text-gray-500 mt-1">
-                                        Min: {bucket.min_selection} • Max: {bucket.max_selection}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </CardHeader>
-                                <CardContent>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                    {subjects.map((subject) => {
-                                      const isSelected = currentSelections.includes(subject.id);
-                                      const canSelect = currentSelections.length < bucket.max_selection;
-                                      
-                                      return (
-                                        <div
-                                          key={subject.id}
-                                          className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                                            isSelected
-                                              ? 'border-blue-500 bg-blue-50'
-                                              : canSelect
-                                              ? 'border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50'
-                                              : 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
-                                          }`}
-                                          onClick={() => {
-                                            if (isSelected || canSelect) {
-                                              handleSubjectSelection(bucket.id, subject.id, !isSelected);
-                                            }
-                                          }}
-                                        >
-                                          <div className="flex items-center justify-between mb-2">
-                                            <Badge variant="outline" className="text-xs">
-                                              {subject.code}
-                                            </Badge>
-                                            <div className="flex items-center gap-2">
-                                              <Badge className="text-xs bg-purple-100 text-purple-800">
-                                                {subject.credit_value} Credits
-                                              </Badge>
-                                              {isSelected && (
-                                                <div className="h-5 w-5 rounded-full bg-blue-500 flex items-center justify-center">
-                                                  <svg className="h-3 w-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                                  </svg>
-                                                </div>
-                                              )}
-                                            </div>
-                                          </div>
-                                          <h5 className="font-medium text-sm text-gray-900 line-clamp-2">
-                                            {subject.name}
-                                          </h5>
-                                          {subject.description && (
-                                            <p className="text-xs text-gray-600 mt-1 line-clamp-2">
-                                              {subject.description}
-                                            </p>
-                                          )}
-                                          <div className="flex items-center gap-2 mt-2">
-                                            <Badge variant="outline" className="text-xs">
-                                              {subject.nep_category}
-                                            </Badge>
-                                            <Badge variant="outline" className="text-xs">
-                                              {subject.subject_type}
-                                            </Badge>
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                  
-                                  {subjects.length === 0 && (
-                                    <div className="text-center py-8 text-gray-500">
-                                      <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                                      <p className="text-sm">No subjects available in this bucket</p>
-                                    </div>
-                                  )}
-                                </CardContent>
-                              </Card>
-                            );
-                          })}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Examination Information Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <GraduationCap className="h-5 w-5" />
-            Examination Schedule
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Upcoming examinations and important details
-          </p>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h4 className="font-semibold text-red-900">Mid-term Examination</h4>
-                  <p className="text-sm text-red-700">Data Structures and Algorithms</p>
+                  )}
                 </div>
-                <Badge className="bg-red-100 text-red-800 border-red-300">Upcoming</Badge>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                <div>
-                  <span className="font-medium text-red-800">Exam Date:</span>
-                  <p className="text-red-700">October 18, 2025</p>
-                </div>
-                <div>
-                  <span className="font-medium text-red-800">Start Time:</span>
-                  <p className="text-red-700">10:00 AM</p>
-                </div>
-                <div>
-                  <span className="font-medium text-red-800">Duration:</span>
-                  <p className="text-red-700">90 minutes</p>
-                </div>
-              </div>
-              <div className="mt-3">
-                <p className="text-sm text-red-700">
-                  <span className="font-medium">Topics/Syllabus Coverage:</span> List the topics that will be covered in the exam (e.g., Arrays, Linked Lists, Stacks, Queues, Trees, Graphs)
-                </p>
-              </div>
-              <div className="mt-3">
-                <p className="text-sm text-red-700">
-                  <span className="font-medium">Instructions & Guidelines:</span> Special instructions for students (e.g., Bring calculator, No mobile phones allowed, Open book exam, etc.)
-                </p>
-              </div>
+              ))}
             </div>
-
-            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h4 className="font-semibold text-purple-900">Final Examination</h4>
-                  <p className="text-sm text-purple-700">Database Management Systems</p>
-                </div>
-                <Badge className="bg-purple-100 text-purple-800 border-purple-300">Scheduled</Badge>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                <div>
-                  <span className="font-medium text-purple-800">Exam Date:</span>
-                  <p className="text-purple-700">November 25, 2025</p>
-                </div>
-                <div>
-                  <span className="font-medium text-purple-800">Start Time:</span>
-                  <p className="text-purple-700">2:00 PM</p>
-                </div>
-                <div>
-                  <span className="font-medium text-purple-800">Duration:</span>
-                  <p className="text-purple-700">3 hours</p>
-                </div>
-              </div>
-              <div className="mt-3">
-                <p className="text-sm text-purple-700">
-                  <span className="font-medium">Topics/Syllabus Coverage:</span> Comprehensive coverage including SQL queries, database design, normalization, transactions, and advanced topics
-                </p>
-              </div>
-              <div className="mt-3">
-                <p className="text-sm text-purple-700">
-                  <span className="font-medium">Instructions & Guidelines:</span> Closed book examination, scientific calculator permitted, no electronic devices allowed
-                </p>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </motion.div>
+        )}
       </div>
-    </>
+    </StudentLayout>
   );
 }

@@ -136,6 +136,7 @@ CREATE TABLE users (
     admission_year INT,
     current_semester INT CHECK (current_semester BETWEEN 1 AND 8),
     credit DECIMAL(5,2),
+    cgpa NUMERIC(4,2) CHECK (cgpa >= 0.00 AND cgpa <= 10.00),
     max_hours_per_day INT DEFAULT 6 CHECK (max_hours_per_day BETWEEN 1 AND 12),
     max_hours_per_week INT DEFAULT 30 CHECK (max_hours_per_week BETWEEN 1 AND 60),
     min_hours_per_week INT DEFAULT 10 CHECK (min_hours_per_week >= 0),

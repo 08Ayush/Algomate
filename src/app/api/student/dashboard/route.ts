@@ -81,7 +81,13 @@ export async function GET(request: NextRequest) {
             academic_year,
             actual_strength,
             course_id,
+            department_id,
             course:courses!course_id (
+              code
+            ),
+            departments:departments!batches_department_id_fkey (
+              id,
+              name,
               code
             )
           `)
@@ -127,10 +133,10 @@ export async function GET(request: NextRequest) {
 
       additionalData.facultyMembers = facultyMembers || [];
       additionalData.facultyCount = facultyMembers?.length || 0;
-      
+
       // Fetch events in parallel for course departments
       const departmentIds = [...new Set((courseBatches ?? []).map(b => b.department_id).filter(Boolean))];
-      
+
       if (departmentIds.length > 0) {
         const { data: eventsData, error: eventsError } = await supabase
           .from('events')
@@ -155,7 +161,7 @@ export async function GET(request: NextRequest) {
           .in('status', ['draft', 'published'])
           .order('event_date', { ascending: false })
           .limit(10);
-        
+
         additionalData.events = (eventsData || []).map(event => ({
           ...event,
           creator: Array.isArray(event.creator) ? event.creator[0] || null : event.creator,
@@ -163,7 +169,7 @@ export async function GET(request: NextRequest) {
           start_time: event.event_time,
           venue: event.location
         }));
-        
+
         if (eventsError) {
           console.error('Error fetching events:', eventsError);
         }

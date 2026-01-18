@@ -14,10 +14,11 @@ export async function GET(request: NextRequest) {
     const semester = searchParams.get('semester');
     const academicYear = searchParams.get('academicYear');
     const departmentId = searchParams.get('departmentId');
-    
+    const courseId = searchParams.get('courseId');
+
     if (!studentId || !semester) {
-      return NextResponse.json({ 
-        error: 'Student ID and semester are required' 
+      return NextResponse.json({
+        error: 'Student ID and semester are required'
       }, { status: 400 });
     }
 
@@ -44,8 +45,8 @@ export async function GET(request: NextRequest) {
     // Find if student has any MAJOR selection from sem 3+
     const lockedMajor = existingMajorSelections?.find((selection: any) => {
       const subjectData = Array.isArray(selection.subjects) ? selection.subjects[0] : selection.subjects;
-      const isMajor = selection.selection_type === 'MAJOR' || 
-                     ['MAJOR', 'CORE MAJOR', 'ADVANCED MAJOR'].includes(subjectData?.nep_category || '');
+      const isMajor = selection.selection_type === 'MAJOR' ||
+        ['MAJOR', 'CORE MAJOR', 'ADVANCED MAJOR'].includes(subjectData?.nep_category || '');
       return isMajor && selection.semester >= 3;
     });
 
@@ -68,21 +69,29 @@ export async function GET(request: NextRequest) {
         domain_sequence,
         description,
         semester,
-        course_group_id
+        course_group_id,
+        course_id,
+        department_id
       `)
       .eq('semester', parseInt(semester))
       .eq('is_active', true);
 
+    // Filter by department if provided
     if (departmentId) {
       query = query.eq('department_id', departmentId);
+    }
+
+    // Filter by course if provided
+    if (courseId) {
+      query = query.eq('course_id', courseId);
     }
 
     const { data: subjects, error } = await query;
 
     if (error) {
       console.error('Database error:', error);
-      return NextResponse.json({ 
-        error: 'Failed to fetch subjects' 
+      return NextResponse.json({
+        error: 'Failed to fetch subjects'
       }, { status: 500 });
     }
 
@@ -113,8 +122,8 @@ export async function GET(request: NextRequest) {
       } else if (isMajorCategory) {
         isSelectable = true;
         selectionType = 'MAJOR';
-        reason = parseInt(semester) >= 3 
-          ? 'Will be locked after selection (cannot change in future semesters)' 
+        reason = parseInt(semester) >= 3
+          ? 'Will be locked after selection (cannot change in future semesters)'
           : 'Can be selected (will be locked from Semester 3)';
         isPriority = false;
       } else if (isMinorCategory) {
@@ -150,7 +159,7 @@ export async function GET(request: NextRequest) {
       return a.name.localeCompare(b.name);
     });
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       subjects: classifiedSubjects,
       locked_major: lockedMajor ? {
         domain: lockedDomain,
@@ -164,8 +173,8 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Server error:', error);
-    return NextResponse.json({ 
-      error: 'Internal server error' 
+    return NextResponse.json({
+      error: 'Internal server error'
     }, { status: 500 });
   }
 }
