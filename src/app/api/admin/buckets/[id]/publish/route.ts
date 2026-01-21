@@ -1,71 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
+import { SupabaseElectiveBucketRepository } from '@/modules/elective';
+import { authenticate } from '@/shared/middleware/auth';
 
-/**
- * Publish/Unpublish Bucket API
- * POST - Toggle bucket publish status
- */
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+const bucketRepo = new SupabaseElectiveBucketRepository(supabase);
+
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = await params;
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader) {
+    const user = await authenticate(request);
+    if (!user || user.role !== 'college_admin') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await request.json();
-    const { is_published, published_by } = body;
-
-    const updateData: any = {
-      is_published,
-      updated_at: new Date().toISOString()
-    };
-
-    if (is_published) {
-      updateData.published_at = new Date().toISOString();
-      updateData.published_by = published_by;
-    } else {
-      // Unpublishing
-      updateData.published_at = null;
-      updateData.published_by = null;
-    }
-
-    const { data: bucket, error } = await supabaseAdmin
+    // Mark bucket as published
+    await supabase
       .from('elective_buckets')
-      .update(updateData)
-      .eq('id', id)
-      .select(`
-        *,
-        batches:batches!elective_buckets_batch_id_fkey (
-          id,
-          name,
-          semester,
-          section,
-          academic_year,
-          course_id,
-          department_id,
-          departments:departments (id, name, code),
-          courses:courses (id, title, code)
-        ),
-        subjects:subjects!subjects_course_group_id_fkey (id, code, name)
-      `)
-      .single();
+      .update({ is_published: true } as any)
+      .eq('id', params.id);
 
-    if (error) {
-      console.error('Error updating bucket publish status:', error);
-      return NextResponse.json({ error: 'Failed to update bucket' }, { status: 500 });
-    }
-
-    return NextResponse.json({ 
-      bucket,
-      message: is_published ? 'Bucket published successfully' : 'Bucket unpublished successfully'
+    return NextResponse.json({
+      success: true,
+      message: 'Bucket published successfully'
     });
-
   } catch (error: any) {
-    console.error('Error in bucket publish:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('Error publishing bucket:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

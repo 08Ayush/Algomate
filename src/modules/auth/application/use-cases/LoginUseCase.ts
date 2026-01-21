@@ -1,0 +1,65 @@
+import { IUserRepository } from '../../domain/repositories/IUserRepository';
+import { AuthService } from '../../domain/services/AuthService';
+import { LoginDto, LoginResult } from '../dto/LoginDto';
+import { UnauthorizedError } from '@/shared/middleware/error-handler';
+
+/**
+ * Login Use Case
+ * 
+ * Handles user authentication
+ */
+export class LoginUseCase {
+    constructor(
+        private readonly userRepository: IUserRepository,
+        private readonly authService: AuthService
+    ) { }
+
+    /**
+     * Execute login
+     */
+    async execute(dto: LoginDto): Promise<LoginResult> {
+        // Find user by college UID
+        const user = await this.userRepository.findByCollegeUid(dto.collegeUid);
+
+        if (!user) {
+            throw new UnauthorizedError('Invalid College UID or password');
+        }
+
+        // Verify password
+        const isValidPassword = await this.authService.verifyPassword(
+            dto.password,
+            user.passwordHash
+        );
+
+        if (!isValidPassword) {
+            throw new UnauthorizedError('Invalid College UID or password');
+        }
+
+        // Generate token
+        const token = this.authService.generateToken({
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            college_id: user.collegeId,
+            department_id: user.departmentId,
+            faculty_type: user.facultyType
+        });
+
+        // Save token and last login to database (Critical for session validation)
+        await this.userRepository.updateLastLogin(user.id, token);
+
+        // Return result
+        return {
+            token,
+            user: {
+                id: user.id,
+                email: user.email,
+                college_uid: user.collegeUid,
+                role: user.role,
+                college_id: user.collegeId,
+                department_id: user.departmentId,
+                faculty_type: user.facultyType
+            }
+        };
+    }
+}

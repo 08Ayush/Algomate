@@ -3,7 +3,7 @@
  * RSVP system for users to register for events
  */
 
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/shared/database/client';
 
 // ============================================================================
 // TYPES

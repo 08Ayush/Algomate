@@ -9,7 +9,7 @@ import {
   AlertCircle, Info, ChevronDown, ChevronUp, Layers, GraduationCap,
   Building2, Calendar
 } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+import { createClient } from '@/shared/database/browser';
 
 interface User {
   id: string;

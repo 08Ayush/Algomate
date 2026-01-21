@@ -1,0 +1,437 @@
+openapi: 3.0.0
+info:
+  title: Academic Campus API
+  version: 1.0.0
+  description: |
+    REST API for the Academic Campus management system.
+    Built with modular monolithic architecture using Next.js and Supabase.
+  contact:
+    name: API Support
+    email: support@academiccampus.edu
+
+servers:
+  - url: http://localhost:3000
+    description: Development server
+  - url: https://api.academiccampus.edu
+    description: Production server
+
+tags:
+  - name: Authentication
+    description: User authentication endpoints
+  - name: Timetables
+    description: Timetable management endpoints
+  - name: Elective Buckets
+    description: NEP elective bucket management
+  - name: Batches
+    description: Student batch management
+  - name: Classrooms
+    description: Classroom resource management
+  - name: Courses
+    description: Course/program management
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token authentication
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          example: "Error message"
+
+    ElectiveBucket:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        batch_id:
+          type: string
+          format: uuid
+        bucket_name:
+          type: string
+        bucket_type:
+          type: string
+          enum: [GENERAL, SKILL, MINOR, HONORS]
+        min_selection:
+          type: integer
+          minimum: 1
+        max_selection:
+          type: integer
+          minimum: 1
+        college_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateElectiveBucketRequest:
+      type: object
+      required:
+        - batch_id
+        - bucket_name
+        - bucket_type
+        - min_selection
+        - max_selection
+        - college_id
+      properties:
+        batch_id:
+          type: string
+          format: uuid
+        bucket_name:
+          type: string
+        bucket_type:
+          type: string
+          enum: [GENERAL, SKILL, MINOR, HONORS]
+        min_selection:
+          type: integer
+          minimum: 1
+        max_selection:
+          type: integer
+          minimum: 1
+        college_id:
+          type: string
+          format: uuid
+        subject_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    Batch:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        semester:
+          type: integer
+        section:
+          type: string
+        academic_year:
+          type: string
+        course_id:
+          type: string
+          format: uuid
+        department_id:
+          type: string
+          format: uuid
+        college_id:
+          type: string
+          format: uuid
+        is_active:
+          type: boolean
+
+paths:
+  # Elective Bucket Endpoints
+  /api/nep/buckets:
+    get:
+      tags:
+        - Elective Buckets
+      summary: Get all elective buckets
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: batch_id
+          schema:
+            type: string
+          description: Filter by batch ID
+      responses:
+        '200':
+          description: List of elective buckets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  buckets:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ElectiveBucket'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - Elective Buckets
+      summary: Create a new elective bucket
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateElectiveBucketRequest'
+      responses:
+        '201':
+          description: Bucket created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  bucket:
+                    $ref: '#/components/schemas/ElectiveBucket'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/nep/buckets/{id}:
+    get:
+      tags:
+        - Elective Buckets
+      summary: Get elective bucket by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Bucket details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  bucket:
+                    $ref: '#/components/schemas/ElectiveBucket'
+        '404':
+          description: Bucket not found
+
+    put:
+      tags:
+        - Elective Buckets
+      summary: Update elective bucket
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bucket_name:
+                  type: string
+                min_selection:
+                  type: integer
+                max_selection:
+                  type: integer
+      responses:
+        '200':
+          description: Bucket updated
+        '404':
+          description: Bucket not found
+
+    delete:
+      tags:
+        - Elective Buckets
+      summary: Delete elective bucket
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Bucket deleted
+        '404':
+          description: Bucket not found
+
+  # Timetable Endpoints
+  /api/timetables/{id}/approve:
+    post:
+      tags:
+        - Timetables
+      summary: Approve a timetable
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Timetable approved
+        '403':
+          description: Insufficient permissions
+        '404':
+          description: Timetable not found
+
+  /api/timetables/{id}/reject:
+    post:
+      tags:
+        - Timetables
+      summary: Reject a timetable
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Timetable rejected
+        '403':
+          description: Insufficient permissions
+
+  # Batch Endpoints
+  /api/batches/create:
+    post:
+      tags:
+        - Batches
+      summary: Create a new batch
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - semester
+                - course_id
+                - department_id
+              properties:
+                name:
+                  type: string
+                semester:
+                  type: integer
+                section:
+                  type: string
+                academic_year:
+                  type: string
+                course_id:
+                  type: string
+                department_id:
+                  type: string
+      responses:
+        '201':
+          description: Batch created
+        '400':
+          description: Invalid input
+
+  # Classroom Endpoints
+  /api/admin/classrooms:
+    get:
+      tags:
+        - Classrooms
+      summary: Get all classrooms
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: college_id
+          schema:
+            type: string
+        - in: query
+          name: department_id
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of classrooms
+
+    post:
+      tags:
+        - Classrooms
+      summary: Create a new classroom
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - room_number
+                - capacity
+                - room_type
+              properties:
+                room_number:
+                  type: string
+                capacity:
+                  type: integer
+                room_type:
+                  type: string
+                  enum: [LECTURE_HALL, LAB, TUTORIAL, AUDITORIUM, SEMINAR]
+      responses:
+        '201':
+          description: Classroom created
+
+  # Metrics Endpoint
+  /api/metrics:
+    get:
+      tags:
+        - Monitoring
+      summary: Get Prometheus metrics
+      responses:
+        '200':
+          description: Metrics in Prometheus format
+          content:
+            text/plain:
+              schema:
+                type: string

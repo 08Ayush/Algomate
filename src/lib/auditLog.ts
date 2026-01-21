@@ -3,7 +3,7 @@
  * Comprehensive change tracking for compliance and debugging
  */
 
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/shared/database/client';
 
 // ============================================================================
 // TYPES

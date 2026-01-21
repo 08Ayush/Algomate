@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import bcrypt from 'bcryptjs';
+import { SupabaseUserRepository } from '@/modules/auth/infrastructure/persistence/SupabaseUserRepository';
+import { SupabaseDepartmentRepository } from '@/modules/department/infrastructure/persistence/SupabaseDepartmentRepository';
+import { AuthService } from '@/modules/auth/domain/services/AuthService';
+import { handleError, ApiResponse } from '@/shared/utils/response';
+import { UserRole, FacultyType } from '@/shared/types';
+import { Database } from '@/shared/database';
 
 // Create server-side supabase client with service role key
-const supabaseAdmin = createClient(
+const supabaseAdmin = createClient<Database>(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
   {
@@ -14,6 +19,11 @@ const supabaseAdmin = createClient(
   }
 );
 
+// Instantiate repositories and services
+const userRepository = new SupabaseUserRepository(supabaseAdmin);
+const departmentRepository = new SupabaseDepartmentRepository(supabaseAdmin);
+const authService = new AuthService();
+
 // Helper function to get user from Authorization header
 async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) {
   const authHeader = request.headers.get('Authorization');
@@ -23,284 +33,211 @@ async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) 
 
   const token = authHeader.substring(7);
   try {
-    // Decode and verify the user token
-    const userString = Buffer.from(token, 'base64').toString();
-    const user = JSON.parse(userString);
-    
-    // Verify user exists and is active - include department_id
-    const { data: dbUser, error } = await supabaseAdmin
-      .from('users')
-      .select('id, college_id, department_id, role, faculty_type, is_active')
-      .eq('id', user.id)
-      .eq('is_active', true)
-      .single();
+    const decoded = authService.decodeToken(token);
+    if (!decoded || !decoded.id) {
+      return null;
+    }
 
-    if (error || !dbUser) {
+    const user = await userRepository.findById(decoded.id);
+
+    if (!user || !user.isActive) {
       return null;
     }
 
     // For write operations, only allow admin/college_admin/super_admin
-    if (requireAdmin && !['admin', 'college_admin', 'super_admin'].includes(dbUser.role)) {
+    if (requireAdmin && !user.isAdmin()) {
       return null;
     }
 
-    // For read operations, allow admin, college_admin, super_admin, and faculty with creator/publisher types
+    // For read operations
     if (!requireAdmin) {
-      const allowedRoles = ['admin', 'college_admin', 'super_admin'];
-      const allowedFacultyTypes = ['creator', 'publisher'];
-      
-      if (!allowedRoles.includes(dbUser.role) && 
-          !(dbUser.role === 'faculty' && allowedFacultyTypes.includes(dbUser.faculty_type))) {
+      if (!user.isAdmin() &&
+        !(user.isFaculty() && (user.isCreatorFaculty() || user.isPublisherFaculty()))) {
         return null;
       }
     }
 
-    return dbUser;
-  } catch {
+    return user;
+  } catch (error) {
+    console.error('Auth error:', error);
     return null;
   }
 }
 
-// GET - Fetch faculty for authenticated user's college (and department if creator)
+// GET - Fetch faculty for authenticated user's college
 export async function GET(request: NextRequest) {
   try {
-    // Get authenticated user - allow read access for creator/publisher
     const user = await getAuthenticatedUser(request, false);
     if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized. Please log in as an admin.' },
-        { status: 401 }
-      );
+      return ApiResponse.unauthorized('Unauthorized. Please log in as an admin.');
     }
 
-    console.log('🔍 Faculty API - User authenticated:', {
-      id: user.id,
-      role: user.role,
-      department_id: user.department_id,
-      college_id: user.college_id
-    });
-
-    // Get college_id from query parameter (for super_admin) or use user's college_id
+    // Get college_id
     const { searchParams } = new URL(request.url);
     const queryCollegeId = searchParams.get('college_id');
-    
-    let targetCollegeId = user.college_id;
-    
-    // Super admin can view any college's faculty
-    if (user.role === 'super_admin' && queryCollegeId) {
+
+    let targetCollegeId = user.collegeId;
+
+    if (user.isSuperAdmin() && queryCollegeId) {
       targetCollegeId = queryCollegeId;
     }
 
-    // Build query based on user role
-    let query = supabaseAdmin
-      .from('users')
-      .select(`
-        id,
-        first_name,
-        last_name,
-        email,
-        college_uid,
-        phone,
-        role,
-        faculty_type,
-        department_id,
-        college_id,
-        is_active,
-        departments!users_department_id_fkey(id, name, code)
-      `)
-      .eq('college_id', targetCollegeId)
-      .in('role', ['admin', 'faculty']);
-
-    // Filter by department for non-admin users (not super_admin or admin)
-    if (!['super_admin', 'admin', 'college_admin'].includes(user.role) && user.department_id) {
-      console.log('🔒 Filtering faculty by department_id:', user.department_id);
-      query = query.eq('department_id', user.department_id);
-    } else {
-      console.log('👤 User role:', user.role, '- No department filtering applied');
+    if (!targetCollegeId) {
+      return ApiResponse.badRequest('College ID is required');
     }
 
-    const { data: faculty, error } = await query.order('first_name');
-    
-    console.log(`📊 Fetched ${faculty?.length || 0} faculty members for user role: ${user.role}, dept: ${user.department_id}`);
+    // Fetch users (Admin & Faculty)
+    const users = await userRepository.findByCollege(targetCollegeId, ['admin', 'faculty']);
 
-    if (error) {
-      console.error('Faculty fetch error:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch faculty' },
-        { status: 500 }
-      );
+    // Fetch departments for mapping
+    const departments = await departmentRepository.findByCollege(targetCollegeId);
+    const departmentMap = new Map(departments.map(d => [d.id, { id: d.id, name: d.name, code: d.code }]));
+
+    let filteredUsers = users;
+
+    // Filter by department if restricted
+    if (!user.isAdmin() && user.departmentId) {
+      filteredUsers = users.filter(u => u.departmentId === user.departmentId);
     }
 
-    // Map faculty_type back to role for display (reverse the mapping from POST/PUT)
-    const mappedFaculty = faculty?.map(f => {
-      // If role is 'faculty' and faculty_type is 'creator' or 'publisher', show that as the role
-      if (f.role === 'faculty' && (f.faculty_type === 'creator' || f.faculty_type === 'publisher')) {
-        return { ...f, role: f.faculty_type };
+    // transform to response format (join department, map role)
+    const mappedFaculty = filteredUsers.map(u => {
+      const uJson = u.toJSON();
+
+      // Add department info
+      const dept = u.departmentId ? departmentMap.get(u.departmentId) : null;
+
+      // Logic to show 'departments' object as in existing API (using join)
+      // Existing API response: departments: { id, name, code }
+      const userWithDept = {
+        ...uJson,
+        departments: dept || null
+      };
+
+      // Map faculty_type back to role for display
+      if (u.role === UserRole.FACULTY && (u.facultyType === FacultyType.CREATOR || u.facultyType === FacultyType.PUBLISHER)) {
+        userWithDept.role = u.facultyType;
       }
-      return f;
+
+      return userWithDept;
     });
 
+    // Sort by name (existing API: first_name)
+    mappedFaculty.sort((a, b) => (a.first_name || '').localeCompare(b.first_name || ''));
+
     return NextResponse.json({
-      faculty: mappedFaculty || []
+      faculty: mappedFaculty
     });
 
   } catch (error: any) {
-    console.error('Faculty API error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Internal server error' },
-      { status: 500 }
-    );
+    return handleError(error);
   }
 }
 
 // POST - Create new faculty
 export async function POST(request: NextRequest) {
   try {
-    // Get authenticated user - require admin role for creating faculty
     const user = await getAuthenticatedUser(request, true);
     if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized. Only admins can create faculty members.' },
-        { status: 403 }
-      );
+      return ApiResponse.forbidden('Unauthorized. Only admins can create faculty members.');
     }
 
-    const { 
-      first_name, 
-      last_name, 
-      email, 
-      phone, 
-      role, 
-      faculty_type, 
-      department_id, 
-      is_active 
-    } = await request.json();
+    if (!user.collegeId) {
+      return ApiResponse.badRequest('User college ID missing');
+    }
 
-    // Map creator/publisher role to faculty role with appropriate faculty_type
+    const body = await request.json();
+    const {
+      first_name,
+      last_name,
+      email,
+      phone,
+      role,
+      faculty_type,
+      department_id,
+      is_active
+    } = body;
+
+    // Determine actual role/faculty_type
     let actualRole = role;
     let actualFacultyType = faculty_type || 'general';
-    
+
     if (role === 'creator' || role === 'publisher') {
       actualRole = 'faculty';
       actualFacultyType = role;
     }
 
-    // Validate required fields
+    // Validation
     if (!first_name || !last_name || !email || !department_id) {
-      return NextResponse.json(
-        { error: 'First name, last name, email, and department are required' },
-        { status: 400 }
-      );
+      return ApiResponse.badRequest('First name, last name, email, and department are required');
     }
 
-    // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      return NextResponse.json(
-        { error: 'Invalid email format' },
-        { status: 400 }
-      );
+      return ApiResponse.badRequest('Invalid email format');
     }
 
-    // Check if email already exists
-    const { data: existingUser } = await supabaseAdmin
-      .from('users')
-      .select('id')
-      .eq('email', email)
-      .single();
-
+    // Check email existence
+    const existingUser = await userRepository.findByEmail(email);
     if (existingUser) {
-      return NextResponse.json(
-        { error: 'Email already exists' },
-        { status: 400 }
-      );
+      return ApiResponse.conflict('Email already exists');
     }
 
-    // Check if department exists and belongs to user's college
-    const { data: department } = await supabaseAdmin
-      .from('departments')
-      .select('id, code, college_id')
-      .eq('id', department_id)
-      .eq('college_id', user.college_id)
-      .single();
-
-    if (!department) {
-      return NextResponse.json(
-        { error: 'Department not found in your college' },
-        { status: 400 }
-      );
+    // Validate Department
+    const department = await departmentRepository.findById(department_id);
+    if (!department || department.collegeId !== user.collegeId) {
+      return ApiResponse.badRequest('Department not found in your college');
     }
 
-    // Generate college UID
+    // Generate college_uid
     const rolePrefix = actualRole === 'admin' ? 'ADM' : 'FAC';
     const randomSuffix = Math.floor(Math.random() * 900000) + 100000;
     const college_uid = `${rolePrefix}${randomSuffix}`;
 
-    // Generate default password (user should change on first login)
+    // Default password
     const defaultPassword = 'faculty123';
-    const passwordHash = await bcrypt.hash(defaultPassword, 12);
+    const passwordHash = await authService.hashPassword(defaultPassword);
 
-    // Create faculty user
-    const { data: newFaculty, error } = await supabaseAdmin
-      .from('users')
-      .insert({
-        first_name,
-        last_name,
-        email,
-        phone: phone || null,
-        college_uid,
-        password_hash: passwordHash,
-        role: actualRole,
-        faculty_type: actualFacultyType,
-        department_id,
-        college_id: user.college_id,  // Use authenticated user's college_id
-        is_active: is_active !== undefined ? is_active : true,
-        email_verified: false
-      })
-      .select(`
-        id,
-        first_name,
-        last_name,
-        email,
-        college_uid,
-        phone,
-        role,
-        faculty_type,
-        department_id,
-        college_id,
-        is_active,
-        departments!users_department_id_fkey(id, name, code)
-      `)
-      .single();
+    // Create User
+    const newUser = await userRepository.create({
+      email,
+      collegeUid: college_uid,
+      passwordHash,
+      firstName: first_name,
+      lastName: last_name,
+      role: actualRole as UserRole,
+      collegeId: user.collegeId,
+      departmentId: department_id,
+      facultyType: actualFacultyType as FacultyType,
+      studentId: null,
+      courseId: null,
+      currentSemester: null,
+      admissionYear: null,
+      isActive: is_active !== undefined ? is_active : true
+    });
 
-    if (error) {
-      console.error('Faculty creation error:', error);
-      return NextResponse.json(
-        { error: 'Failed to create faculty' },
-        { status: 500 }
-      );
-    }
-
-    // Map faculty_type back to role for display (reverse the mapping)
+    // Construct response
+    const newUserJson = newUser.toJSON();
     const displayFaculty = {
-      ...newFaculty,
-      role: (newFaculty.role === 'faculty' && 
-             (newFaculty.faculty_type === 'creator' || newFaculty.faculty_type === 'publisher'))
-        ? newFaculty.faculty_type
-        : newFaculty.role
+      ...newUserJson,
+      role: (newUser.role === UserRole.FACULTY &&
+        (newUser.facultyType === FacultyType.CREATOR || newUser.facultyType === FacultyType.PUBLISHER))
+        ? newUser.facultyType
+        : newUser.role,
+      departments: {
+        id: department.id,
+        name: department.name,
+        code: department.code
+      }
     };
 
-    return NextResponse.json({
+    return ApiResponse.created({
       message: 'Faculty created successfully',
       faculty: displayFaculty,
-      defaultPassword: defaultPassword // Include in response for admin reference
-    }, { status: 201 });
+      defaultPassword
+    });
 
   } catch (error: any) {
-    console.error('Faculty creation API error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Internal server error' },
-      { status: 500 }
-    );
+    return handleError(error);
   }
 }

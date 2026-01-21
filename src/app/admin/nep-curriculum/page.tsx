@@ -6,7 +6,7 @@ import { Header } from '@/components/Header';
 import { ArrowLeft } from 'lucide-react';
 import CurriculumBuilder from '@/components/nep/CurriculumBuilder';
 import MockStudentGenerator from '@/components/nep/MockStudentGenerator';
-import { createClient } from '@/lib/supabase/client';
+import { createClient } from '@/shared/database/browser';
 
 interface User {
   id: string;

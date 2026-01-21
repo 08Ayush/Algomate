@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/client';
+import { createClient } from '@/shared/database/browser';
 
 interface GenerateStudentsParams {
   batchId: string;

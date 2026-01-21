@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { SupabaseUserRepository } from '@/modules/auth/infrastructure/persistence/SupabaseUserRepository';
+import { SupabaseDepartmentRepository } from '@/modules/department/infrastructure/persistence/SupabaseDepartmentRepository';
+import { CreateDepartmentUseCase } from '@/modules/department/application/use-cases/CreateDepartmentUseCase';
+import { GetDepartmentsByCollegeUseCase } from '@/modules/department/application/use-cases/GetDepartmentsByCollegeUseCase';
+import { AuthService } from '@/modules/auth/domain/services/AuthService';
+import { handleError, ApiResponse } from '@/shared/utils/response';
+import { UserRole, FacultyType } from '@/shared/types';
+import { Database } from '@/shared/database';
 
 // Create server-side supabase client with service role key
-const supabaseAdmin = createClient(
+const supabaseAdmin = createClient<Database>(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
   {
@@ -13,6 +21,15 @@ const supabaseAdmin = createClient(
   }
 );
 
+// Instantiate repositories and services
+const userRepository = new SupabaseUserRepository(supabaseAdmin);
+const departmentRepository = new SupabaseDepartmentRepository(supabaseAdmin);
+const authService = new AuthService();
+
+// Use Cases
+const createDepartmentUseCase = new CreateDepartmentUseCase(departmentRepository);
+const getDepartmentsByCollegeUseCase = new GetDepartmentsByCollegeUseCase(departmentRepository);
+
 // Helper function to get user from Authorization header
 async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) {
   const authHeader = request.headers.get('Authorization');
@@ -22,40 +39,36 @@ async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) 
 
   const token = authHeader.substring(7);
   try {
-    // Decode and verify the user token (you can implement JWT verification here)
-    const userString = Buffer.from(token, 'base64').toString();
-    const user = JSON.parse(userString);
-    
-    // Verify user exists and is active
-    const { data: dbUser, error } = await supabaseAdmin
-      .from('users')
-      .select('id, college_id, role, faculty_type, is_active')
-      .eq('id', user.id)
-      .eq('is_active', true)
-      .single();
+    // Decode token to get user ID
+    // In legacy Auth, this is a base64 encoded JSON
+    const decoded = authService.decodeToken(token);
+    if (!decoded || !decoded.id) {
+      return null;
+    }
 
-    if (error || !dbUser) {
+    // Verify user exists and is active using Repository
+    const user = await userRepository.findById(decoded.id);
+
+    if (!user || !user.isActive) {
       return null;
     }
 
     // For write operations, only allow admin/college_admin/super_admin
-    if (requireAdmin && !['admin', 'college_admin', 'super_admin'].includes(dbUser.role)) {
+    if (requireAdmin && !user.isAdmin()) {
       return null;
     }
 
-    // For read operations, allow admin, college_admin, super_admin, and faculty with creator/publisher types
+    // For read operations
     if (!requireAdmin) {
-      const allowedRoles = ['admin', 'college_admin', 'super_admin'];
-      const allowedFacultyTypes = ['creator', 'publisher'];
-      
-      if (!allowedRoles.includes(dbUser.role) && 
-          !(dbUser.role === 'faculty' && allowedFacultyTypes.includes(dbUser.faculty_type))) {
+      if (!user.isAdmin() &&
+        !(user.isFaculty() && (user.isCreatorFaculty() || user.isPublisherFaculty()))) {
         return null;
       }
     }
 
-    return dbUser;
-  } catch {
+    return user;
+  } catch (error) {
+    console.error('Auth error:', error);
     return null;
   }
 }
@@ -63,51 +76,37 @@ async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) 
 // GET - Fetch departments for authenticated user's college
 export async function GET(request: NextRequest) {
   try {
-    // Get authenticated user - allow read access for creator/publisher
+    // Get authenticated user
     const user = await getAuthenticatedUser(request, false);
     if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized. Please log in as an admin.' },
-        { status: 401 }
-      );
+      return ApiResponse.unauthorized('Unauthorized. Please log in with appropriate permissions.');
     }
 
     // Get college_id from query parameter (for super_admin) or use user's college_id
     const { searchParams } = new URL(request.url);
     const queryCollegeId = searchParams.get('college_id');
-    
-    let targetCollegeId = user.college_id;
-    
+
+    let targetCollegeId = user.collegeId;
+
     // Super admin can view any college's departments
-    if (user.role === 'super_admin' && queryCollegeId) {
+    if (user.isSuperAdmin() && queryCollegeId) {
       targetCollegeId = queryCollegeId;
     }
 
-    // Fetch departments only for target college
-    const { data: departments, error } = await supabaseAdmin
-      .from('departments')
-      .select('*')
-      .eq('college_id', targetCollegeId)
-      .order('name');
-
-    if (error) {
-      console.error('Departments fetch error:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch departments' },
-        { status: 500 }
-      );
+    if (!targetCollegeId) {
+      return ApiResponse.badRequest('College ID is required');
     }
 
+    // Execute Use Case
+    const departments = await getDepartmentsByCollegeUseCase.execute(targetCollegeId);
+
+    // Return with "departments" key to match legacy response structure
     return NextResponse.json({
-      departments: departments || []
+      departments
     });
 
   } catch (error: any) {
-    console.error('Departments API error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Internal server error' },
-      { status: 500 }
-    );
+    return handleError(error);
   }
 }
 
@@ -117,41 +116,38 @@ export async function POST(request: NextRequest) {
     // Get authenticated user - only admins can create departments
     const user = await getAuthenticatedUser(request, true);
     if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized. Only admins can create departments.' },
-        { status: 403 }
-      );
+      return ApiResponse.forbidden('Unauthorized. Only admins can create departments.');
     }
 
-    const { name, code, description } = await request.json();
+    const body = await request.json();
 
-    if (!name || !code) {
-      return NextResponse.json({ error: 'Name and code required' }, { status: 400 });
+    // Mapping body to DTO
+    // Note: The use case expects snake_case for college_id if we use the interface directly, 
+    // but DTO validation handles it.
+    // However, we need to ensure college_id is set.
+    // If user is Admin/CollegeAdmin, we use their college_id.
+    // If SuperAdmin, they might provide it in body? 
+    // Existing code: college_id: user.college_id.
+
+    if (!user.collegeId) {
+      // Should not happen for Admin/CollegeAdmin but check to be safe
+      return ApiResponse.badRequest('User does not have a valid college ID');
     }
 
-    // Direct insert (unique constraint handles duplicates)
-    const { data: newDept, error } = await supabaseAdmin
-      .from('departments')
-      .insert({
-        name,
-        code: code.toUpperCase(),
-        description: description || null,
-        college_id: user.college_id
-      })
-      .select('id, name, code, description, college_id')
-      .single();
+    const { name, code, description } = body;
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
-    }
+    // Use Case Execution
+    const newDept = await createDepartmentUseCase.execute({
+      name,
+      code: code?.toUpperCase(), // Ensure uppercase as per legacy
+      description,
+      college_id: user.collegeId
+    });
 
-    return NextResponse.json({ department: newDept }, { status: 201 });
+    // Return with "department" key to match legacy response structure
+    return ApiResponse.created({ department: newDept });
 
   } catch (error: any) {
-    console.error('Department creation API error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Internal server error' },
-      { status: 500 }
-    );
+    return handleError(error);
   }
 }

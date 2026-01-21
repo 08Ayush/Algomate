@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { supabaseAdmin } from '@/shared/database/client';
 
 /**
  * Make Bucket Live for Creators API
@@ -64,10 +64,10 @@ export async function POST(
       return NextResponse.json({ error: 'Failed to update bucket' }, { status: 500 });
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       bucket,
-      message: is_live 
-        ? 'Bucket is now live for departmental creators to add subjects' 
+      message: is_live
+        ? 'Bucket is now live for departmental creators to add subjects'
         : 'Bucket is no longer live for creators'
     });
 

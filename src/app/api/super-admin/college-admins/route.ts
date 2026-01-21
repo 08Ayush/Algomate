@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { supabaseAdmin } from '@/shared/database/client';
 import bcrypt from 'bcryptjs';
 
 interface AdminWithCollege {

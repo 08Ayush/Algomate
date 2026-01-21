@@ -3,7 +3,7 @@
  * Tracks performance metrics for CP-SAT and GA algorithm executions
  */
 
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/shared/database/client';
 
 // ============================================================================
 // TYPES

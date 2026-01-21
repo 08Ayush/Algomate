@@ -1,75 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
+import { authenticate } from '@/shared/middleware/auth';
 
-/**
- * POST - Unpublish a bucket (set is_published to false)
- */
+const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+
 export async function POST(
     request: NextRequest,
     { params }: { params: { id: string } }
 ) {
     try {
-        const bucketId = params.id;
-
-        if (!bucketId) {
-            return NextResponse.json(
-                { error: 'Bucket ID is required' },
-                { status: 400 }
-            );
+        const user = await authenticate(request);
+        if (!user || user.role !== 'college_admin') {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Check if bucket exists
-        const { data: bucket, error: fetchError } = await supabaseAdmin
+        await supabase
             .from('elective_buckets')
-            .select('id, is_published, bucket_name')
-            .eq('id', bucketId)
-            .single();
-
-        if (fetchError || !bucket) {
-            return NextResponse.json(
-                { error: 'Bucket not found' },
-                { status: 404 }
-            );
-        }
-
-        if (!bucket.is_published) {
-            return NextResponse.json(
-                { error: 'Bucket is already unpublished' },
-                { status: 400 }
-            );
-        }
-
-        // Unpublish the bucket
-        const { data: updatedBucket, error: updateError } = await supabaseAdmin
-            .from('elective_buckets')
-            .update({
-                is_published: false,
-                published_at: null,
-                published_by: null
-            })
-            .eq('id', bucketId)
-            .select()
-            .single();
-
-        if (updateError) {
-            console.error('Error unpublishing bucket:', updateError);
-            return NextResponse.json(
-                { error: 'Failed to unpublish bucket' },
-                { status: 500 }
-            );
-        }
+            .update({ is_published: false } as any)
+            .eq('id', params.id);
 
         return NextResponse.json({
             success: true,
-            message: 'Bucket unpublished successfully',
-            bucket: updatedBucket
+            message: 'Bucket unpublished successfully'
         });
-
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error unpublishing bucket:', error);
-        return NextResponse.json(
-            { error: 'Internal server error' },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
 }

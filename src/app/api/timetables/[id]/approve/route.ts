@@ -1,43 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
+import { ApproveTimetableUseCase, SupabaseTimetableRepository } from '@/modules/timetable';
+import { authenticate } from '@/shared/middleware/auth';
 
-// Get authenticated user from token
-async function getAuthenticatedUser(request: NextRequest) {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  try {
-    const userString = Buffer.from(token, 'base64').toString();
-    const user = JSON.parse(userString);
-    
-    // Verify user exists and is active
-    const { data: dbUser, error } = await supabase
-      .from('users')
-      .select('id, department_id, college_id, role, faculty_type, is_active, first_name, last_name')
-      .eq('id', user.id)
-      .eq('is_active', true)
-      .single();
-
-    if (error || !dbUser) {
-      return null;
-    }
-
-    return dbUser;
-  } catch {
-    return null;
-  }
-}
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+const timetableRepo = new SupabaseTimetableRepository(supabase);
+const approveUseCase = new ApproveTimetableUseCase(timetableRepo);
 
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    // Get authenticated user
-    const user = await getAuthenticatedUser(request);
+    const user = await authenticate(request);
     if (!user) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized. Please log in.' },
@@ -45,61 +23,15 @@ export async function POST(
       );
     }
 
-    // Only publishers can approve timetables
-    if (user.faculty_type !== 'publisher') {
-      return NextResponse.json(
-        { success: false, error: 'Only publishers can approve timetables.' },
-        { status: 403 }
-      );
-    }
+    const result = await approveUseCase.execute(params.id, user.id, user.faculty_type);
+    return NextResponse.json(result);
 
-    const timetableId = params.id;
-
-    console.log('✅ Approving timetable:', timetableId);
-
-    // Update timetable status to published
-    const { error: updateError } = await supabase
-      .from('generated_timetables')
-      .update({ 
-        status: 'published'
-      })
-      .eq('id', timetableId);
-
-    if (updateError) {
-      console.error('❌ Error publishing timetable:', updateError);
-      return NextResponse.json(
-        { success: false, error: `Failed to publish: ${updateError.message}` },
-        { status: 500 }
-      );
-    }
-
-    // Add workflow approval record
-    const { error: workflowError } = await supabase
-      .from('workflow_approvals')
-      .insert({
-        timetable_id: timetableId,
-        workflow_step: 'approved',
-        performed_by: user.id,
-        comments: 'Approved and published by publisher'
-      });
-
-    if (workflowError) {
-      console.error('❌ Error creating workflow record:', workflowError);
-      // Don't fail the entire operation for workflow error
-    }
-
-    console.log('✅ Timetable approved and published successfully');
-
-    return NextResponse.json({
-      success: true,
-      message: 'Timetable approved and published successfully!'
-    });
-
-  } catch (error) {
-    console.error('Unexpected error approving timetable:', error);
+  } catch (error: any) {
+    console.error('Error approving timetable:', error);
+    const status = error.message.includes('Only publishers') ? 403 : 500;
     return NextResponse.json(
-      { success: false, error: 'Internal server error' },
-      { status: 500 }
+      { success: false, error: error.message || 'Internal server error' },
+      { status }
     );
   }
 }

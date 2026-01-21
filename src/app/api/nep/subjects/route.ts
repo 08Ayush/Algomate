@@ -1,91 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { getAuthenticatedUser } from '@/lib/auth-middleware';
+import { createClient } from '@supabase/supabase-js';
+import { authenticate } from '@/shared/middleware/auth';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getAuthenticatedUser(request);
+    const user = await authenticate(request);
     if (!user) {
-      console.error('Authentication failed for NEP subjects API');
-      return NextResponse.json({ 
-        error: 'Authentication required', 
-        message: 'Please log in to access subjects data',
-        code: 'AUTH_REQUIRED'
-      }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { searchParams } = new URL(request.url);
     const courseId = searchParams.get('courseId');
     const semester = searchParams.get('semester');
-    const departmentId = searchParams.get('departmentId');
-    const bucketId = searchParams.get('bucketId');
+    const nepCategory = searchParams.get('nepCategory');
 
-    // Security check: If user has department_id, verify it matches the requested departmentId
-    if (user.department_id && departmentId && user.department_id !== departmentId) {
-      return NextResponse.json({ 
-        error: 'You can only access subjects for your own department',
-        code: 'UNAUTHORIZED_DEPARTMENT'
-      }, { status: 403 });
-    }
-
-    // If user has department_id but none provided in request, use user's department
-    const targetDepartmentId = departmentId || user.department_id;
-
-    // If bucketId is provided, fetch subjects from that bucket
-    if (bucketId) {
-      const { data, error } = await supabase
-        .from('subjects')
-        .select('*')
-        .eq('course_group_id', bucketId)
-        .eq('is_active', true)
-        .order('code');
-
-      if (error) {
-        console.error('Database error:', error);
-        return NextResponse.json({ error: 'Failed to fetch bucket subjects' }, { status: 500 });
-      }
-
-      console.log(`Found ${data?.length || 0} subjects for bucket ${bucketId}`);
-      return NextResponse.json({ subjects: data || [] });
-    }
-
-    if (!courseId || !semester) {
-      return NextResponse.json(
-        { error: 'Course ID and semester are required' },
-        { status: 400 }
-      );
-    }
-
-    const supabase = createClient();
-
-    // Build query for subjects
+    // Build query
     let query = supabase
       .from('subjects')
       .select('*')
-      .eq('college_id', user.college_id)
-      .eq('course_id', courseId)
-      .eq('semester', parseInt(semester))
-      .eq('is_active', true)
-      .is('course_group_id', null); // Only subjects not in buckets
+      .eq('college_id', user.college_id);
 
-    // Add department filter (use validated targetDepartmentId)
-    if (targetDepartmentId) {
-      query = query.eq('department_id', targetDepartmentId);
-    }
+    if (courseId) query = query.eq('course_id', courseId);
+    if (semester) query = query.eq('semester', parseInt(semester));
+    if (nepCategory) query = query.eq('nep_category', nepCategory);
 
-    const { data, error } = await query.order('code');
+    const { data, error } = await query.order('name');
 
-    if (error) {
-      console.error('Database error:', error);
-      return NextResponse.json({ error: 'Failed to fetch subjects' }, { status: 500 });
-    }
-
-    const filterInfo = targetDepartmentId ? `, department ${targetDepartmentId}` : '';
-    console.log(`Found ${data?.length || 0} subjects for college ${user.college_id}, course ${courseId}, semester ${semester}${filterInfo}`);
+    if (error) throw error;
 
     return NextResponse.json(data || []);
-  } catch (error) {
-    console.error('Error in GET /api/nep/subjects:', error);
+  } catch (error: any) {
+    console.error('Error fetching NEP subjects:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

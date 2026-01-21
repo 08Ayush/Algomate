@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient } from '@/shared/database/server';
 import bcrypt from 'bcryptjs';
 
 export async function PUT(
@@ -8,10 +8,10 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    
+
     // Get auth header
     const authHeader = request.headers.get('authorization');
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -19,7 +19,7 @@ export async function PUT(
     // Decode the base64 token
     const token = authHeader.substring(7);
     const decodedUser = JSON.parse(Buffer.from(token, 'base64').toString());
-    
+
     if (!decodedUser.college_id) {
       return NextResponse.json({ error: 'College ID not found' }, { status: 400 });
     }
@@ -87,10 +87,10 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    
+
     // Get auth header
     const authHeader = request.headers.get('authorization');
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -98,7 +98,7 @@ export async function DELETE(
     // Decode the base64 token
     const token = authHeader.substring(7);
     const decodedUser = JSON.parse(Buffer.from(token, 'base64').toString());
-    
+
     if (!decodedUser.college_id) {
       return NextResponse.json({ error: 'College ID not found' }, { status: 400 });
     }

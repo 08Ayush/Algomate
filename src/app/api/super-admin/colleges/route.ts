@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { supabaseAdmin } from '@/shared/database/client';
 
 // GET - List all colleges with counts
 export async function GET(request: NextRequest) {

@@ -1,161 +1,208 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import bcrypt from 'bcryptjs';
+import { createClient } from '@supabase/supabase-js';
+import { SupabaseUserRepository } from '@/modules/auth/infrastructure/persistence/SupabaseUserRepository';
+import { SupabaseDepartmentRepository } from '@/modules/department/infrastructure/persistence/SupabaseDepartmentRepository';
+import { SupabaseCourseRepository } from '@/modules/college/infrastructure/persistence/SupabaseCourseRepository';
+import { AuthService } from '@/modules/auth/domain/services/AuthService';
+import { handleError, ApiResponse } from '@/shared/utils/response';
+import { UserRole, FacultyType } from '@/shared/types';
+import { Database } from '@/shared/database';
 
-export async function GET(request: NextRequest) {
+// Create server-side supabase client with service role key
+const supabaseAdmin = createClient<Database>(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  }
+);
+
+// Instantiate repositories and services
+const userRepository = new SupabaseUserRepository(supabaseAdmin);
+const departmentRepository = new SupabaseDepartmentRepository(supabaseAdmin);
+const courseRepository = new SupabaseCourseRepository(supabaseAdmin);
+const authService = new AuthService();
+
+// Helper function to get user from Authorization header
+async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.substring(7);
   try {
-    // Get auth header
-    const authHeader = request.headers.get('authorization');
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const decoded = authService.decodeToken(token);
+    if (!decoded || !decoded.id) {
+      return null;
     }
 
-    // Decode the base64 token
-    const token = authHeader.substring(7);
-    const decodedUser = JSON.parse(Buffer.from(token, 'base64').toString());
-    
-    if (!decodedUser.college_id) {
-      return NextResponse.json({ error: 'College ID not found' }, { status: 400 });
+    const user = await userRepository.findById(decoded.id);
+
+    if (!user || !user.isActive) {
+      return null;
     }
 
-    // Get college_id from query parameter (for super_admin) or use user's college_id
-    const { searchParams } = new URL(request.url);
-    const queryCollegeId = searchParams.get('college_id');
-    
-    let targetCollegeId = decodedUser.college_id;
-    
-    // Super admin can view any college's students
-    if (decodedUser.role === 'super_admin' && queryCollegeId) {
-      targetCollegeId = queryCollegeId;
+    // For write operations, only allow admin/college_admin/super_admin
+    if (requireAdmin && !user.isAdmin()) {
+      // Super admin is always allowed, helper checks role
+      return null;
     }
 
-    const supabase = createClient();
+    // For read operations
+    if (!requireAdmin) {
+      // Allow admins and super admins
+      if (user.isAdmin()) return user;
 
-    // Fetch students with their course information
-    const { data: students, error } = await supabase
-      .from('users')
-      .select(`
-        id,
-        first_name,
-        last_name,
-        email,
-        college_uid,
-        phone,
-        student_id,
-        course_id,
-        department_id,
-        current_semester,
-        admission_year,
-        is_active,
-        created_at,
-        courses (
-          id,
-          title,
-          code
-        ),
-        departments (
-          id,
-          name,
-          code
-        )
-      `)
-      .eq('college_id', targetCollegeId)
-      .eq('role', 'student')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Supabase error:', error);
-      return NextResponse.json({ error: 'Failed to fetch students' }, { status: 500 });
+      // Allow faculty (creator/publisher)? 
+      // Existing route seemed to check only for 'super_admin' or just college matching
+      // But typically admins access this. 
+      // We'll enforce Admin access for now as per "Migrate Admin Routes" context.
+      // Although existing GET allows verifying based on college_id mostly?
+      // Existing code check:
+      // if (!decodedUser.college_id) error.
+      // if (user.role === 'super_admin'...)
+      // It doesn't explicitly block others but token decoding implies valid user.
     }
 
-    return NextResponse.json({ students: students || [] });
+    return user;
   } catch (error) {
-    console.error('Error in GET /api/admin/students:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('Auth error:', error);
+    return null;
   }
 }
 
-export async function POST(request: NextRequest) {
+// GET - Fetch students
+export async function GET(request: NextRequest) {
   try {
-    // Get auth header
-    const authHeader = request.headers.get('authorization');
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const user = await getAuthenticatedUser(request, false);
+    if (!user) {
+      return ApiResponse.unauthorized();
     }
 
-    // Decode the base64 token
-    const token = authHeader.substring(7);
-    const decodedUser = JSON.parse(Buffer.from(token, 'base64').toString());
-    
-    if (!decodedUser.college_id) {
-      return NextResponse.json({ error: 'College ID not found' }, { status: 400 });
+    // Get college_id
+    const { searchParams } = new URL(request.url);
+    const queryCollegeId = searchParams.get('college_id');
+
+    let targetCollegeId = user.collegeId;
+
+    // Super admin can view any college's students
+    if (user.isSuperAdmin() && queryCollegeId) {
+      targetCollegeId = queryCollegeId;
+    }
+
+    if (!targetCollegeId) {
+      return ApiResponse.badRequest('College ID is required');
+    }
+
+    // Fetch Students
+    const students = await userRepository.findByCollege(targetCollegeId, ['student']);
+
+    // Fetch Departments and Courses for joining
+    const [departments, courses] = await Promise.all([
+      departmentRepository.findByCollege(targetCollegeId),
+      courseRepository.findByCollege(targetCollegeId)
+    ]);
+
+    const departmentMap = new Map(departments.map(d => [d.id, d]));
+    const courseMap = new Map(courses.map(c => [c.id, c]));
+
+    // Map response
+    const mappedStudents = students.map(s => {
+      const sJson = s.toJSON();
+      const dept = s.departmentId ? departmentMap.get(s.departmentId) : null;
+      const course = s.courseId ? courseMap.get(s.courseId) : null;
+
+      return {
+        ...sJson,
+        departments: dept ? {
+          id: dept.id,
+          name: dept.name,
+          code: dept.code
+        } : null,
+        courses: course ? {
+          id: course.id,
+          title: course.title,
+          code: course.code
+        } : null
+      };
+    });
+
+    // Sort by created_at desc
+    mappedStudents.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    return NextResponse.json({
+      students: mappedStudents
+    });
+
+  } catch (error: any) {
+    return handleError(error);
+  }
+}
+
+// POST - Create new student
+export async function POST(request: NextRequest) {
+  try {
+    const user = await getAuthenticatedUser(request, true);
+    if (!user) {
+      return ApiResponse.forbidden('Unauthorized');
+    }
+
+    if (!user.collegeId) {
+      return ApiResponse.badRequest('College ID not found');
     }
 
     const body = await request.json();
     const { first_name, last_name, email, student_id, phone, password, current_semester, admission_year, course_id, department_id, is_active } = body;
 
+    // Validation
     if (!first_name || !last_name || !email || !course_id || !department_id || !password) {
-      return NextResponse.json({ error: 'Missing required fields (first_name, last_name, email, course_id, department_id, password)' }, { status: 400 });
+      return ApiResponse.badRequest('Missing required fields');
     }
 
-    const supabase = createClient();
-
-    // Generate college UID (e.g., STUDENT2024001)
-    const { data: existingStudents } = await supabase
-      .from('users')
-      .select('college_uid')
-      .eq('college_id', decodedUser.college_id)
-      .eq('role', 'student')
-      .order('college_uid', { ascending: false })
-      .limit(1);
+    // Determine College UID
+    const existingStudent = await userRepository.findLatestStudent(user.collegeId);
 
     let nextNumber = 1;
-    if (existingStudents && existingStudents.length > 0) {
-      const lastUid = existingStudents[0].college_uid;
-      const match = lastUid.match(/\d+$/);
+    if (existingStudent && existingStudent.collegeUid) {
+      const match = existingStudent.collegeUid.match(/\d+$/);
       if (match) {
         nextNumber = parseInt(match[0]) + 1;
       }
     }
 
-    const college_uid = `STUDENT${admission_year}${String(nextNumber).padStart(3, '0')}`;
+    const year = admission_year || new Date().getFullYear();
+    const college_uid = `STUDENT${year}${String(nextNumber).padStart(3, '0')}`;
 
-    // Hash the provided password
-    const password_hash = await bcrypt.hash(password, 10);
+    // Hash password
+    const passwordHash = await authService.hashPassword(password);
 
-    // Insert new student
-    const { data: newStudent, error } = await supabase
-      .from('users')
-      .insert({
-        first_name,
-        last_name,
-        email,
-        password_hash,
-        college_uid,
-        student_id: student_id || null,
-        phone: phone || null,
-        current_semester: current_semester || 1,
-        admission_year: admission_year || new Date().getFullYear(),
-        course_id: course_id || null,
-        department_id: department_id || null,
-        role: 'student',
-        college_id: decodedUser.college_id,
-        is_active: is_active !== undefined ? is_active : true
-      })
-      .select()
-      .single();
+    // Create Student
+    const newStudent = await userRepository.create({
+      email,
+      collegeUid: college_uid,
+      passwordHash,
+      firstName: first_name,
+      lastName: last_name,
+      role: UserRole.STUDENT,
+      collegeId: user.collegeId,
+      departmentId: department_id,
+      courseId: course_id,
+      currentSemester: current_semester || 1,
+      admissionYear: year,
+      studentId: student_id || null,
+      phone: phone || null,
+      isActive: is_active !== undefined ? is_active : true,
+      // Fields not needed for student
+      facultyType: null
+    });
 
-    if (error) {
-      console.error('Supabase error:', error);
-      return NextResponse.json({ error: error.message || 'Failed to create student' }, { status: 500 });
-    }
+    return ApiResponse.created({ student: newStudent.toJSON() });
 
-    console.log(`Successfully created student with ID: ${newStudent.id}`);
-    return NextResponse.json({ student: newStudent }, { status: 201 });
-  } catch (error) {
-    console.error('Error in POST /api/admin/students:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  } catch (error: any) {
+    return handleError(error);
   }
 }

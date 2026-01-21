@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/Header';
 import { ArrowLeft, Users, BookOpen, Download, Search, Filter, RefreshCw } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+import { createClient } from '@/shared/database/client';
 
 interface User {
   id: string;
@@ -167,7 +167,7 @@ export default function StudentChoicesPage() {
       } else {
         const typedChoicesData = (choicesData || []) as StudentChoice[];
         setChoices(typedChoicesData);
-        
+
         // Calculate subject statistics
         const stats: Record<string, SubjectStats> = {};
         typedChoicesData.forEach(choice => {
@@ -217,12 +217,12 @@ export default function StudentChoicesPage() {
   // Filter choices
   const filteredStudents = Object.values(choicesByStudent).filter(({ student, choices: studentChoices }) => {
     if (!student) return false;
-    
+
     // Filter by allotted status
     const hasAllotted = studentChoices.some(c => c.is_allotted);
     if (filterAllotted === 'allotted' && !hasAllotted) return false;
     if (filterAllotted === 'pending' && hasAllotted) return false;
-    
+
     // Filter by search query
     const matchesSearch = searchQuery === '' ||
       student.first_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -274,7 +274,7 @@ export default function StudentChoicesPage() {
   return (
     <div className="min-h-screen bg-gray-100">
       <Header />
-      
+
       <div className="pt-20 pb-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           {/* Back Button and Header */}
@@ -373,7 +373,7 @@ export default function StudentChoicesPage() {
                 <div>
                   <p className="text-sm text-gray-500">Avg. per Student</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {Object.keys(choicesByStudent).length > 0 
+                    {Object.keys(choicesByStudent).length > 0
                       ? (choices.length / Object.keys(choicesByStudent).length).toFixed(1)
                       : '0'}
                   </p>
@@ -388,21 +388,19 @@ export default function StudentChoicesPage() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setViewMode('students')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    viewMode === 'students'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'students'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
                 >
                   By Student
                 </button>
                 <button
                   onClick={() => setViewMode('subjects')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    viewMode === 'subjects'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'subjects'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
                 >
                   By Subject
                 </button>
@@ -448,9 +446,8 @@ export default function StudentChoicesPage() {
               {filteredStudents.map(({ student, choices: studentChoices }) => {
                 const hasAllotted = studentChoices.some(c => c.is_allotted);
                 return (
-                  <div key={student?.id} className={`bg-white rounded-lg shadow-sm border-2 p-4 ${
-                    hasAllotted ? 'border-green-300 bg-green-50' : 'border-gray-200'
-                  }`}>
+                  <div key={student?.id} className={`bg-white rounded-lg shadow-sm border-2 p-4 ${hasAllotted ? 'border-green-300 bg-green-50' : 'border-gray-200'
+                    }`}>
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
@@ -477,15 +474,14 @@ export default function StudentChoicesPage() {
                         .map((choice) => (
                           <div
                             key={choice.id}
-                            className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-2 ${
-                              choice.is_allotted
-                                ? 'bg-green-200 text-green-900 border-2 border-green-400'
-                                : choice.priority === 1
+                            className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-2 ${choice.is_allotted
+                              ? 'bg-green-200 text-green-900 border-2 border-green-400'
+                              : choice.priority === 1
                                 ? 'bg-green-100 text-green-800 border border-green-200'
                                 : choice.priority === 2
-                                ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                                : 'bg-gray-100 text-gray-800 border border-gray-200'
-                            }`}
+                                  ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                  : 'bg-gray-100 text-gray-800 border border-gray-200'
+                              }`}
                           >
                             <span className="font-medium">{choice.subjects?.code}</span>
                             <span className="text-xs opacity-75">

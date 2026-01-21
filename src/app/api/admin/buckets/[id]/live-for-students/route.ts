@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { supabaseAdmin } from '@/shared/database/client';
 
 /**
  * Make Bucket Live for Students API
@@ -45,8 +45,8 @@ export async function POST(
 
     // Validate that bucket has subjects before making it live for students
     if (is_live && !hasSubjects) {
-      return NextResponse.json({ 
-        error: 'Cannot make bucket live for students. No subjects have been added to this bucket yet. Please make it live for creators first so they can add subjects.' 
+      return NextResponse.json({
+        error: 'Cannot make bucket live for students. No subjects have been added to this bucket yet. Please make it live for creators first so they can add subjects.'
       }, { status: 400 });
     }
 
@@ -93,10 +93,10 @@ export async function POST(
       return NextResponse.json({ error: 'Failed to update bucket' }, { status: 500 });
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       bucket,
-      message: is_live 
-        ? 'Bucket is now live for students to select subjects' 
+      message: is_live
+        ? 'Bucket is now live for students to select subjects'
         : 'Bucket is no longer live for students'
     });
 

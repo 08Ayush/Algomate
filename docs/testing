@@ -1,0 +1,115 @@
+# Testing Infrastructure - README
+
+## Overview
+
+This project uses **Vitest** as the testing framework, providing fast unit and integration testing capabilities.
+
+## Test Structure
+
+```
+__tests__/
+├── unit/                  # Unit tests for use cases
+│   └── use-cases/        # Use case tests
+├── integration/          # Integration tests
+│   └── repositories/     # Repository tests
+├── e2e/                  # End-to-end tests
+├── mocks/                # Mock implementations
+├── fixtures/             # Test data fixtures
+└── setup.ts              # Global test setup
+```
+
+## Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run tests with UI
+npm run test:ui
+
+# Run tests with coverage
+npm run test:coverage
+
+# Run only unit tests
+npm run test:unit
+
+# Run only integration tests
+npm run test:integration
+
+# Run only E2E tests
+npm run test:e2e
+
+# Watch mode (default)
+npm test
+```
+
+## Writing Tests
+
+### Unit Tests for Use Cases
+
+```typescript
+import { describe, it, expect, beforeEach } from 'vitest';
+import { YourUseCase } from '@/modules/your-module';
+import { MockRepository } from '@/__tests__/mocks/MockRepository';
+
+describe('YourUseCase', () => {
+  let useCase: YourUseCase;
+  let mockRepo: MockRepository;
+
+  beforeEach(() => {
+    mockRepo = new MockRepository();
+    useCase = new YourUseCase(mockRepo);
+  });
+
+  it('should do something', async () => {
+    // Arrange
+    const input = { /* test data */ };
+
+    // Act
+    const result = await useCase.execute(input);
+
+    // Assert
+    expect(result.success).toBe(true);
+  });
+});
+```
+
+### Integration Tests for Repositories
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { SupabaseYourRepository } from '@/modules/your-module';
+
+describe('SupabaseYourRepository', () => {
+  it('should create entity', async () => {
+    // Test with actual database calls
+  });
+});
+```
+
+## Test Coverage
+
+Run coverage reports with:
+```bash
+npm run test:coverage
+```
+
+Coverage reports are generated in `coverage/` directory.
+
+---
+
+## Current Test Status
+
+✅ **Unit Tests:**
+- CreateElectiveBucketUseCase
+- GetBucketsForBatchUseCase
+
+⚪ **Integration Tests:** (To be added)
+⚪ **E2E Tests:** (To be added)
+
+## Next Steps
+
+1. Add more unit tests for remaining use cases
+2. Create integration tests for repositories
+3. Setup E2E testing with Playwright
+4. Achieve 80%+ code coverage

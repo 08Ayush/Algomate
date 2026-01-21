@@ -1,104 +1,74 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { Database } from '@/shared/database';
+import { SupabaseSubjectRepository } from '@/modules/nep-curriculum/infrastructure/persistence/SupabaseSubjectRepository';
+import { SupabaseBatchRepository } from '@/modules/college/infrastructure/persistence/SupabaseBatchRepository';
+import { GetQualifiedSubjectsUseCase } from '@/modules/nep-curriculum/application/use-cases/GetQualifiedSubjectsUseCase';
+import { GetBatchesUseCase } from '@/modules/college/application/use-cases/GetBatchesUseCase';
+import { handleError } from '@/shared/utils/response';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 
-// Helper function to decode and verify user from token
-function getAuthenticatedUser(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+// Helper function to get authenticated user
+async function getAuthenticatedUser(request: NextRequest) {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
     return null;
   }
 
+  const token = authHeader.substring(7);
   try {
-    const token = authHeader.substring(7);
-    const decoded = JSON.parse(Buffer.from(token, 'base64').toString());
-    return decoded;
-  } catch (error) {
-    console.error('Token decode error:', error);
+    const userString = Buffer.from(token, 'base64').toString();
+    const user = JSON.parse(userString);
+
+    // Verify user exists and is active
+    const { data: dbUser, error } = await supabase
+      .from('users')
+      .select('id, department_id, role, is_active, college_id')
+      .eq('id', user.id)
+      .eq('is_active', true)
+      .single();
+
+    if (error || !dbUser) {
+      return null;
+    }
+
+    return dbUser;
+  } catch {
     return null;
   }
 }
 
 export async function GET(request: NextRequest) {
   try {
-    // Verify authentication
-    const user = getAuthenticatedUser(request);
-    if (!user || !user.user_id) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
+    const user = await getAuthenticatedUser(request);
+    if (!user) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // Initialize repositories
+    const subjectRepo = new SupabaseSubjectRepository(supabase);
+    const batchRepo = new SupabaseBatchRepository(supabase);
 
-    // 1. Fetch Subjects: Use faculty_qualified_subjects to get subjects the faculty can teach
-    const { data: qualifiedSubjects, error: subjectsError } = await supabase
-      .from('faculty_qualified_subjects')
-      .select(`
-        subject_id,
-        subject:subjects (
-          id,
-          name,
-          code,
-          subject_type
-        )
-      `)
-      .eq('faculty_id', user.user_id);
+    // Initialize Use Cases
+    const getQualifiedSubjectsUseCase = new GetQualifiedSubjectsUseCase(subjectRepo);
+    const getBatchesUseCase = new GetBatchesUseCase(batchRepo);
 
-    if (subjectsError) {
-      console.error('Error fetching qualified subjects:', subjectsError);
-      // Fallback: If no qualification data, maybe return all subjects for their department?
-      // For now, let's proceed.
-    }
-
-    const subjects = qualifiedSubjects?.map((qs: any) => qs.subject).filter(Boolean) || [];
-
-    // 2. Fetch Batches: Get batches for the faculty's department or college
-    // If user has department_id, filter by it.
-    let batchesQuery = supabase
-      .from('batches')
-      .select('id, name, semester, section, academic_year')
-      .eq('is_active', true);
-
-    // If user has a department, restrict to that department's batches
-    // (You might want to relax this if faculty can teach across departments, 
-    // but typically they are assigned to a department)
-    // Checking if 'department_id' is available in user token or could be fetched.
-    // The user token from `create/page.tsx` has `college_id` and `role`. 
-    // Let's assume we filter by college_id at least.
-
-    if (user.college_id) {
-      batchesQuery = batchesQuery.eq('college_id', user.college_id);
-    }
-
-    // Filter by department if available
-    if (user.department_id) {
-      batchesQuery = batchesQuery.eq('department_id', user.department_id);
-    }
-
-    const { data: batchesData, error: batchesError } = await batchesQuery.order('created_at', { ascending: false });
-
-    if (batchesError) {
-      console.error('Error fetching batches:', batchesError);
-    }
-
-    const batches = batchesData || [];
+    // Fetch data concurrently
+    const [subjects, batches] = await Promise.all([
+      getQualifiedSubjectsUseCase.execute(user.id),
+      getBatchesUseCase.execute(user.college_id, user.department_id)
+    ]);
 
     return NextResponse.json({
       success: true,
-      batches,
-      subjects,
+      batches: batches.map(b => b.toJSON()), // Use toJSON if entities are returned
+      subjects: subjects.map(s => s.toJSON())
     });
 
-  } catch (error: any) {
-    console.error('Error in assigned-subjects-batches API:', error);
-    return NextResponse.json(
-      { success: false, error: 'Internal server error: ' + error.message },
-      { status: 500 }
-    );
+  } catch (error) {
+    return handleError(error);
   }
 }

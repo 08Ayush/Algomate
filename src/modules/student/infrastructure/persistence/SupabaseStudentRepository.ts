@@ -1,0 +1,179 @@
+import { SupabaseClient } from '@supabase/supabase-js';
+import { IStudentRepository, IBatchRepository } from '../../domain/repositories/IStudentRepository';
+import { Student, Batch } from '../../domain/entities/Student';
+import { BaseRepository, Database } from '@/shared/database';
+
+export class SupabaseStudentRepository extends BaseRepository<'users'> implements IStudentRepository {
+    constructor(db: SupabaseClient<Database>) {
+        super(db, 'users');
+    }
+
+    private mapToEntity(row: any): Student {
+        return new Student(
+            row.id,
+            row.id,
+            row.batch_id || '',
+            row.roll_number || '',
+            row.enrollment_year || new Date().getFullYear(),
+            new Date(row.created_at),
+            new Date(row.updated_at)
+        );
+    }
+
+    async findById(id: string): Promise<Student | null> {
+        const { data, error } = await this.db
+            .from('users')
+            .select('*')
+            .eq('id', id)
+            .eq('role', 'student')
+            .single();
+
+        if (error) {
+            if (error.code === 'PGRST116') return null;
+            throw error;
+        }
+        return this.mapToEntity(data);
+    }
+
+    async findByUserId(userId: string): Promise<Student | null> {
+        return this.findById(userId);
+    }
+
+    async findByBatch(batchId: string): Promise<Student[]> {
+        const { data, error } = await this.db
+            .from('users')
+            .select('*')
+            .eq('role', 'student');
+
+        if (error) throw error;
+        return data.map(row => this.mapToEntity(row));
+    }
+
+    async create(student: Omit<Student, 'id' | 'createdAt' | 'updatedAt'>): Promise<Student> {
+        const { data, error } = await this.db
+            .from('users')
+            .update({
+                roll_number: student.rollNumber,
+                enrollment_year: student.enrollmentYear
+            })
+            .eq('id', student.userId)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return this.mapToEntity(data);
+    }
+
+    async update(id: string, data: Partial<Student>): Promise<Student> {
+        const updateData: any = {};
+        if (data.rollNumber) updateData.roll_number = data.rollNumber;
+        if (data.enrollmentYear) updateData.enrollment_year = data.enrollmentYear;
+
+        const { data: result, error } = await this.db
+            .from('users')
+            .update(updateData)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return this.mapToEntity(result);
+    }
+
+    async delete(id: string): Promise<boolean> {
+        return super.delete(id);
+    }
+
+    async countByBatch(batchId: string): Promise<number> {
+        const { count, error } = await this.db
+            .from('users')
+            .select('*', { count: 'exact', head: true })
+            .eq('role', 'student');
+
+        if (error) throw error;
+        return count || 0;
+    }
+}
+
+export class SupabaseBatchRepository implements IBatchRepository {
+    constructor(private readonly db: SupabaseClient<Database>) { }
+
+    private mapToEntity(row: any): Batch {
+        return new Batch(
+            row.id,
+            row.name,
+            row.department_id,
+            row.year,
+            row.semester,
+            new Date(row.created_at),
+            new Date(row.updated_at)
+        );
+    }
+
+    async findById(id: string): Promise<Batch | null> {
+        const { data, error } = await this.db
+            .from('batches' as any)
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (error) {
+            if (error.code === 'PGRST116') return null;
+            throw error;
+        }
+        return this.mapToEntity(data);
+    }
+
+    async findByDepartment(departmentId: string): Promise<Batch[]> {
+        const { data, error } = await this.db
+            .from('batches' as any)
+            .select('*')
+            .eq('department_id', departmentId);
+
+        if (error) throw error;
+        return data.map(row => this.mapToEntity(row));
+    }
+
+    async create(batch: Omit<Batch, 'id' | 'createdAt' | 'updatedAt'>): Promise<Batch> {
+        const { data, error } = await this.db
+            .from('batches' as any)
+            .insert({
+                name: batch.name,
+                department_id: batch.departmentId,
+                year: batch.year,
+                semester: batch.semester
+            })
+            .select()
+            .single();
+
+        if (error) throw error;
+        return this.mapToEntity(data);
+    }
+
+    async update(id: string, data: Partial<Batch>): Promise<Batch> {
+        const updateData: any = {};
+        if (data.name) updateData.name = data.name;
+        if (data.year) updateData.year = data.year;
+        if (data.semester) updateData.semester = data.semester;
+
+        const { data: result, error } = await this.db
+            .from('batches' as any)
+            .update(updateData)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return this.mapToEntity(result);
+    }
+
+    async delete(id: string): Promise<boolean> {
+        const { error } = await this.db
+            .from('batches' as any)
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+        return true;
+    }
+}
