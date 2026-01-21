@@ -1,7 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { IUserRepository } from '../../domain/repositories/IUserRepository';
 import { User } from '../../domain/entities/User';
-import { Database } from '@/shared/database';
+import { Database, UpdateDto } from '@/shared/database';
 import { UserRole, FacultyType } from '@/shared/types';
 
 /**
@@ -185,7 +185,7 @@ export class SupabaseUserRepository implements IUserRepository {
      * Update user
      */
     async update(id: string, data: Partial<User>): Promise<User> {
-        const updateData: any = {};
+        const updateData: UpdateDto<'users'> = {};
 
         if (data.email) updateData.email = data.email;
         if (data.collegeUid) updateData.college_uid = data.collegeUid;
@@ -287,7 +287,7 @@ export class SupabaseUserRepository implements IUserRepository {
             .update({
                 last_login: new Date().toISOString(),
                 token: token
-            } as any)
+            })
             .eq('id', id);
 
         if (error) throw error;

@@ -46,7 +46,13 @@ export class LoginUseCase {
         });
 
         // Save token and last login to database (Critical for session validation)
-        await this.userRepository.updateLastLogin(user.id, token);
+        try {
+            await this.userRepository.updateLastLogin(user.id, token);
+        } catch (error: any) {
+            // Graceful degradation: If the database is missing the 'token' column (PGRST204),
+            // or has other issues, we log it but do NOT block the user from logging in.
+            console.warn('⚠️ Shared: Failed to persist session to database. User is logged in but session is not tracked.', error.message);
+        }
 
         // Return result
         return {

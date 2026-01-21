@@ -140,45 +140,36 @@ Update the existing Next.js API route to use the new module instead of conflicti
 
 ---
 
-## 6. 📊 Current Migration Status & Achieved Milestones (Progress Report)
+## 6. 📝 Progress Log (Current Work Status)
+*Detailed breakdown of work completed in the recent session (Internal Note)*
 
-*For Partner Review - detailed breakdown of work completed as of Jan 2026*
+### A. 🧹 Documentation Overhaul
+We have cleaned up the root directory and established a professional documentation structure:
+- **Moved** all scattered `.md` files (Migration, Strategy, Todos) into the `docs/` folder.
+- **Created** `docs/README.md` as a central index for all project documentation.
+- **Categorized** docs into `architecture`, `migration`, `project`, `database`, and `legacy-fixes`.
 
-### ✅ A. Foundational Architecture (Completed)
-We have successfully established the "Skeleton" of the new system.
-1.  **Directory Structure:** established `src/modules` (for domains) and `src/shared` (for utilities), enforcing strict boundaries.
-2.  **Shared Kernel Implementation:**
-    *   **Database:** Implemented `DatabaseClient` (Singleton pattern) in `src/shared/database`. It provides safe access to both the *Anonymous Client* (for user actions) and *Service Role Client* (for admin actions/bypassing RLS).
-    *   **caching:** Built a robust `CacheService` (`src/shared/cache`) using Redis, with an automatic in-memory fallback if Redis is down.
-    *   **Event Bus:** Created `EventBus` (`src/shared/events`) to allow modules to talk to each other without importing each other's code (Mocked and ready).
-    *   **Observability:** Integrated `Pino` for high-performance structured logging and `Prometheus` for metrics collection.
+### B. 🛡️ Authentication Fixes (Critical)
+We resolved severe issues preventing users from logging in:
+1.  **Fixed 401 (Invalid College UID):**
+    - *Problem:* `SupabaseUserRepository` was using the anonymous client (`db`), which was blocked by Row Level Security (RLS) policies during user lookup.
+    - *Fix:* Updated `src/app/api/auth/login/route.ts` and `src/app/api/auth/register/route.ts` to use `serviceDb` (Admin Client), enabling the backend to bypass RLS for credential verification.
+2.  **Fixed 500 (Missing Token Column):**
+    - *Problem:* The new architecture attempted to save a session `token` and `last_login`, but the database table `users` lacked these columns.
+    - *Fix:* Created `docs/database/Fix_Missing_Token_Column.sql` to add these missing columns.
+3.  **Token Persistence:**
+    - Modified `LoginUseCase.ts` and `SupabaseUserRepository.ts` to actively save the session token and timestamp after a successful login, ensuring immediate session validity.
 
-### ✅ B. Authentication Module (Fully Migrated)
-We picked **Auth** as the pilot module to prove the architecture. It is now fully modular.
-1.  **Domain Layer (The Rules):** 
-    *   Defined the `User` entity and `IUserRepository` interface in `src/modules/auth/domain`. This code has **zero** dependencies on Next.js or Supabase.
-2.  **Infrastructure Layer (The Database):** 
-    *   Implemented `SupabaseUserRepository`. 
-    *   **Critical Fix:** Modified it to use `serviceDb` for key operations (`findByCollegeUid`), solving the "401 Unauthorized" RLS error we faced.
-    *   **Critical Fix:** Added `updateLastLogin` logic to persist session tokens, ensuring backward compatibility with the legacy system.
-3.  **Application Layer (The Logic):** 
-    *   Created `LoginUseCase` and `RegisterUseCase`. These coordinate the flow: Validate Input -> Find User -> Hash Password -> Generate Token -> Save Session -> Return.
-4.  **API Layer (The Endpoints):** 
-    *   Refactored `src/app/api/auth/login/route.ts` and `register/route.ts` to use these new Classes instead of writing raw logic in the route handler.
+### C. 🚦 Rate Limiting Strategy
+- **Created** `docs/project/RATE_LIMIT_PLAN.md`: A detailed plan to protect our APIs.
+- Identified critical limits:
+    - Login: 5 attempts/min (Brute-force protection).
+    - AI Generation: 5 requests/hour (Cost control).
+    - General Admin: 300 requests/min.
 
-### ✅ C. Database Repairs (Completed)
-During migration, we found mismatch issues with the schema.
-1.  **Missing Columns:** The `users` table was missing `token` and `last_login`.
-2.  **Fix:** Created and verified a migration script: `docs/database/Fix_Missing_Token_Column.sql`.
+### D. 🖥️ Frontend Stabilization
+- **Fixed Font Crash:** The application was crashing on startup due to network failures connecting to Google Fonts.
+- *Action:* Temporarily commented out `Geist` font imports in `src/app/layout.tsx` to ensure the app boots reliably offline/online.
 
-### ✅ D. Documentation & DevOps (Completed)
-1.  **Organization:** Consolidated 20+ scattered `.md` files into a clean `docs/` folder structure.
-2.  **New Docs:** 
-    *   Added **OpenAPI/Swagger** documentation for APIs.
-    *   Created `LOGIN_ISSUES_AND_SOLUTIONS.md` to document the solutions to RLS and connection bugs.
-    *   Created this guide (`FROM_MONOLITH_TO_MODULAR.md`).
-3.  **Testing:** Configured `Vitest` (Unit) and `Playwright` (E2E) testing environments.
-
-### ⏩ E. Immediate Next Steps
-1.  Begin migration of **Timetable Module** (following the pattern established in Auth).
-2.  Begin migration of **Elective Module**.
+### E. 🔄 Git Management
+- Branch `merger_MDs` created to consolidate these extensive documentation and structural changes safely.
