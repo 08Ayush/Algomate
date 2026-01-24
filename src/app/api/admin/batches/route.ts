@@ -17,7 +17,7 @@ async function authenticateUser(request: NextRequest, requireAdmin = false) {
   try {
     const decodedData = JSON.parse(Buffer.from(token, 'base64').toString('utf-8'));
     console.log('Decoded token data (updated):', { hasId: !!decodedData.id, hasCollegeId: !!decodedData.college_id });
-    
+
     if (!decodedData.id) {
       return null;
     }
@@ -44,9 +44,9 @@ async function authenticateUser(request: NextRequest, requireAdmin = false) {
     if (!requireAdmin) {
       const allowedRoles = ['admin', 'college_admin', 'super_admin'];
       const allowedFacultyTypes = ['creator', 'publisher'];
-      
-      if (!allowedRoles.includes(user.role) && 
-          !(user.role === 'faculty' && allowedFacultyTypes.includes(user.faculty_type))) {
+
+      if (!allowedRoles.includes(user.role) &&
+        !(user.role === 'faculty' && allowedFacultyTypes.includes(user.faculty_type))) {
         return null;
       }
     }
@@ -70,9 +70,9 @@ export async function GET(request: NextRequest) {
     // Get college_id from query parameter (for super_admin) or use user's college_id
     const { searchParams } = new URL(request.url);
     const queryCollegeId = searchParams.get('college_id');
-    
+
     let targetCollegeId = user.college_id;
-    
+
     // Super admin can view any college's batches
     if (user.role === 'super_admin' && queryCollegeId) {
       targetCollegeId = queryCollegeId;
@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch batches' }, { status: 500 });
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       batches: batches || [],
       message: `Found ${batches?.length || 0} batches`
     });
@@ -157,7 +157,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Delete related records first (in order of dependencies)
-    
+
     // 1. First, get all elective buckets for this batch
     const { data: buckets } = await supabase
       .from('elective_buckets')
@@ -173,7 +173,7 @@ export async function DELETE(request: NextRequest) {
         .from('subjects')
         .select('id')
         .in('course_group_id', bucketIds);
-      
+
       subjectIds = subjects?.map(s => s.id) || [];
     }
 
@@ -183,7 +183,7 @@ export async function DELETE(request: NextRequest) {
         .from('student_course_selections')
         .delete()
         .in('subject_id', subjectIds);
-      
+
       if (selectionsError) {
         console.log('Note: Error deleting student course selections:', selectionsError.message);
       }
@@ -197,9 +197,9 @@ export async function DELETE(request: NextRequest) {
 
     if (enrollmentError) {
       console.error('Error deleting student enrollments:', enrollmentError);
-      return NextResponse.json({ 
-        error: 'Failed to delete student enrollments', 
-        details: enrollmentError.message 
+      return NextResponse.json({
+        error: 'Failed to delete student enrollments',
+        details: enrollmentError.message
       }, { status: 500 });
     }
 
@@ -211,9 +211,9 @@ export async function DELETE(request: NextRequest) {
 
     if (batchSubjectsError) {
       console.error('Error deleting batch subjects:', batchSubjectsError);
-      return NextResponse.json({ 
-        error: 'Failed to delete batch subjects', 
-        details: batchSubjectsError.message 
+      return NextResponse.json({
+        error: 'Failed to delete batch subjects',
+        details: batchSubjectsError.message
       }, { status: 500 });
     }
 
@@ -245,13 +245,13 @@ export async function DELETE(request: NextRequest) {
 
     if (deleteError) {
       console.error('Delete error:', deleteError);
-      return NextResponse.json({ 
-        error: 'Failed to delete batch', 
-        details: deleteError.message 
+      return NextResponse.json({
+        error: 'Failed to delete batch',
+        details: deleteError.message
       }, { status: 500 });
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
       message: `Batch "${batch.name}" and all related data (elective buckets, subjects) have been deleted successfully`
     });

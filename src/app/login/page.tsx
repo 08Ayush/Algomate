@@ -84,7 +84,8 @@ export default function LoginPage() {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      // Increased timeout to 60s to handle slow dev environments/cold starts
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
 
       const response = await fetch('/api/auth/login', {
         method: 'POST',

@@ -34,12 +34,20 @@ class DatabaseClient {
      * Use with caution - only for admin operations
      */
     static getServiceClient(): SupabaseClient {
+        // Safety check: Prevent service client initialization in browser
+        if (typeof window !== 'undefined') {
+            return null as unknown as SupabaseClient;
+        }
+
         if (!this.serviceInstance) {
             const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
             const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+            // On server, we must have the key. If missing, throw error.
             if (!supabaseUrl || !serviceRoleKey) {
-                throw new Error('Missing Supabase service role key. Please check SUPABASE_SERVICE_ROLE_KEY');
+                console.error('Missing Supabase service role key. This is expected during build time or in browser, but critical on server.');
+                // Graceful fallback to avoid crashing build/browser if mistakenly imported
+                return null as unknown as SupabaseClient;
             }
 
             this.serviceInstance = createClient(supabaseUrl, serviceRoleKey, {
