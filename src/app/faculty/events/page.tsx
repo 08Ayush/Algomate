@@ -87,12 +87,19 @@ const EventsPage: React.FC = () => {
       const headers = getAuthHeaders();
       if (!headers) return;
       const res = await fetch(`/api/events?id=${id}`, { method: 'DELETE', headers });
+      const data = await res.json();
       if (res.ok) {
         toast.success('Event deleted');
         setEvents(prev => prev.filter(e => e.id !== id));
         setSelectedEvent(null);
+      } else {
+        toast.error(data.error || 'Failed to delete event');
+        console.error('Delete error:', data);
       }
-    } catch { toast.error('Error deleting'); }
+    } catch (error) {
+      console.error('Delete exception:', error);
+      toast.error('Error deleting event');
+    }
   };
 
   // Stats
@@ -248,6 +255,7 @@ const EventsPage: React.FC = () => {
 
             {isCreatorOrPublisher && (
               <button
+                type="button"
                 onClick={() => router.push('/faculty/events/create')}
                 className="flex items-center gap-2 px-4 py-2 bg-[#4D869C] text-white rounded-xl font-medium hover:shadow-lg"
               >
@@ -285,6 +293,7 @@ const EventsPage: React.FC = () => {
                 </button>
                 {isCreatorOrPublisher && (
                   <button
+                    type="button"
                     onClick={() => router.push('/faculty/events/create')}
                     className="ml-2 flex items-center gap-2 px-4 py-2 bg-[#4D869C] text-white rounded-xl font-medium hover:shadow-lg"
                   >
@@ -518,13 +527,24 @@ const EventsPage: React.FC = () => {
                     {isCreatorOrPublisher && (
                       <>
                         <button
-                          onClick={() => handleDelete(selectedEvent.id)}
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleDelete(selectedEvent.id);
+                          }}
                           className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-xl font-medium"
                         >
                           Delete
                         </button>
                         <button
-                          onClick={() => router.push(`/faculty/events/edit/${selectedEvent.id}`)}
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setSelectedEvent(null);
+                            router.push(`/faculty/events/edit/${selectedEvent.id}`);
+                          }}
                           className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200"
                         >
                           Edit
@@ -532,7 +552,12 @@ const EventsPage: React.FC = () => {
                       </>
                     )}
                     <button
-                      onClick={() => setSelectedEvent(null)}
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setSelectedEvent(null);
+                      }}
                       className="px-6 py-2 bg-gray-900 text-white rounded-xl font-medium hover:bg-gray-800"
                     >
                       Close

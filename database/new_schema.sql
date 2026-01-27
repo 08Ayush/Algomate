@@ -1259,72 +1259,55 @@ EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
--- Events table
+-- Events table (DEPLOYED SCHEMA - matches actual Supabase database)
+-- Note: This is different from the original design in events_schema.sql
 CREATE TABLE IF NOT EXISTS events (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY, -- No default, must be generated in application
     
     -- Basic Information
     title VARCHAR(255) NOT NULL,
     description TEXT,
-    event_type event_type NOT NULL,
-    
-    -- Organizational
-    department_id UUID NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
-    created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    event_type VARCHAR(50), -- VARCHAR, not ENUM in deployed schema
     
     -- Date & Time
-    start_date DATE NOT NULL,
-    end_date DATE NOT NULL,
-    start_time TIME NOT NULL,
-    end_time TIME NOT NULL,
+    event_date DATE NOT NULL, -- Note: called 'event_date' not 'start_date'
+    event_time TIME WITHOUT TIME ZONE, -- Note: called 'event_time' not 'start_time'
+    end_time TIME WITHOUT TIME ZONE,
     
     -- Location
-    venue VARCHAR(255) NOT NULL,
-    classroom_id UUID REFERENCES classrooms(id) ON DELETE SET NULL,
+    location VARCHAR(255), -- Note: called 'location' not 'venue'
+    
+    -- Organizational
+    created_by UUID NOT NULL REFERENCES users(id),
+    published_by UUID REFERENCES users(id),
+    college_id UUID NOT NULL REFERENCES colleges(id), -- REQUIRED in deployed schema
+    department_id UUID REFERENCES departments(id),
     
     -- Participants
-    expected_participants INTEGER DEFAULT 0,
-    max_registrations INTEGER DEFAULT 0,
-    current_participants INTEGER DEFAULT 0,
+    max_participants INTEGER, -- Note: called 'max_participants' not 'expected_participants'
     registration_required BOOLEAN DEFAULT FALSE,
-    registration_deadline TIMESTAMP,
-    
-    -- Budget & Resources
-    budget_allocated DECIMAL(15,2) DEFAULT 0,
-    
-    -- Contact Information
-    contact_person VARCHAR(255),
-    contact_email VARCHAR(255),
-    contact_phone VARCHAR(50),
+    registration_link TEXT,
+    target_audience JSONB,
     
     -- Status & Priority
-    status event_status DEFAULT 'pending',
-    priority_level INTEGER DEFAULT 1 CHECK (priority_level BETWEEN 1 AND 5),
+    status content_status DEFAULT 'draft', -- Uses content_status enum, not event_status
+    priority VARCHAR(20) DEFAULT 'normal', -- VARCHAR (high/normal/low), not INTEGER
+    is_featured BOOLEAN DEFAULT FALSE,
     
-    -- Visibility & Permissions
-    is_public BOOLEAN DEFAULT TRUE,
-    
-    -- Conflict Management
-    has_conflict BOOLEAN DEFAULT FALSE,
-    conflicting_events UUID[],
-    queue_position INTEGER,
-    
-    -- Approval Workflow
-    approved_by UUID REFERENCES users(id) ON DELETE SET NULL,
-    approved_at TIMESTAMP,
-    rejection_reason TEXT,
-    rejected_by UUID REFERENCES users(id) ON DELETE SET NULL,
-    rejected_at TIMESTAMP,
+    -- Attachments
+    attachment_url TEXT,
+    image_url TEXT,
     
     -- Metadata
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    published_at TIMESTAMP WITH TIME ZONE,
     
-    -- Constraints
-    CONSTRAINT valid_dates CHECK (start_date <= end_date),
-    CONSTRAINT valid_times CHECK (start_time < end_time),
-    CONSTRAINT valid_priority CHECK (priority_level >= 1 AND priority_level <= 5),
-    CONSTRAINT valid_participants CHECK (current_participants <= max_registrations)
+    -- Foreign key constraints
+    CONSTRAINT events_college_id_fkey FOREIGN KEY (college_id) REFERENCES colleges(id),
+    CONSTRAINT events_created_by_fkey FOREIGN KEY (created_by) REFERENCES users(id),
+    CONSTRAINT events_department_id_fkey FOREIGN KEY (department_id) REFERENCES departments(id),
+    CONSTRAINT events_published_by_fkey FOREIGN KEY (published_by) REFERENCES users(id)
 );
 
 -- Event Registrations table

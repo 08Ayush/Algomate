@@ -13,12 +13,16 @@ const supabaseAdmin = createClient(
   }
 )
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     console.log('🔍 Testing departments API...')
     console.log('🔗 Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
     console.log('🔑 Service Role Key exists:', !!process.env.SUPABASE_SERVICE_ROLE_KEY)
-    
+
+    // Get college_id from query params if provided
+    const { searchParams } = new URL(request.url);
+    const college_id = searchParams.get('college_id');
+
     // Test connection first with more detailed logging
     const { data: connectionTest, error: connectionError } = await supabaseAdmin
       .from('departments')
@@ -29,44 +33,51 @@ export async function GET() {
 
     if (connectionError) {
       console.error('❌ Connection error:', connectionError)
-      return NextResponse.json({ 
-        error: 'Database connection failed', 
+      return NextResponse.json({
+        error: 'Database connection failed',
         details: connectionError,
         code: connectionError.code,
-        message: connectionError.message 
+        message: connectionError.message
       }, { status: 500 })
     }
 
-    // Get all departments
-    const { data: departments, error } = await supabaseAdmin
+    // Build query - filter by college_id if provided
+    let query = supabaseAdmin
       .from('departments')
       .select(`
         id,
         name,
         code,
         description,
-        is_active
+        is_active,
+        college_id
       `)
-      .eq('is_active', true)
-      .order('name')
+      .eq('is_active', true);
+
+    // Filter by college_id if provided
+    if (college_id) {
+      query = query.eq('college_id', college_id);
+    }
+
+    const { data: departments, error } = await query.order('name');
 
     if (error) {
       console.error('Department fetch error:', error)
-      return NextResponse.json({ 
-        error: 'Failed to fetch departments', 
-        details: error 
+      return NextResponse.json({
+        error: 'Failed to fetch departments',
+        details: error
       }, { status: 500 })
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       departments: departments || [],
       count: departments?.length || 0
     })
 
   } catch (error) {
     console.error('Unexpected error:', error)
-    return NextResponse.json({ 
-      error: 'Internal server error', 
+    return NextResponse.json({
+      error: 'Internal server error',
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
   }
@@ -135,21 +146,21 @@ export async function POST() {
 
     if (error) {
       console.error('Insert error:', error)
-      return NextResponse.json({ 
-        error: 'Failed to create departments', 
-        details: error 
+      return NextResponse.json({
+        error: 'Failed to create departments',
+        details: error
       }, { status: 500 })
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       message: 'Sample departments created successfully',
       departments: data
     })
 
   } catch (error) {
     console.error('Unexpected error:', error)
-    return NextResponse.json({ 
-      error: 'Internal server error', 
+    return NextResponse.json({
+      error: 'Internal server error',
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
   }

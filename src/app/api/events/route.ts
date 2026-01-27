@@ -64,19 +64,20 @@ export async function GET(request: NextRequest) {
         department_name: eventData.department?.name || '',
         created_by: eventData.created_by,
         created_by_name: eventData.creator ? `${eventData.creator.first_name} ${eventData.creator.last_name}` : '',
-        start_date: eventData.start_date,
-        end_date: eventData.end_date,
-        start_time: eventData.start_time,
+        // Map deployed schema columns to frontend expected names
+        start_date: eventData.event_date, // Deployed: event_date
+        end_date: eventData.event_date, // No end_date in deployed schema
+        start_time: eventData.event_time, // Deployed: event_time
         end_time: eventData.end_time,
-        venue: eventData.venue,
-        expected_participants: eventData.expected_participants || 0,
-        max_registrations: eventData.max_registrations || 0,
-        current_participants: eventData.current_participants || 0,
+        venue: eventData.location, // Deployed: location
+        expected_participants: eventData.max_participants || 0,
+        max_registrations: eventData.max_participants || 0,
+        current_participants: 0, // Not in deployed schema
         status: eventData.status,
-        priority_level: eventData.priority_level,
-        is_public: eventData.is_public,
+        priority_level: eventData.priority === 'high' ? 5 : (eventData.priority === 'low' ? 1 : 3),
+        is_public: !eventData.is_featured,
         registration_required: eventData.registration_required || false,
-        has_conflict: eventData.has_conflict || false,
+        has_conflict: false,
         created_at: eventData.created_at,
         updated_at: eventData.updated_at
       };
@@ -109,7 +110,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Transform data
+    // Transform data - map deployed schema columns to frontend expected names
     const transformedData = data?.map((event: any) => ({
       id: event.id,
       title: event.title,
@@ -119,18 +120,18 @@ export async function GET(request: NextRequest) {
       department_name: event.department?.name || '',
       created_by: event.created_by,
       creator_name: event.creator ? `${event.creator.first_name} ${event.creator.last_name}` : '',
-      start_date: event.start_date,
-      end_date: event.end_date,
-      start_time: event.start_time,
+      start_date: event.event_date, // Deployed: event_date → Frontend: start_date
+      end_date: event.event_date, // No end_date in deployed schema, use start
+      start_time: event.event_time, // Deployed: event_time → Frontend: start_time
       end_time: event.end_time,
-      venue: event.venue,
-      expected_participants: event.expected_participants || 0,
-      max_registrations: event.max_registrations || 0,
+      venue: event.location, // Deployed: location → Frontend: venue
+      expected_participants: event.max_participants || 0,
+      max_registrations: event.max_participants || 0,
       status: event.status,
-      priority_level: event.priority_level,
-      is_public: event.is_public,
+      priority_level: event.priority === 'high' ? 5 : (event.priority === 'low' ? 1 : 3),
+      is_public: !event.is_featured, // Approximate mapping
       registration_required: event.registration_required || false,
-      has_conflict: event.has_conflict || false,
+      has_conflict: false,
       created_at: event.created_at,
       updated_at: event.updated_at
     }));
@@ -177,23 +178,38 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // Map to DEPLOYED schema (not new_schema.sql)
+    // Deployed DB uses: event_date, event_time, location, college_id (required)
+
+    // Get college_id from request body
+    const college_id = body.college_id;
+
+    if (!college_id) {
+      return NextResponse.json({
+        error: 'college_id is required',
+        success: false
+      }, { status: 400 });
+    }
+
+    // Generate UUID for id since deployed schema doesn't have DEFAULT gen_random_uuid()
+    const eventId = crypto.randomUUID();
+
     const insertData: any = {
+      id: eventId, // REQUIRED - deployed schema has no default UUID generator
       title,
-      description: description || null,
-      event_type: event_type || 'other',
+      description: description || '',
+      event_type: event_type || 'workshop', // VARCHAR, not ENUM
       department_id,
       created_by,
-      start_date,
-      end_date: end_date || start_date,
-      start_time: start_time || '09:00',
+      college_id, // REQUIRED in deployed schema
+      event_date: start_date, // Deployed uses 'event_date' not 'start_date'
+      event_time: start_time || '09:00', // Deployed uses 'event_time' not 'start_time'
       end_time: end_time || '10:00',
-      venue: venue || 'TBA',
-      expected_participants: expected_participants || 0,
-      max_registrations: max_registrations || 0,
-      priority_level: priority_level || 2,
-      is_public: is_public !== undefined ? is_public : true,
+      location: venue || 'TBA', // Deployed uses 'location' not 'venue'
+      status: 'draft', // Deployed uses content_status enum (draft/published/archived)
       registration_required: registration_required || false,
-      status: 'pending'
+      max_participants: max_registrations || expected_participants || 0,
+      priority: priority_level ? (priority_level > 3 ? 'high' : 'normal') : 'normal'
     };
 
     const { data, error } = await supabase
@@ -233,7 +249,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Event ID is required' }, { status: 400 });
     }
 
-    // Explicit mapping to new schema columns
+    // Map frontend field names to DEPLOYED schema column names
     const updateData: any = {};
     if (rawUpdateData.title !== undefined) updateData.title = rawUpdateData.title;
     if (rawUpdateData.description !== undefined) updateData.description = rawUpdateData.description;
@@ -242,16 +258,26 @@ export async function PUT(request: NextRequest) {
     if (rawUpdateData.status !== undefined) updateData.status = rawUpdateData.status;
     if (rawUpdateData.registration_required !== undefined) updateData.registration_required = rawUpdateData.registration_required;
 
-    // New Schema specific fields
-    if (rawUpdateData.start_date !== undefined) updateData.start_date = rawUpdateData.start_date;
-    if (rawUpdateData.end_date !== undefined) updateData.end_date = rawUpdateData.end_date;
-    if (rawUpdateData.start_time !== undefined) updateData.start_time = rawUpdateData.start_time;
+    // Map to deployed schema column names (different from frontend!)
+    if (rawUpdateData.start_date !== undefined) updateData.event_date = rawUpdateData.start_date; // Frontend: start_date → DB: event_date
+    if (rawUpdateData.start_time !== undefined) updateData.event_time = rawUpdateData.start_time; // Frontend: start_time → DB: event_time
     if (rawUpdateData.end_time !== undefined) updateData.end_time = rawUpdateData.end_time;
-    if (rawUpdateData.venue !== undefined) updateData.venue = rawUpdateData.venue;
-    if (rawUpdateData.expected_participants !== undefined) updateData.expected_participants = rawUpdateData.expected_participants;
-    if (rawUpdateData.max_registrations !== undefined) updateData.max_registrations = rawUpdateData.max_registrations;
-    if (rawUpdateData.priority_level !== undefined) updateData.priority_level = rawUpdateData.priority_level;
-    if (rawUpdateData.is_public !== undefined) updateData.is_public = rawUpdateData.is_public;
+    if (rawUpdateData.venue !== undefined) updateData.location = rawUpdateData.venue; // Frontend: venue → DB: location
+
+    // Map participants fields
+    if (rawUpdateData.expected_participants !== undefined || rawUpdateData.max_registrations !== undefined) {
+      updateData.max_participants = rawUpdateData.max_registrations || rawUpdateData.expected_participants || 0; // Frontend: max_registrations → DB: max_participants
+    }
+
+    // Map priority
+    if (rawUpdateData.priority_level !== undefined) {
+      updateData.priority = rawUpdateData.priority_level > 3 ? 'high' : (rawUpdateData.priority_level < 2 ? 'low' : 'normal'); // Frontend: priority_level (number) → DB: priority (varchar)
+    }
+
+    // is_public doesn't exist in deployed schema, map to is_featured
+    if (rawUpdateData.is_public !== undefined) {
+      updateData.is_featured = !rawUpdateData.is_public; // Invert logic
+    }
 
     const { data, error } = await supabase
       .from('events')

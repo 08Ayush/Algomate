@@ -107,7 +107,19 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
         try {
             const headers = getAuthHeaders();
             if (!headers) return;
-            const res = await fetch('/api/departments', { headers });
+
+            // Get user's college_id to filter departments
+            const userData = localStorage.getItem('user');
+            if (!userData) return;
+            const user = JSON.parse(userData);
+
+            if (!user.college_id) {
+                toast.error('User college information not found');
+                return;
+            }
+
+            // Fetch departments only for the faculty's college
+            const res = await fetch(`/api/departments?college_id=${user.college_id}`, { headers });
             if (res.ok) {
                 const data = await res.json();
                 setDepartments(data.departments || data.data || []);
@@ -213,7 +225,7 @@ export default function EditEventPage({ params }: { params: Promise<{ id: string
                     event_type: formData.event_type,
                     department_id: formData.department_id,
                     start_date: formData.start_date,
-                    end_date: formData.end_date || formData.start_date,
+                    // end_date removed - column doesn't exist in deployed schema
                     start_time: formData.start_time,
                     end_time: formData.end_time,
                     venue: formData.venue || 'TBA',

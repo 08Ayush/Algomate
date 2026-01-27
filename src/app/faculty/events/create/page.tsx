@@ -89,14 +89,28 @@ export default function CreateEventPage() {
         try {
             const headers = getAuthHeaders();
             if (!headers) return;
-            // Fetch departments for the current college
-            const res = await fetch('/api/departments', { headers });
+
+            // Get user's college_id to filter departments
+            const userData = localStorage.getItem('user');
+            if (!userData) return;
+            const user = JSON.parse(userData);
+
+            if (!user.college_id) {
+                toast.error('User college information not found');
+                return;
+            }
+
+            // Fetch departments only for the faculty's college
+            const res = await fetch(`/api/departments?college_id=${user.college_id}`, { headers });
             if (res.ok) {
                 const data = await res.json();
                 setDepartments(data.departments || data.data || []);
+            } else {
+                toast.error('Failed to fetch departments');
             }
         } catch (err) {
             console.error('Error fetching departments:', err);
+            toast.error('Error loading departments');
         }
     };
 
@@ -116,45 +130,77 @@ export default function CreateEventPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
+        // Validate required fields
         if (!formData.title || !formData.start_date || !formData.department_id) {
-            toast.error('Please fill in check required fields');
+            toast.error('Please fill in all required fields (Title, Start Date, Department)');
             return;
         }
 
         try {
             setLoading(true);
             const userData = localStorage.getItem('user');
-            if (!userData) return;
+            if (!userData) {
+                toast.error('User not authenticated');
+                router.push('/login');
+                return;
+            }
             const user = JSON.parse(userData);
+
+            if (!user.id) {
+                toast.error('Invalid user data. Please log in again.');
+                router.push('/login');
+                return;
+            }
 
             const headers = getAuthHeaders();
             if (!headers) return;
 
+            // Prepare submission data to match DEPLOYED database schema
+            // Deployed DB uses: event_date, event_time, location, college_id (all different from new_schema.sql!)
+
+            if (!user.college_id) {
+                toast.error('User college_id not found. Please log in again.');
+                return;
+            }
+
+            const submissionData = {
+                title: formData.title,
+                description: formData.description || '',
+                event_type: formData.event_type || 'workshop',
+                department_id: formData.department_id,
+                created_by: user.id,
+                college_id: user.college_id, // REQUIRED by deployed schema
+                start_date: formData.start_date, // API will map to event_date
+                start_time: formData.start_time || '09:00:00', // API will map to event_time
+                end_time: formData.end_time || '17:00:00',
+                venue: formData.venue || 'TBA', // API will map to location
+                registration_required: formData.registration_required || false,
+                max_registrations: formData.max_registrations || 0,
+                expected_participants: formData.expected_participants || 0,
+                priority_level: formData.priority_level || 2,
+            };
+
+            console.log('Submitting event data:', submissionData);
+
             const res = await fetch('/api/events', {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({
-                    ...formData,
-                    created_by: user.id,
-                    // If end_date is not set, use start_date
-                    end_date: formData.end_date || formData.start_date,
-                    // Set default times if not provided
-                    start_time: formData.start_time || '09:00',
-                    end_time: formData.end_time || '10:00',
-                    venue: formData.venue || 'TBA'
-                })
+                body: JSON.stringify(submissionData)
             });
+
+            const data = await res.json();
+            console.log('API Response:', data);
 
             if (res.ok) {
                 toast.success('Event created successfully!');
                 router.push('/faculty/events');
             } else {
-                const data = await res.json();
                 toast.error(data.error || 'Failed to create event');
+                console.error('API Error:', data);
             }
         } catch (err) {
             console.error('Error creating event:', err);
-            toast.error('Error creating event');
+            toast.error('Error creating event. Please try again.');
         } finally {
             setLoading(false);
         }
