@@ -9,7 +9,7 @@ export class SupabaseNotificationRepository implements INotificationRepository {
     private mapToEntity(row: any): Notification {
         return new Notification(
             row.id,
-            row.user_id,
+            row.recipient_id, // Mapped from recipient_id
             row.title,
             row.message,
             row.type,
@@ -39,7 +39,7 @@ export class SupabaseNotificationRepository implements INotificationRepository {
         const { data, error } = await this.db
             .from('notifications' as any)
             .select('*')
-            .eq('user_id', userId)
+            .eq('recipient_id', userId) // Changed to recipient_id
             .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -50,7 +50,7 @@ export class SupabaseNotificationRepository implements INotificationRepository {
         const { data, error } = await this.db
             .from('notifications' as any)
             .select('*')
-            .eq('user_id', userId)
+            .eq('recipient_id', userId) // Changed to recipient_id
             .eq('is_read', false)
             .order('created_at', { ascending: false });
 
@@ -62,7 +62,7 @@ export class SupabaseNotificationRepository implements INotificationRepository {
         const { data, error } = await this.db
             .from('notifications' as any)
             .insert({
-                user_id: notification.userId,
+                recipient_id: notification.userId, // Mapped to recipient_id
                 title: notification.title,
                 message: notification.message,
                 type: notification.type,
@@ -82,7 +82,7 @@ export class SupabaseNotificationRepository implements INotificationRepository {
         const { data, error } = await this.db
             .from('notifications' as any)
             .insert(notifications.map(n => ({
-                user_id: n.userId,
+                recipient_id: n.userId, // Mapped to recipient_id
                 title: n.title,
                 message: n.message,
                 type: n.type,
@@ -113,7 +113,7 @@ export class SupabaseNotificationRepository implements INotificationRepository {
         const { error } = await this.db
             .from('notifications' as any)
             .update({ is_read: true } as any)
-            .eq('user_id', userId)
+            .eq('recipient_id', userId) // Changed to recipient_id
             .eq('is_read', false);
 
         if (error) throw error;
@@ -134,7 +134,7 @@ export class SupabaseNotificationRepository implements INotificationRepository {
         const { count, error } = await this.db
             .from('notifications' as any)
             .select('*', { count: 'exact', head: true })
-            .eq('user_id', userId)
+            .eq('recipient_id', userId) // Changed to recipient_id
             .eq('is_read', false);
 
         if (error) throw error;

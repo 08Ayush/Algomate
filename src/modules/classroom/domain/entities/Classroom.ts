@@ -5,9 +5,11 @@ export class Classroom {
         public readonly collegeId: string,
         public readonly departmentId: string | null,
         public readonly capacity: number,
-        public readonly type: 'LECTURE_HALL' | 'LAB' | 'TUTORIAL' | 'AUDITORIUM' | 'SEMINAR',
+        public readonly type: string, // Changed to string to be flexible
         public readonly hasProjector: boolean,
         public readonly hasComputers: boolean,
+        public readonly hasAc: boolean,
+        public readonly isAvailable: boolean,
         public readonly isActive: boolean,
         public readonly createdAt: Date,
         public readonly updatedAt: Date
@@ -23,6 +25,8 @@ export class Classroom {
             type: this.type,
             has_projector: this.hasProjector,
             has_computers: this.hasComputers,
+            has_ac: this.hasAc,
+            is_available: this.isAvailable,
             is_active: this.isActive,
             created_at: this.createdAt.toISOString(),
             updated_at: this.updatedAt.toISOString()
@@ -36,10 +40,12 @@ export class Classroom {
             data.college_id,
             data.department_id,
             data.capacity,
-            data.type || 'LECTURE_HALL',
+            data.type || 'Lecture Hall',
             data.has_projector || false,
             data.has_computers || false,
-            data.is_active,
+            data.has_ac || false,
+            data.is_available !== undefined ? data.is_available : true,
+            data.is_active !== undefined ? data.is_active : true, // Default to true if missing
             new Date(data.created_at),
             new Date(data.updated_at)
         );

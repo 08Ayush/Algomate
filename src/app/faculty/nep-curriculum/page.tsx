@@ -117,11 +117,12 @@ export default function NEPCurriculumPage() {
 
       if (!response.ok) return;
 
-      const { courses: data } = await response.json();
+      const data = await response.json();
+      const coursesData = Array.isArray(data) ? data : data.courses;
 
-      if (data && data.length > 0) {
-        setCourses(data as Course[]);
-        setSelectedCourse(data[0].id);
+      if (coursesData && coursesData.length > 0) {
+        setCourses(coursesData);
+        setSelectedCourse(coursesData[0].id);
       }
     } catch (error) {
       console.error('Error fetching courses:', error);

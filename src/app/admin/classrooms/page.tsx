@@ -84,7 +84,12 @@ const ClassroomsPage: React.FC = () => {
 
             if (res.ok) {
                 const data = await res.json();
-                setClassrooms(data.classrooms || []);
+                // Check if data is array (direct return) or object with classrooms property
+                if (Array.isArray(data)) {
+                    setClassrooms(data);
+                } else {
+                    setClassrooms(data.classrooms || []);
+                }
             }
         } catch (error) {
             toast.error('Error loading classrooms');

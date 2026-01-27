@@ -3,6 +3,7 @@ import { Timetable, ScheduledClass } from '../entities/Timetable';
 export interface ITimetableRepository {
     findById(id: string): Promise<Timetable | null>;
     findByDepartment(departmentId: string): Promise<Timetable[]>;
+    findByCollege(collegeId: string): Promise<Timetable[]>;
     findByBatch(batchId: string): Promise<Timetable[]>;
     create(timetable: Omit<Timetable, 'id' | 'createdAt' | 'updatedAt'>): Promise<Timetable>;
     createTask(task: any): Promise<any>; // Using any for now, should be a defined type

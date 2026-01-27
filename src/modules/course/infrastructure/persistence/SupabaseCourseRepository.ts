@@ -41,7 +41,7 @@ export class SupabaseCourseRepository implements ICourseRepository {
         return (data || []).map(row => Course.fromDatabase(row));
     }
 
-    async create(course: Omit<Course, 'id' | 'createdAt' | 'updatedAt'>): Promise<Course> {
+    async create(course: Omit<Course, 'id' | 'createdAt' | 'updatedAt' | 'toJSON'>): Promise<Course> {
         const { data, error } = await this.db
             .from('courses')
             .insert({
@@ -49,7 +49,9 @@ export class SupabaseCourseRepository implements ICourseRepository {
                 code: course.code,
                 college_id: course.collegeId,
                 department_id: course.departmentId,
-                duration: course.duration,
+                duration_years: course.duration,
+                intake: course.intake,
+                nature_of_course: course.natureOfCourse,
                 is_active: course.isActive
             } as any)
             .select()
@@ -63,8 +65,10 @@ export class SupabaseCourseRepository implements ICourseRepository {
         const updateData: any = {};
         if (data.title) updateData.title = data.title;
         if (data.code) updateData.code = data.code;
-        if (data.duration !== undefined) updateData.duration = data.duration;
+        if (data.duration !== undefined) updateData.duration_years = data.duration;
         if (data.isActive !== undefined) updateData.is_active = data.isActive;
+        if (data.intake !== undefined) updateData.intake = data.intake;
+        if (data.natureOfCourse !== undefined) updateData.nature_of_course = data.natureOfCourse;
 
         const { data: result, error } = await this.db
             .from('courses')

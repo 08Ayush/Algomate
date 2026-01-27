@@ -7,6 +7,8 @@ export class Course {
         public readonly departmentId: string | null,
         public readonly duration: number,
         public readonly isActive: boolean,
+        public readonly intake: number,
+        public readonly natureOfCourse: string | null,
         public readonly createdAt: Date,
         public readonly updatedAt: Date
     ) { }
@@ -19,7 +21,10 @@ export class Course {
             college_id: this.collegeId,
             department_id: this.departmentId,
             duration: this.duration,
+            duration_years: this.duration, // For frontend compatibility
             is_active: this.isActive,
+            intake: this.intake,
+            nature_of_course: this.natureOfCourse,
             created_at: this.createdAt.toISOString(),
             updated_at: this.updatedAt.toISOString()
         };
@@ -32,8 +37,10 @@ export class Course {
             data.code,
             data.college_id,
             data.department_id,
-            data.duration,
-            data.is_active,
+            data.duration_years || data.duration || 0,
+            data.is_active !== undefined ? data.is_active : true, // Default to true if missing
+            data.intake || 0,
+            data.nature_of_course || null,
             new Date(data.created_at),
             new Date(data.updated_at)
         );

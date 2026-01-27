@@ -63,41 +63,28 @@ const CollegeAdminDashboard: React.FC = () => {
       const queryParam = collegeId ? `?college_id=${collegeId}` : '';
 
       const headers = {
-        'Authorization': `Bearer ${authToken}`,
-        'Content-Type': 'application/json'
+        'Authorization': `Bearer ${authToken}`
       };
 
-      const [deptRes, facultyRes, classroomRes, batchRes, subjectRes, courseRes, studentRes, constraintRes] = await Promise.all([
-        fetch(`/api/admin/departments${queryParam}`, { headers }).catch(() => ({ ok: false, json: () => Promise.resolve({ departments: [] }) } as Response)),
-        fetch(`/api/admin/faculty${queryParam}`, { headers }).catch(() => ({ ok: false, json: () => Promise.resolve({ faculty: [] }) } as Response)),
-        fetch(`/api/admin/classrooms${queryParam}`, { headers }).catch(() => ({ ok: false, json: () => Promise.resolve({ classrooms: [] }) } as Response)),
-        fetch(`/api/admin/batches${queryParam}`, { headers }).catch(() => ({ ok: false, json: () => Promise.resolve({ batches: [] }) } as Response)),
-        fetch(`/api/admin/subjects${queryParam}`, { headers }).catch(() => ({ ok: false, json: () => Promise.resolve({ subjects: [] }) } as Response)),
-        fetch(`/api/admin/courses${queryParam}`, { headers }).catch(() => ({ ok: false, json: () => Promise.resolve({ courses: [] }) } as Response)),
-        fetch(`/api/admin/students${queryParam}`, { headers }).catch(() => ({ ok: false, json: () => Promise.resolve({ students: [] }) } as Response)),
-        fetch('/api/admin/constraints', { headers }).catch(() => ({ ok: false, json: () => Promise.resolve({ data: [] }) } as Response))
-      ]);
+      const response = await fetch(`/api/admin/stats${queryParam}`, { headers });
 
-      const [deptData, facultyData, classroomData, batchData, subjectData, courseData, studentData, constraintData] = await Promise.all([
-        deptRes.ok ? deptRes.json() : { departments: [] },
-        facultyRes.ok ? facultyRes.json() : { faculty: [] },
-        classroomRes.ok ? classroomRes.json() : { classrooms: [] },
-        batchRes.ok ? batchRes.json() : { batches: [] },
-        subjectRes.ok ? subjectRes.json() : { subjects: [] },
-        courseRes.ok ? courseRes.json() : { courses: [] },
-        studentRes.ok ? studentRes.json() : { students: [] },
-        constraintRes.ok ? constraintRes.json() : { data: [] }
-      ]);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[Dashboard] Stats fetch failed:', response.status, response.statusText, errorText);
+        throw new Error(`Failed to fetch stats: ${response.status} ${errorText}`);
+      }
+
+      const data = await response.json();
 
       setStats({
-        departments: deptData.departments?.length || 0,
-        faculty: facultyData.faculty?.length || 0,
-        classrooms: classroomData.classrooms?.length || 0,
-        batches: batchData.batches?.length || 0,
-        subjects: subjectData.subjects?.length || 0,
-        courses: courseData.courses?.length || 0,
-        students: studentData.students?.length || 0,
-        constraints: constraintData.data?.length || 0
+        departments: data.departments || 0,
+        faculty: data.faculty || 0,
+        classrooms: data.classrooms || 0,
+        batches: data.batches || 0,
+        subjects: data.subjects || 0,
+        courses: data.courses || 0,
+        students: data.students || 0,
+        constraints: data.constraints || 0
       });
 
     } catch (error) {

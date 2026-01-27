@@ -13,7 +13,9 @@ export class CreateClassroomUseCase {
             type: dto.type,
             hasProjector: dto.has_projector,
             hasComputers: dto.has_computers,
-            isActive: dto.is_active
+            hasAc: dto.has_ac,
+            isAvailable: dto.is_available,
+            isActive: true // Always true on creation if not passed, or remove if repo ignores it
         });
 
         return {

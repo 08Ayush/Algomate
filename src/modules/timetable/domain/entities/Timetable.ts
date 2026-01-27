@@ -4,6 +4,7 @@
 export class Timetable {
     constructor(
         public readonly id: string,
+        public readonly title: string,
         public readonly departmentId: string,
         public readonly batchId: string,
         public readonly collegeId: string,
@@ -22,6 +23,7 @@ export class Timetable {
     toJSON() {
         return {
             id: this.id,
+            title: this.title,
             department_id: this.departmentId,
             batch_id: this.batchId,
             college_id: this.collegeId,
@@ -49,6 +51,7 @@ export class ScheduledClass {
         public readonly subjectId: string,
         public readonly facultyId: string,
         public readonly classroomId: string,
+        public readonly timeSlotId: string,
         public readonly dayOfWeek: number,
         public readonly startTime: string,
         public readonly endTime: string,
@@ -66,6 +69,7 @@ export class ScheduledClass {
             subject_id: this.subjectId,
             faculty_id: this.facultyId,
             classroom_id: this.classroomId,
+            time_slot_id: this.timeSlotId,
             day_of_week: this.dayOfWeek,
             start_time: this.startTime,
             end_time: this.endTime,

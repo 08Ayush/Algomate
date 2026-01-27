@@ -52,8 +52,8 @@ const AssignmentsPage: React.FC = () => {
                 const data = await res.json();
                 const userData = localStorage.getItem('user');
                 const user = userData ? JSON.parse(userData) : null;
-                // Filter to show only assignments created by this faculty
-                const myAssignments = (data.assignments || data.data || []).filter((a: any) => a.created_by === user?.id);
+                // Show all assignments for now to debug visibility
+                const myAssignments = (data.assignments || data.data || []);
                 setAssignments(myAssignments);
             }
         } catch { toast.error('Error loading assignments'); } finally { setLoading(false); }

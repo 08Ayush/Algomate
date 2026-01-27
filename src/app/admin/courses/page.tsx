@@ -52,7 +52,14 @@ const CoursesPage: React.FC = () => {
             if (!headers) return;
             const q = user.college_id ? `?college_id=${user.college_id}` : '';
             const res = await fetch(`/api/admin/courses${q}`, { headers });
-            if (res.ok) setCourses((await res.json()).courses || []);
+            if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data)) {
+                    setCourses(data);
+                } else {
+                    setCourses(data.courses || []);
+                }
+            }
         } catch { toast.error('Error loading courses'); } finally { setLoading(false); }
     };
 

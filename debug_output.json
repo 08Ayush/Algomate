@@ -1,0 +1,152 @@
+{
+  "users": [
+    {
+      "id": "115fbcbb-d144-4521-a3ab-753457a93000",
+      "email": "bramhe@svpcet.edu.in",
+      "role": "faculty",
+      "college_id": "c25be3d2-4b6d-4373-b6de-44a4e2a2508f"
+    },
+    {
+      "id": "2d1a31bc-969f-4711-9e2f-65237ea3251d",
+      "email": "college.admin@svpcet.in",
+      "role": "college_admin",
+      "college_id": "c25be3d2-4b6d-4373-b6de-44a4e2a2508f"
+    },
+    {
+      "id": "0140c0a7-a81f-4ee7-8d96-b9ca9f8ea6a3",
+      "email": "admin@academic.com",
+      "role": "super_admin",
+      "college_id": "c25be3d2-4b6d-4373-b6de-44a4e2a2508f"
+    },
+    {
+      "id": "209ae129-4c9e-48f0-8c7f-5ece6f7bd4da",
+      "email": "bhagyashree.hambarde@svpcet.edu.in",
+      "role": "faculty",
+      "college_id": "c25be3d2-4b6d-4373-b6de-44a4e2a2508f"
+    },
+    {
+      "id": "38bd5f87-b3a3-4bb2-a2c0-ae3d31e2c4e3",
+      "email": "sheikh@svpcet.edu.in",
+      "role": "faculty",
+      "college_id": "c25be3d2-4b6d-4373-b6de-44a4e2a2508f"
+    },
+    {
+      "id": "44671314-1ceb-4880-b25c-c0a6c98d0e16",
+      "email": "wankhede@svpcet.edu.in",
+      "role": "faculty",
+      "college_id": "c25be3d2-4b6d-4373-b6de-44a4e2a2508f"
+    },
+    {
+      "id": "4fb4d599-3549-4069-99fe-ed04e7af2969",
+      "email": "wadhwani@svpcet.edu.in",
+      "role": "faculty",
+      "college_id": "c25be3d2-4b6d-4373-b6de-44a4e2a2508f"
+    },
+    {
+      "id": "5aec4b65-5dc8-45e9-9b52-d7650e773d03",
+      "email": "meshram@svpcet.edu.in",
+      "role": "faculty",
+      "college_id": "c25be3d2-4b6d-4373-b6de-44a4e2a2508f"
+    },
+    {
+      "id": "5c4bb012-96e1-4bc8-9ad6-5ee5276fea30",
+      "email": "golhar@svpcet.edu.in",
+      "role": "faculty",
+      "college_id": "c25be3d2-4b6d-4373-b6de-44a4e2a2508f"
+    },
+    {
+      "id": "46418749-1a3f-4ec2-8f5c-04fda8db370a",
+      "email": "jayshri.harde@svpcet.edu.in",
+      "role": "faculty",
+      "college_id": "c25be3d2-4b6d-4373-b6de-44a4e2a2508f"
+    }
+  ],
+  "colleges": [
+    {
+      "id": "c25be3d2-4b6d-4373-b6de-44a4e2a2508f",
+      "name": "St. Vincent Pallotti College of Engineering and Technology"
+    },
+    {
+      "id": "afbcc29b-8b1c-40b9-baf7-e5a494aabe02",
+      "name": "Government College of Education, Jammu"
+    },
+    {
+      "id": "360fa452-7e7c-47d6-b6be-4636f3006a64",
+      "name": "YCCE College of engineering"
+    }
+  ],
+  "courses": [
+    {
+      "id": "cabfaf14-818b-4027-815b-66476e69c00a",
+      "title": "Bachelor of Education",
+      "college_id": "afbcc29b-8b1c-40b9-baf7-e5a494aabe02"
+    },
+    {
+      "id": "743afb80-d34f-4d13-a4ac-2205cd11b67f",
+      "title": "Master of Education ",
+      "college_id": "afbcc29b-8b1c-40b9-baf7-e5a494aabe02"
+    },
+    {
+      "id": "df8020b0-ecc8-4bc0-beeb-579825be8967",
+      "title": "Integrated Teacher Education Program (B.A.B.Ed)",
+      "college_id": "afbcc29b-8b1c-40b9-baf7-e5a494aabe02"
+    },
+    {
+      "id": "821d457b-a8a5-450f-b1cd-fcc0c49787bf",
+      "title": "Bachelor of Technology",
+      "college_id": "c25be3d2-4b6d-4373-b6de-44a4e2a2508f"
+    }
+  ],
+  "classrooms": [
+    {
+      "id": "90102ef0-0dbb-442c-b860-ce7dad41136c",
+      "name": "Room no. 1",
+      "college_id": "afbcc29b-8b1c-40b9-baf7-e5a494aabe02"
+    },
+    {
+      "id": "b099978d-ed54-4687-b8cc-47bc688d8db2",
+      "name": "Room No.2",
+      "college_id": "afbcc29b-8b1c-40b9-baf7-e5a494aabe02"
+    },
+    {
+      "id": "79617709-a045-4d84-8493-008541751c76",
+      "name": "Room No.4",
+      "college_id": "afbcc29b-8b1c-40b9-baf7-e5a494aabe02"
+    },
+    {
+      "id": "b61bd390-1c20-4f81-9180-4f52cec4b4d5",
+      "name": "Room No.5",
+      "college_id": "afbcc29b-8b1c-40b9-baf7-e5a494aabe02"
+    },
+    {
+      "id": "dc8d9307-62b0-4a97-a8f9-8af408a0eeca",
+      "name": "Room No.3",
+      "college_id": "afbcc29b-8b1c-40b9-baf7-e5a494aabe02"
+    },
+    {
+      "id": "0655cf4f-b674-4758-ae16-47026ff8bffc",
+      "name": "BF04",
+      "college_id": "c25be3d2-4b6d-4373-b6de-44a4e2a2508f"
+    },
+    {
+      "id": "4535cf4f-b674-4758-ae16-47026ff8bffc",
+      "name": "BS03",
+      "college_id": "c25be3d2-4b6d-4373-b6de-44a4e2a2508f"
+    },
+    {
+      "id": "5675cf4f-b674-4758-ae16-47026ff8bffc",
+      "name": "BS02",
+      "college_id": "c25be3d2-4b6d-4373-b6de-44a4e2a2508f"
+    },
+    {
+      "id": "720b1f12-27f7-4edb-a212-b5153e9d1a09",
+      "name": "BF05",
+      "college_id": "c25be3d2-4b6d-4373-b6de-44a4e2a2508f"
+    },
+    {
+      "id": "7b22ab74-f04e-4064-ad17-a5c00e753ed5",
+      "name": "Geo Lab",
+      "college_id": "afbcc29b-8b1c-40b9-baf7-e5a494aabe02"
+    }
+  ]
+}

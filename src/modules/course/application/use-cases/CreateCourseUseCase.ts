@@ -11,6 +11,8 @@ export class CreateCourseUseCase {
             collegeId: dto.college_id,
             departmentId: dto.department_id || null,
             duration: dto.duration,
+            intake: dto.intake,
+            natureOfCourse: dto.nature_of_course || null,
             isActive: dto.is_active
         });
 

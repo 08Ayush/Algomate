@@ -41,7 +41,7 @@ export class SupabaseClassroomRepository implements IClassroomRepository {
         return (data || []).map(row => Classroom.fromDatabase(row));
     }
 
-    async create(classroom: Omit<Classroom, 'id' | 'createdAt' | 'updatedAt'>): Promise<Classroom> {
+    async create(classroom: Omit<Classroom, 'id' | 'createdAt' | 'updatedAt' | 'toJSON'>): Promise<Classroom> {
         const { data, error } = await this.db
             .from('classrooms')
             .insert({
@@ -52,7 +52,9 @@ export class SupabaseClassroomRepository implements IClassroomRepository {
                 type: classroom.type,
                 has_projector: classroom.hasProjector,
                 has_computers: classroom.hasComputers,
-                is_active: classroom.isActive
+                has_ac: classroom.hasAc,
+                is_available: classroom.isAvailable
+                // is_active removed as it does not exist in DB schema
             } as any)
             .select()
             .single();
@@ -68,7 +70,9 @@ export class SupabaseClassroomRepository implements IClassroomRepository {
         if (data.type) updateData.type = data.type;
         if (data.hasProjector !== undefined) updateData.has_projector = data.hasProjector;
         if (data.hasComputers !== undefined) updateData.has_computers = data.hasComputers;
-        if (data.isActive !== undefined) updateData.is_active = data.isActive;
+        if (data.hasAc !== undefined) updateData.has_ac = data.hasAc;
+        if (data.isAvailable !== undefined) updateData.is_available = data.isAvailable;
+        // is_active removed from update
 
         const { data: result, error } = await this.db
             .from('classrooms')
@@ -80,6 +84,8 @@ export class SupabaseClassroomRepository implements IClassroomRepository {
         if (error) throw error;
         return Classroom.fromDatabase(result);
     }
+
+
 
     async delete(id: string): Promise<boolean> {
         const { error } = await this.db

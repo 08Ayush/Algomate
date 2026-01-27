@@ -7,7 +7,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 // Helper function to decode and verify user from token
 function getAuthenticatedUser(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
-  
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return null;
   }
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    
+
     // Parse request body
     const body = await request.json();
     const {
@@ -207,7 +207,6 @@ export async function GET(request: NextRequest) {
       .from('assignments')
       .select('*')
       .eq('college_id', user.college_id)
-      .eq('created_by', user.user_id)
       .order('created_at', { ascending: false });
 
     if (error) {

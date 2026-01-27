@@ -7,6 +7,7 @@ interface GetTimetablesRequest {
     status?: string;
     academicYear?: string;
     departmentId?: string;
+    collegeId?: string;
 }
 
 export class GetTimetablesUseCase {
@@ -15,7 +16,7 @@ export class GetTimetablesUseCase {
     ) { }
 
     async execute(request: GetTimetablesRequest): Promise<Timetable[]> {
-        const { batchId, departmentId } = request;
+        const { batchId, departmentId, collegeId } = request;
 
         if (batchId) {
             return this.timetableRepository.findByBatch(batchId);
@@ -23,6 +24,10 @@ export class GetTimetablesUseCase {
 
         if (departmentId) {
             return this.timetableRepository.findByDepartment(departmentId);
+        }
+
+        if (collegeId) {
+            return this.timetableRepository.findByCollege(collegeId);
         }
 
         // Return empty or implement findAll if needed

@@ -9,6 +9,7 @@ export class SupabaseTimetableRepository implements ITimetableRepository {
     private mapToEntity(row: any): Timetable {
         return new Timetable(
             row.id,
+            row.title || 'Untitled Timetable',
             row.department_id,
             row.batch_id,
             row.college_id,
@@ -40,10 +41,25 @@ export class SupabaseTimetableRepository implements ITimetableRepository {
     }
 
     async findByDepartment(departmentId: string): Promise<Timetable[]> {
+        // Since department_id might not exist on generated_timetables, 
+        // we filter via the linked batches table
+        const { data, error } = await this.db
+            .from('generated_timetables' as any)
+            .select('*, batches!inner(department_id)')
+            .eq('batches.department_id', departmentId);
+
+        if (error) throw error;
+
+        // Remove the joined batches property before mapping to avoid type issues if needed,
+        // or just rely on mapToEntity ignoring extra props.
+        return data.map(row => this.mapToEntity(row));
+    }
+
+    async findByCollege(collegeId: string): Promise<Timetable[]> {
         const { data, error } = await this.db
             .from('generated_timetables' as any)
             .select('*')
-            .eq('department_id', departmentId);
+            .eq('college_id', collegeId);
 
         if (error) throw error;
         return data.map(row => this.mapToEntity(row));
@@ -63,6 +79,7 @@ export class SupabaseTimetableRepository implements ITimetableRepository {
         const { data, error } = await (this.db
             .from('generated_timetables' as any) as any)
             .insert({
+                title: timetable.title,
                 department_id: timetable.departmentId,
                 batch_id: timetable.batchId,
                 college_id: timetable.collegeId,
@@ -98,8 +115,8 @@ export class SupabaseTimetableRepository implements ITimetableRepository {
         if (data.status) updateData.status = data.status;
         if (data.publishedAt !== undefined) updateData.published_at = data.publishedAt;
 
-        const { data: result, error } = await this.db
-            .from('generated_timetables' as any)
+        const { data: result, error } = await (this.db
+            .from('generated_timetables' as any) as any)
             .update(updateData)
             .eq('id', id)
             .select()
@@ -120,8 +137,8 @@ export class SupabaseTimetableRepository implements ITimetableRepository {
     }
 
     async publish(id: string): Promise<Timetable> {
-        const { data, error } = await this.db
-            .from('generated_timetables' as any)
+        const { data, error } = await (this.db
+            .from('generated_timetables' as any) as any)
             .update({
                 status: 'published',
                 published_at: new Date().toISOString()
@@ -135,8 +152,8 @@ export class SupabaseTimetableRepository implements ITimetableRepository {
     }
 
     async updateStatus(id: string, status: 'draft' | 'pending_approval' | 'published' | 'rejected'): Promise<Timetable> {
-        const { data, error } = await this.db
-            .from('generated_timetables' as any)
+        const { data, error } = await (this.db
+            .from('generated_timetables' as any) as any)
             .update({ status } as any)
             .eq('id', id)
             .select()
@@ -173,6 +190,7 @@ export class SupabaseScheduledClassRepository implements IScheduledClassReposito
             row.subject_id,
             row.faculty_id,
             row.classroom_id,
+            row.time_slot_id,
             row.day_of_week,
             row.start_time,
             row.end_time,
@@ -216,6 +234,7 @@ export class SupabaseScheduledClassRepository implements IScheduledClassReposito
                 subject_id: scheduledClass.subjectId,
                 faculty_id: scheduledClass.facultyId,
                 classroom_id: scheduledClass.classroomId,
+                time_slot_id: scheduledClass.timeSlotId,
                 day_of_week: scheduledClass.dayOfWeek,
                 start_time: scheduledClass.startTime,
                 end_time: scheduledClass.endTime,
@@ -239,6 +258,7 @@ export class SupabaseScheduledClassRepository implements IScheduledClassReposito
                 subject_id: sc.subjectId,
                 faculty_id: sc.facultyId,
                 classroom_id: sc.classroomId,
+                time_slot_id: sc.timeSlotId,
                 day_of_week: sc.dayOfWeek,
                 start_time: sc.startTime,
                 end_time: sc.endTime,
@@ -250,7 +270,7 @@ export class SupabaseScheduledClassRepository implements IScheduledClassReposito
             .select();
 
         if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+        return data.map((row: any) => this.mapToEntity(row));
     }
 
     async delete(id: string): Promise<boolean> {
@@ -273,32 +293,4 @@ export class SupabaseScheduledClassRepository implements IScheduledClassReposito
         return true;
     }
 
-    async updateStatus(id: string, status: 'draft' | 'pending_approval' | 'published' | 'rejected'): Promise<Timetable> {
-        const { data, error } = await this.db
-            .from('generated_timetables' as any)
-            .update({ status } as any)
-            .eq('id', id)
-            .select()
-            .single();
-
-        if (error) throw error;
-        return this.mapToEntity(data);
-    }
-
-    async logWorkflowAction(timetableId: string, action: string, performedBy: string, comments?: string): Promise<void> {
-        const { error } = await this.db
-            .from('workflow_approvals' as any)
-            .insert({
-                timetable_id: timetableId,
-                workflow_step: action,
-                performed_by: performedBy,
-                comments: comments || '',
-                approval_level: 'creator' // Default level
-            } as any);
-
-        if (error) {
-            console.error('Error logging workflow action:', error);
-            // Don't throw - workflow logging is not critical
-        }
-    }
 }

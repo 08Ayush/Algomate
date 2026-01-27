@@ -20,6 +20,7 @@ import {
   FileText,
   RefreshCw
 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
 interface ScheduledClass {
   id: string;
@@ -161,103 +162,118 @@ export default function ViewTimetablePage() {
   };
 
   const exportToPDF = () => {
-    if (!timetable) return;
+    console.log('Starting PDF export...');
+    if (!timetable) {
+      console.error('No timetable data to export');
+      toast.error('No timetable data available');
+      return;
+    }
 
-    const doc = new jsPDF('l', 'mm', 'a4');
-    const pageWidth = doc.internal.pageSize.getWidth();
+    try {
+      const doc = new jsPDF('l', 'mm', 'a4');
+      const pageWidth = doc.internal.pageSize.getWidth();
 
-    doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
-    doc.text(timetable.title, pageWidth / 2, 15, { align: 'center' });
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      const titleText = timetable.title || `Timetable - ${timetable.semester || 'Draft'}`;
+      doc.text(titleText, pageWidth / 2, 15, { align: 'center' });
 
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    const metaY = 25;
-    doc.text(`Batch: ${timetable.batch_name || 'N/A'}`, 14, metaY);
-    doc.text(`Semester: ${timetable.semester}`, 80, metaY);
-    doc.text(`Academic Year: ${timetable.academic_year}`, 140, metaY);
-    doc.text(`Created: ${new Date(timetable.created_at).toLocaleDateString()}`, 210, metaY);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      const metaY = 25;
+      doc.text(`Batch: ${timetable.batch_name || 'N/A'}`, 14, metaY);
+      doc.text(`Semester: ${timetable.semester}`, 80, metaY);
+      doc.text(`Academic Year: ${timetable.academic_year}`, 140, metaY);
+      doc.text(`Created: ${new Date(timetable.created_at).toLocaleDateString()}`, 210, metaY);
 
-    const tableData: any[] = [];
+      const tableData: any[] = [];
 
-    DAYS.forEach(day => {
-      const rowData: any[] = [day];
+      DAYS.forEach(day => {
+        const rowData: any[] = [day];
 
+        timeSlots.forEach(slot => {
+          if (slot === 'LUNCH') {
+            rowData.push('LUNCH BREAK');
+          } else {
+            const classInfo = getClassForSlot(day, slot);
+            if (classInfo) {
+              const cellContent = `${classInfo.subject_code || ''}\n${classInfo.subject_name || ''}\n${classInfo.faculty_name || ''}\n${classInfo.classroom_name || ''}`;
+              rowData.push(cellContent);
+            } else {
+              rowData.push('-');
+            }
+          }
+        });
+
+        tableData.push(rowData);
+      });
+
+      const headers = ['Day / Time'];
       timeSlots.forEach(slot => {
         if (slot === 'LUNCH') {
-          rowData.push('LUNCH BREAK');
+          headers.push('1:15-2:15\nLunch');
         } else {
-          const classInfo = getClassForSlot(day, slot);
-          if (classInfo) {
-            const cellContent = `${classInfo.subject_code || ''}\n${classInfo.subject_name || ''}\n${classInfo.faculty_name || ''}\n${classInfo.classroom_name || ''}`;
-            rowData.push(cellContent);
-          } else {
-            rowData.push('-');
+          const [start, end] = slot.split('-');
+          headers.push(`${start}\n${end}`);
+        }
+      });
+
+      console.log('Generating autoTable...');
+      autoTable(doc, {
+        head: [headers],
+        body: tableData,
+        startY: 35,
+        theme: 'grid',
+        styles: {
+          fontSize: 8,
+          cellPadding: 3,
+          overflow: 'linebreak',
+          valign: 'middle',
+          halign: 'center'
+        },
+        headStyles: {
+          fillColor: [77, 134, 156],
+          textColor: 255,
+          fontStyle: 'bold',
+          halign: 'center'
+        },
+        columnStyles: {
+          0: {
+            fontStyle: 'bold',
+            fillColor: [243, 244, 246],
+            halign: 'left',
+            cellWidth: 25
           }
         }
       });
 
-      tableData.push(rowData);
-    });
-
-    const headers = ['Day / Time'];
-    timeSlots.forEach(slot => {
-      if (slot === 'LUNCH') {
-        headers.push('1:15-2:15\nLunch');
-      } else {
-        const [start, end] = slot.split('-');
-        headers.push(`${start}\n${end}`);
+      const pageCount = doc.getNumberOfPages();
+      doc.setFontSize(8);
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.text(
+          `Page ${i} of ${pageCount}`,
+          pageWidth / 2,
+          doc.internal.pageSize.getHeight() - 10,
+          { align: 'center' }
+        );
+        doc.text(
+          `Generated on ${new Date().toLocaleString()}`,
+          pageWidth - 14,
+          doc.internal.pageSize.getHeight() - 10,
+          { align: 'right' }
+        );
       }
-    });
 
-    autoTable(doc, {
-      head: [headers],
-      body: tableData,
-      startY: 35,
-      theme: 'grid',
-      styles: {
-        fontSize: 8,
-        cellPadding: 3,
-        overflow: 'linebreak',
-        valign: 'middle',
-        halign: 'center'
-      },
-      headStyles: {
-        fillColor: [77, 134, 156],
-        textColor: 255,
-        fontStyle: 'bold',
-        halign: 'center'
-      },
-      columnStyles: {
-        0: {
-          fontStyle: 'bold',
-          fillColor: [243, 244, 246],
-          halign: 'left',
-          cellWidth: 25
-        }
-      }
-    });
+      const fileName = `${(timetable.title || 'timetable').replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+      console.log(`Saving PDF: ${fileName}`);
+      doc.save(fileName);
+      toast.success('PDF downloaded successfully');
 
-    const pageCount = doc.getNumberOfPages();
-    doc.setFontSize(8);
-    for (let i = 1; i <= pageCount; i++) {
-      doc.setPage(i);
-      doc.text(
-        `Page ${i} of ${pageCount}`,
-        pageWidth / 2,
-        doc.internal.pageSize.getHeight() - 10,
-        { align: 'center' }
-      );
-      doc.text(
-        `Generated on ${new Date().toLocaleString()}`,
-        pageWidth - 14,
-        doc.internal.pageSize.getHeight() - 10,
-        { align: 'right' }
-      );
+    } catch (err) {
+      console.error('Export PDF Error:', err);
+      toast.error('Failed to export PDF');
     }
-
-    const fileName = `${timetable.title.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
-    doc.save(fileName);
   };
 
   if (loading) {
@@ -362,7 +378,7 @@ export default function ViewTimetablePage() {
               onClick={exportToPDF}
               className="flex items-center gap-2 px-4 py-2.5 bg-white/20 text-white rounded-xl font-medium hover:bg-white/30 transition-all"
             >
-              <Download size={16} /> Export PDF
+              <Download size={16} /> Export PDF (Fixed)
             </button>
             <button
               onClick={fetchTimetableDetails}
@@ -484,10 +500,10 @@ export default function ViewTimetablePage() {
                           <td key={`${day}-${slot}`} className="border border-gray-200 p-2">
                             {classInfo ? (
                               <div className={`${isContinuation
-                                  ? 'bg-purple-50 border-l-4 border-l-purple-500 border-t border-r border-b border-purple-200'
-                                  : isLabStartSlot
-                                    ? 'bg-purple-50 border border-purple-200'
-                                    : 'bg-[#4D869C]/10 border border-[#4D869C]/30'
+                                ? 'bg-purple-50 border-l-4 border-l-purple-500 border-t border-r border-b border-purple-200'
+                                : isLabStartSlot
+                                  ? 'bg-purple-50 border border-purple-200'
+                                  : 'bg-[#4D869C]/10 border border-[#4D869C]/30'
                                 } rounded-xl p-3 relative`}>
                                 {isLabStartSlot && (
                                   <div className="absolute top-1 right-1 bg-purple-600 text-white text-xs px-2 py-0.5 rounded-full">

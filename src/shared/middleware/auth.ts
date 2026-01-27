@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/shared/database';
+import { serviceDb } from '../database';
 
 /**
  * Authenticated User Interface
@@ -21,29 +21,54 @@ export interface AuthUser {
  * @returns Authenticated user or null if authentication fails
  */
 export async function authenticate(request: NextRequest): Promise<AuthUser | null> {
-    const authHeader = request.headers.get('authorization');
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return null;
-    }
-
     try {
-        // Extract and decode token
-        const token = authHeader.substring(7);
-        const decoded = Buffer.from(token, 'base64').toString('utf-8');
-        const user: AuthUser = JSON.parse(decoded);
+        const authHeader = request.headers.get('authorization');
 
-        // Verify user exists in database
-        const { data, error } = await db
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            // console.log('[Auth Debug] No Bearer token found in header');
+            return null;
+        }
+
+        const token = authHeader.split(' ')[1];
+        if (!token) {
+            console.log('[Auth Debug] Token is empty');
+            return null;
+        }
+
+        let decoded;
+        try {
+            decoded = Buffer.from(token, 'base64').toString();
+        } catch (e) {
+            console.error('[Auth Debug] Token base64 decode failed');
+            return null;
+        }
+
+        let user: AuthUser;
+        try {
+            user = JSON.parse(decoded);
+        } catch (e) {
+            console.error('[Auth Debug] Token JSON parse failed', decoded);
+            return null;
+        }
+
+        if (!user.id) {
+            console.log('[Auth Debug] No user ID in token');
+            return null;
+        }
+
+        // Verify user exists in database using serviceDb (admin access)
+        const { data, error } = await serviceDb
             .from('users')
             .select('id, email, role, college_id, department_id, faculty_type')
             .eq('id', user.id)
             .single();
 
         if (error || !data) {
-            console.error('[AUTH] User not found in database:', user.id);
+            console.error('[Auth Debug] DB Lookup failed for user:', user.id, 'Error:', error?.message);
             return null;
         }
+
+        console.log('[Auth Debug] Auth successful for:', user.id);
 
         // Return authenticated user
         return {
@@ -55,7 +80,7 @@ export async function authenticate(request: NextRequest): Promise<AuthUser | nul
             faculty_type: data.faculty_type
         };
     } catch (error) {
-        console.error('[AUTH] Authentication error:', error);
+        console.error('[AUTH] Authentication error (exception):', error);
         return null;
     }
 }

@@ -67,7 +67,8 @@ export async function GET(request: NextRequest) {
       semester,
       status,
       academicYear,
-      departmentId: departmentId as string
+      departmentId: departmentId as string,
+      collegeId: user.college_id // Pass college_id for college admins
     });
 
     const enrichedTimetables = await Promise.all(timetables.map(async (tt) => {

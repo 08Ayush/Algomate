@@ -39,6 +39,46 @@
   - [ ] Add rollback logic for failed operations
   - [ ] Test transaction isolation levels
 
+- [x] Debug Admin 401 & Dashboard Counts
+    - [x] Analyze `src/app/admin/dashboard/page.tsx`
+    - [x] Debug `authenticate` middleware failures
+    - [x] Verify user data in database matches token
+    - [x] Implement stats fetching in dashboard
+- [x] Debug Notifications & Stats API
+    - [x] Inspect headers/params for `/api/admin/stats`
+    - [x] Fix `notifications` table schema mismatch (`user_id` missing)
+    - [x] Verify `serviceDb` usage in stats API
+- [x] Debug Admin Classrooms Data Fetch
+    - [x] Inspect `src/app/api/admin/classrooms/route.ts`
+    - [x] Create reproduction script `test-classrooms-api.js`
+    - [x] Verify if API returns 500 or empty array
+    - [x] Check `SupabaseClassroomRepository` query logic
+- [x] Debug Admin Courses Data Fetch
+    - [x] Inspect `src/app/api/admin/courses/route.ts`
+    - [x] Inspect `src/app/admin/courses/page.tsx`
+    - [x] Fix frontend data parsing logic
+- [x] Debug 401 Unauthorized on Stats
+    - [x] Verify `auth.ts` middleware logic
+    - [x] Add debug logs to server console
+    - [x] Verify `serviceDb` lookup
+- [x] Fix Constraints Visibility on Dashboard
+    - [x] Identify table name (`constraint_rules`)
+    - [x] Check schema for `college_id`
+    - [x] Implement count logic in `/api/admin/stats`
+- [x] Fix Faculty NEP Curriculum Course Fetching
+    - [x] Inspect frontend API call
+    - [x] Verify backend `college_id` filtering
+    - [x] Ensure `courses` table has correct data
+- [x] Fix Faculty NEP Buckets Fetching
+    - [x] Inspect `/api/nep/buckets` endpoint
+    - [x] Verify batch lookup logic
+    - [x] Check elective_buckets table data
+    - [x] Add NEP 2020 lookup support
+- [/] Fix Faculty Timetables List
+    - [ ] Inspect frontend `/faculty/timetables`
+    - [ ] Verify API endpoint `/api/timetables`
+    - [ ] Check `generated_timetables` filtering
+
 - [ ] **Saga Pattern Design**
   - [ ] Identify long-running transactions
   - [ ] Design compensation logic for rollbacks
@@ -108,15 +148,8 @@
 - [ ] `db/backup-restore-sop.md` - Backup and recovery procedures
 
 ### Code
-- [ ] `src/shared/database/transactions.ts` - Transaction utilities
-- [ ] `src/shared/database/audit.ts` - Audit logging helpers
-- [ ] SQL migration scripts in `database/migrations/`
-- [ ] Repository optimization examples
-
-### Testing
-- [ ] Performance benchmarks
-- [ ] RLS isolation tests
-- [ ] Transaction rollback tests
+- [x] Analyze `src/middleware.ts` relating to `rate-limit`
+- [x] Analyze `src/shared/rate-limit/RateLimitService.ts`
 - [ ] Disaster recovery drills
 
 ---

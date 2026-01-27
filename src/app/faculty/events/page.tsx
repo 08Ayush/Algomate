@@ -86,7 +86,7 @@ const EventsPage: React.FC = () => {
     try {
       const headers = getAuthHeaders();
       if (!headers) return;
-      const res = await fetch(`/api/events/${id}`, { method: 'DELETE', headers });
+      const res = await fetch(`/api/events?id=${id}`, { method: 'DELETE', headers });
       if (res.ok) {
         toast.success('Event deleted');
         setEvents(prev => prev.filter(e => e.id !== id));
