@@ -12,7 +12,7 @@ const submitUseCase = new SubmitForApprovalUseCase(timetableRepo);
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await authenticate(request);
@@ -23,10 +23,14 @@ export async function POST(
       );
     }
 
+    // Await params in Next.js 15+
+    const { id } = await params;
+
+    // Pass faculty_type as the role (creator/publisher/general)
     const result = await submitUseCase.execute(
-      params.id,
+      id,
       user.id,
-      user.department_id || '' // Provide empty string if null
+      user.faculty_type || '' // Pass faculty_type, not department_id
     );
     return NextResponse.json(result);
 

@@ -65,8 +65,8 @@ const TimetablesPage: React.FC = () => {
             const headers = getAuthHeaders();
             if (!headers) return;
 
-            const q = currentUser.department_id ? `?department_id=${currentUser.department_id}` : '';
-            const res = await fetch(`/api/timetables${q}`, { headers });
+            // Fetch all timetables for the user's college - don't filter by department
+            const res = await fetch(`/api/timetables`, { headers });
             if (res.ok) {
                 const data = await res.json();
                 setTimetables(data.timetables || data.data || []);

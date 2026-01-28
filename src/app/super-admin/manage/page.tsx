@@ -201,12 +201,12 @@ const ManagePage: React.FC = () => {
 
       const [deptRes, facultyRes, classroomRes, batchRes, subjectRes, courseRes, studentRes] = await Promise.all([
         fetch(`/api/admin/departments${query}`, { headers }),
-        fetch(`/api/admin/faculty${query}`, { headers }),
+        fetch(`/api/admin/faculty${query}&limit=1000`, { headers }),
         fetch(`/api/admin/classrooms${query}`, { headers }),
         fetch(`/api/admin/batches${query}`, { headers }),
         fetch(`/api/admin/subjects${query}`, { headers }),
         fetch(`/api/admin/courses${query}`, { headers }),
-        fetch(`/api/admin/students${query}`, { headers })
+        fetch(`/api/admin/students${query}&limit=1000`, { headers })
       ]);
 
       const [deptData, facultyData, classroomData, batchData, subjectData, courseData, studentData] = await Promise.all([

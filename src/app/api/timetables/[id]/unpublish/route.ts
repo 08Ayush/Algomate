@@ -12,7 +12,7 @@ const unpublishUseCase = new UnpublishTimetableUseCase(timetableRepo);
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await authenticate(request);
@@ -23,7 +23,13 @@ export async function POST(
       );
     }
 
-    const result = await unpublishUseCase.execute(params.id, user.id, user.faculty_type);
+    // Await params in Next.js 15+
+    const { id } = await params;
+
+    const body = await request.json().catch(() => ({}));
+    const { reason } = body;
+
+    const result = await unpublishUseCase.execute(id, user.id, user.faculty_type || '');
     return NextResponse.json(result);
 
   } catch (error: any) {

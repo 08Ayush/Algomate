@@ -61,14 +61,13 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') || undefined;
     const academicYear = searchParams.get('academicYear') || undefined;
 
-    // For filtering by department if user is faculty/admin
-    // If faculty, restrict to their department unless they have broader access? 
-    // Existing logic didn't strictly enforce, but let's pass departmentId from params if any
-    const departmentId = searchParams.get('departmentId') || (user.role === 'faculty' ? user.department_id : undefined);
+    // For filtering by department if explicitly requested
+    // Don't auto-filter by department - let faculty see all college timetables unless explicitly filtered
+    const departmentId = searchParams.get('department_id') || searchParams.get('departmentId') || undefined;
 
     // Pagination
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    const limit = parseInt(searchParams.get('limit') || '100');
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
@@ -113,10 +112,23 @@ export async function GET(request: NextRequest) {
     // The raw Supabase response will be snake_case (standard DB).
     // If the frontend expects camelCase, we should map it here.
 
-    // Quick mapper to ensure frontend compatibility
+    // Quick mapper to ensure frontend compatibility - include both snake_case and camelCase
     const mappedData = enrichedTimetables.map((item: any) => ({
       id: item.id,
       title: item.title,
+      // Snake case (for frontend compatibility)
+      department_id: item.department_id,
+      batch_id: item.batch_id,
+      college_id: item.college_id,
+      academic_year: item.academic_year,
+      fitness_score: item.fitness_score,
+      constraint_violations: item.constraint_violations,
+      generation_method: item.generation_method,
+      created_by: item.created_by,
+      published_at: item.published_at,
+      created_at: item.created_at,
+      updated_at: item.updated_at,
+      // CamelCase (for other parts of the app)
       departmentId: item.department_id,
       batchId: item.batch_id,
       collegeId: item.college_id,
@@ -132,6 +144,7 @@ export async function GET(request: NextRequest) {
       updatedAt: item.updated_at,
       // Relations
       batch: item.batch,
+      batch_name: item.batch?.name,
       created_by_user: item.created_by_user,
       generation_task: item.generation_task
     }));

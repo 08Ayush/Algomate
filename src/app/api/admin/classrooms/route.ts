@@ -25,13 +25,24 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const departmentId = searchParams.get('departmentId');
+    const queryCollegeId = searchParams.get('college_id');
+
+    // For super_admin, use college_id from query params
+    let targetCollegeId = user.college_id;
+    if (user.role === 'super_admin' && queryCollegeId) {
+      targetCollegeId = queryCollegeId;
+    }
+
+    if (!targetCollegeId) {
+      return NextResponse.json({ error: 'College ID is required' }, { status: 400 });
+    }
 
     const result = await getClassroomsUseCase.execute(
-      user.college_id,
+      targetCollegeId,
       departmentId || undefined
     );
 
-    return NextResponse.json(result.classrooms);
+    return NextResponse.json({ classrooms: result.classrooms || [] });
   } catch (error: any) {
     console.error('Error fetching classrooms:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

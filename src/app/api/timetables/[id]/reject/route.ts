@@ -12,7 +12,7 @@ const rejectUseCase = new RejectTimetableUseCase(timetableRepo);
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await authenticate(request);
@@ -23,10 +23,13 @@ export async function POST(
       );
     }
 
+    // Await params in Next.js 15+
+    const { id } = await params;
+
     const body = await request.json();
     const { reason } = body;
 
-    const result = await rejectUseCase.execute(params.id, user.id, user.faculty_type, reason);
+    const result = await rejectUseCase.execute(id, user.id, user.faculty_type || '', reason);
     return NextResponse.json(result);
 
   } catch (error: any) {

@@ -1,29 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { SupabaseElectiveBucketRepository } from '@/modules/elective';
 import { authenticate } from '@/shared/middleware/auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
-const bucketRepo = new SupabaseElectiveBucketRepository(supabase);
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await authenticate(request);
-    if (!user || user.role !== 'college_admin') {
+    if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const allowedRoles = ['college_admin', 'admin'];
+    if (!allowedRoles.includes(user.role)) {
+      return NextResponse.json({ error: 'Unauthorized - Admin access required' }, { status: 401 });
+    }
+
+    const { id } = await params;
+
     // Mark bucket as published
-    await supabase
+    const { error } = await supabase
       .from('elective_buckets')
-      .update({ is_published: true } as any)
-      .eq('id', params.id);
+      .update({
+        is_published: true,
+        published_at: new Date().toISOString(),
+        published_by: user.id
+      })
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error publishing bucket:', error);
+      throw error;
+    }
 
     return NextResponse.json({
       success: true,

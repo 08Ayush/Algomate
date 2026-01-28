@@ -12,17 +12,20 @@ const getTimetableUseCase = new GetTimetableUseCase(timetableRepo, scheduledClas
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    if (!params.id) {
+    // Await params in Next.js 15+
+    const { id } = await params;
+
+    if (!id) {
       return NextResponse.json(
         { error: 'Timetable ID is required' },
         { status: 400 }
       );
     }
 
-    const result = await getTimetableUseCase.execute(params.id);
+    const result = await getTimetableUseCase.execute(id);
     return NextResponse.json(result);
 
   } catch (error: any) {

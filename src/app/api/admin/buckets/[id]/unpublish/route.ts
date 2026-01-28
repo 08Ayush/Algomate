@@ -9,18 +9,34 @@ const supabase = createClient(
 
 export async function POST(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const user = await authenticate(request);
-        if (!user || user.role !== 'college_admin') {
+        if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        await supabase
+        const allowedRoles = ['college_admin', 'admin'];
+        if (!allowedRoles.includes(user.role)) {
+            return NextResponse.json({ error: 'Unauthorized - Admin access required' }, { status: 401 });
+        }
+
+        const { id } = await params;
+
+        // Mark bucket as unpublished
+        const { error } = await supabase
             .from('elective_buckets')
-            .update({ is_published: false } as any)
-            .eq('id', params.id);
+            .update({
+                is_published: false,
+                is_live_for_students: false
+            })
+            .eq('id', id);
+
+        if (error) {
+            console.error('Error unpublishing bucket:', error);
+            throw error;
+        }
 
         return NextResponse.json({
             success: true,
