@@ -336,12 +336,15 @@ export default function StudentProfile() {
                                         <p className="font-medium text-gray-900">{profile?.college_uid}</p>
                                     </div>
                                 </div>
-                                {profile?.student_id && (
+                                {profile?.batch && (
                                     <div>
-                                        <label className="text-sm text-gray-500 block mb-1">Roll Number</label>
+                                        <label className="text-sm text-gray-500 block mb-1">Batch</label>
                                         <div className="flex items-center gap-2">
-                                            <Hash size={16} className="text-gray-400" />
-                                            <p className="font-medium text-gray-900">{profile.student_id}</p>
+                                            <GraduationCap size={16} className="text-gray-400" />
+                                            <p className="font-medium text-gray-900">
+                                                {profile.batch.name}
+                                                {profile.batch.section && ` - Section ${profile.batch.section}`}
+                                            </p>
                                         </div>
                                     </div>
                                 )}
@@ -397,20 +400,6 @@ export default function StudentProfile() {
                                 </div>
                             )}
 
-                            {/* Show Batch info */}
-                            {profile?.batch && (
-                                <div>
-                                    <label className="text-sm text-gray-500 block mb-1">Batch</label>
-                                    <div className="flex items-center gap-2">
-                                        <GraduationCap size={16} className="text-gray-400" />
-                                        <p className="font-medium text-gray-900">
-                                            {profile.batch.name}
-                                            {profile.batch.section && ` - Section ${profile.batch.section}`}
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-
                             {/* Academic Year */}
                             {profile?.batch?.academic_year && (
                                 <div>
@@ -446,8 +435,8 @@ export default function StudentProfile() {
                             </div>
                         ))}
                     </div>
-                </motion.div>
-            </div>
-        </StudentLayout>
+                </motion.div >
+            </div >
+        </StudentLayout >
     );
 }

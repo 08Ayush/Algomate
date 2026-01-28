@@ -48,6 +48,25 @@ const CollegeAdminLayout: React.FC<CollegeAdminLayoutProps> = ({ children, activ
     const [showNotifications, setShowNotifications] = useState(false);
     const [notifications, setNotifications] = useState<Notification[]>([]);
 
+    const notificationRef = React.useRef<HTMLDivElement>(null);
+    const profileRef = React.useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+                setShowNotifications(false);
+            }
+            if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+                setShowProfileDropdown(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, []);
+
     useEffect(() => {
         const userData = localStorage.getItem('user');
         if (!userData) {
@@ -155,7 +174,7 @@ const CollegeAdminLayout: React.FC<CollegeAdminLayoutProps> = ({ children, activ
                     )}
 
                     {/* Notifications */}
-                    <div className="relative">
+                    <div className="relative" ref={notificationRef}>
                         <button
                             onClick={() => setShowNotifications(!showNotifications)}
                             className="bg-white/20 hover:bg-white/30 border-none rounded-xl px-4 py-2 cursor-pointer flex items-center transition-all duration-300"
@@ -220,7 +239,7 @@ const CollegeAdminLayout: React.FC<CollegeAdminLayoutProps> = ({ children, activ
                     </div>
 
                     {/* Profile */}
-                    <div className="relative">
+                    <div className="relative" ref={profileRef}>
                         <button
                             onClick={() => setShowProfileDropdown(!showProfileDropdown)}
                             className="flex items-center gap-3 bg-transparent border-none cursor-pointer focus:outline-none"

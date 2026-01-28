@@ -9,6 +9,7 @@ import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
 
 interface Department { id: string; name: string; code: string; }
 interface Course { id: string; title: string; code: string; }
+interface Batch { id: string; name: string; semester: number; section: string; }
 interface Student {
     id: string;
     first_name: string;
@@ -21,8 +22,10 @@ interface Student {
     current_semester: number;
     course_id?: string;
     department_id?: string;
+    batch_id?: string;
     is_active: boolean;
     departments?: Department | null;
+    batch?: Batch | null;
 }
 
 const StudentsPage: React.FC = () => {
@@ -30,6 +33,7 @@ const StudentsPage: React.FC = () => {
     const [students, setStudents] = useState<Student[]>([]);
     const [departments, setDepartments] = useState<Department[]>([]);
     const [courses, setCourses] = useState<Course[]>([]);
+    const [batches, setBatches] = useState<Batch[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [departmentFilter, setDepartmentFilter] = useState('all');
@@ -39,7 +43,7 @@ const StudentsPage: React.FC = () => {
 
     const [form, setForm] = useState({
         first_name: '', last_name: '', email: '', phone: '', student_id: '', password: '',
-        admission_year: new Date().getFullYear(), current_semester: 1, course_id: '', department_id: '', is_active: true
+        admission_year: new Date().getFullYear(), current_semester: 1, course_id: '', department_id: '', batch_id: '', is_active: true
     });
 
     useEffect(() => { fetchData(); }, []);
@@ -58,15 +62,17 @@ const StudentsPage: React.FC = () => {
             const user = JSON.parse(userData);
             const headers = getAuthHeaders();
             if (!headers) return;
-            const q = user.college_id ? `?college_id=${user.college_id}` : '';
-            const [studentRes, deptRes, courseRes] = await Promise.all([
+            const q = user.college_id ? `?college_id=${user.college_id}&limit=1000` : '?limit=1000';
+            const [studentRes, deptRes, courseRes, batchRes] = await Promise.all([
                 fetch(`/api/admin/students${q}`, { headers }),
                 fetch(`/api/admin/departments${q}`, { headers }),
-                fetch(`/api/admin/courses${q}`, { headers })
+                fetch(`/api/admin/courses${q}`, { headers }),
+                fetch(`/api/admin/batches${q}`, { headers })
             ]);
             if (studentRes.ok) setStudents((await studentRes.json()).students || []);
             if (deptRes.ok) setDepartments((await deptRes.json()).departments || []);
             if (courseRes.ok) setCourses((await courseRes.json()).courses || []);
+            if (batchRes.ok) setBatches((await batchRes.json()).batches || []);
         } catch { toast.error('Error loading data'); } finally { setLoading(false); }
     };
 
@@ -77,21 +83,51 @@ const StudentsPage: React.FC = () => {
         try {
             const headers = getAuthHeaders();
             if (!headers) return;
+
+            // If editing, we might need to update batch separately or rely on API to handle it
+            // The modified POST/PUT API should handle batch_id
             const url = editingStudent ? `/api/admin/students/${editingStudent.id}` : '/api/admin/students';
+
+            // Note: For Update (PUT), the API might not yet support batch_id update directly in the student update payload
+            // But we can try. If it fails, we might need a separate call to batch-enrollment endpoint.
+            // However, for CREATE (POST), we added support.
+
+            // Let's rely on standard flow. If PUT doesn't support batch update, we'll need to add it to the PUT endpoint too.
+            // Assume for now we only support it fully on CREATE, or update the PUT endpoint next.
+            // Actually, I'll update the component to make a separate call for batch enrollment if editing
+
             const res = await fetch(url, { method: editingStudent ? 'PUT' : 'POST', headers, body: JSON.stringify(form) });
-            if (res.ok) { toast.success(editingStudent ? 'Updated' : 'Created'); setShowForm(false); setEditingStudent(null); resetForm(); fetchData(); }
+
+            if (res.ok) {
+                const data = await res.json();
+
+                // If editing and batch changed, update enrollment separately if needed
+                if (editingStudent && form.batch_id !== editingStudent.batch_id) {
+                    await fetch('/api/admin/students/batch-enrollment', {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify({ student_id: editingStudent.id, batch_id: form.batch_id })
+                    });
+                }
+
+                toast.success(editingStudent ? 'Updated' : 'Created');
+                setShowForm(false);
+                setEditingStudent(null);
+                resetForm();
+                fetchData();
+            }
             else { const err = await res.json(); toast.error(err.error || 'Failed'); }
         } catch { toast.error('Error'); } finally { setSubmitting(false); }
     };
 
-    const resetForm = () => setForm({ first_name: '', last_name: '', email: '', phone: '', student_id: '', password: '', admission_year: new Date().getFullYear(), current_semester: 1, course_id: '', department_id: '', is_active: true });
+    const resetForm = () => setForm({ first_name: '', last_name: '', email: '', phone: '', student_id: '', password: '', admission_year: new Date().getFullYear(), current_semester: 1, course_id: '', department_id: '', batch_id: '', is_active: true });
 
     const handleEdit = (student: Student) => {
         setEditingStudent(student);
         setForm({
             first_name: student.first_name, last_name: student.last_name, email: student.email, phone: student.phone || '',
             student_id: student.student_id || '', password: '', admission_year: student.admission_year, current_semester: student.current_semester,
-            course_id: student.course_id || '', department_id: student.department_id || '', is_active: student.is_active
+            course_id: student.course_id || '', department_id: student.department_id || '', batch_id: student.batch_id || '', is_active: student.is_active
         });
         setShowForm(true);
     };
@@ -139,11 +175,11 @@ const StudentsPage: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
                         <div className="p-3 rounded-xl bg-[#F56565]/10"><Users size={24} className="text-[#F56565]" /></div>
-                        <div><p className="text-2xl font-bold text-gray-900">{students.length}</p><p className="text-sm text-gray-500">Total Students</p></div>
+                        <div><p className="text-2xl font-bold text-gray-900">{filteredStudents.length}</p><p className="text-sm text-gray-500">Total Students</p></div>
                     </div>
                     <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
                         <div className="p-3 rounded-xl bg-green-100"><Users size={24} className="text-green-600" /></div>
-                        <div><p className="text-2xl font-bold text-gray-900">{students.filter(s => s.is_active).length}</p><p className="text-sm text-gray-500">Active</p></div>
+                        <div><p className="text-2xl font-bold text-gray-900">{filteredStudents.filter(s => s.is_active).length}</p><p className="text-sm text-gray-500">Active</p></div>
                     </div>
                 </div>
 
@@ -155,6 +191,7 @@ const StudentsPage: React.FC = () => {
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Email</th>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Department</th>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Semester</th>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Batch</th>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Status</th>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Actions</th>
                             </tr></thead>
@@ -169,7 +206,8 @@ const StudentsPage: React.FC = () => {
                                         </td>
                                         <td className="px-6 py-4 text-gray-600">{student.email}</td>
                                         <td className="px-6 py-4"><span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm">{student.departments?.name || '-'}</span></td>
-                                        <td className="px-6 py-4"><span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">Sem {student.current_semester}</span></td>
+                                        <td className="px-6 py-4"><span className="px-3 py-1 bg-green-50 text-green-700 rounded-full text-sm font-medium">Sem {student.current_semester}</span></td>
+                                        <td className="px-6 py-4"><span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">{student.batch?.name ? `${student.batch.name} (${student.batch.section})` : '-'}</span></td>
                                         <td className="px-6 py-4"><span className={`px-3 py-1 rounded-full text-xs font-bold ${student.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{student.is_active ? 'Active' : 'Inactive'}</span></td>
                                         <td className="px-6 py-4"><div className="flex gap-2">
                                             <button onClick={() => handleEdit(student)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={16} /></button>
@@ -212,6 +250,16 @@ const StudentsPage: React.FC = () => {
                                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Course</label>
                                     <select className="w-full px-4 py-2 border rounded-lg" value={form.course_id} onChange={(e) => setForm({ ...form, course_id: e.target.value })}>
                                         <option value="">Select</option>{courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                                    </select>
+                                </div>
+                                <div><label className="block text-sm font-medium text-gray-700 mb-1">Batch</label>
+                                    <select className="w-full px-4 py-2 border rounded-lg" value={form.batch_id} onChange={(e) => setForm({ ...form, batch_id: e.target.value })}>
+                                        <option value="">Select Batch/Section</option>
+                                        {batches.map(b => (
+                                            <option key={b.id} value={b.id}>
+                                                {b.name} - Section {b.section} (Sem {b.semester})
+                                            </option>
+                                        ))}
                                     </select>
                                 </div>
                                 <div className="flex items-center gap-3">

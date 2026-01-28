@@ -31,6 +31,8 @@ const BatchesPage: React.FC = () => {
     const [courses, setCourses] = useState<Course[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [departmentFilter, setDepartmentFilter] = useState('all');
+    const [semesterFilter, setSemesterFilter] = useState('all');
     const [showForm, setShowForm] = useState(false);
     const [editingBatch, setEditingBatch] = useState<Batch | null>(null);
     const [submitting, setSubmitting] = useState(false);
@@ -106,7 +108,14 @@ const BatchesPage: React.FC = () => {
         } catch { toast.error('Error'); }
     };
 
-    const filteredBatches = batches.filter(b => b.name.toLowerCase().includes(searchQuery.toLowerCase()) || b.section.toLowerCase().includes(searchQuery.toLowerCase()));
+    const uniqueSemesters = [...new Set(batches.map(b => b.semester))].sort((a, b) => a - b);
+
+    const filteredBatches = batches.filter(b => {
+        const matchesSearch = b.name.toLowerCase().includes(searchQuery.toLowerCase()) || b.section.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesDept = departmentFilter === 'all' || b.department_id === departmentFilter;
+        const matchesSem = semesterFilter === 'all' || b.semester.toString() === semesterFilter;
+        return matchesSearch && matchesDept && matchesSem;
+    });
 
     return (
         <CollegeAdminLayout activeTab="batches">
@@ -120,20 +129,30 @@ const BatchesPage: React.FC = () => {
                 </div>
 
                 <div className="bg-white rounded-2xl shadow-lg p-6">
-                    <div className="relative">
-                        <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                        <input type="text" placeholder="Search batches..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none" />
+                    <div className="flex gap-4 flex-wrap">
+                        <div className="relative flex-1 min-w-[200px]">
+                            <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input type="text" placeholder="Search batches..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none" />
+                        </div>
+                        <select value={departmentFilter} onChange={(e) => setDepartmentFilter(e.target.value)} className="px-4 py-3 border border-gray-200 rounded-xl min-w-[180px]">
+                            <option value="all">All Departments</option>
+                            {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                        </select>
+                        <select value={semesterFilter} onChange={(e) => setSemesterFilter(e.target.value)} className="px-4 py-3 border border-gray-200 rounded-xl min-w-[150px]">
+                            <option value="all">All Semesters</option>
+                            {uniqueSemesters.map(sem => <option key={sem} value={sem.toString()}>Semester {sem}</option>)}
+                        </select>
                     </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
                         <div className="p-3 rounded-xl bg-[#ED8936]/10"><Layers size={24} className="text-[#ED8936]" /></div>
-                        <div><p className="text-2xl font-bold text-gray-900">{batches.length}</p><p className="text-sm text-gray-500">Total Batches</p></div>
+                        <div><p className="text-2xl font-bold text-gray-900">{filteredBatches.length}</p><p className="text-sm text-gray-500">Total Batches</p></div>
                     </div>
                     <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
                         <div className="p-3 rounded-xl bg-green-100"><Layers size={24} className="text-green-600" /></div>
-                        <div><p className="text-2xl font-bold text-gray-900">{batches.filter(b => b.is_active).length}</p><p className="text-sm text-gray-500">Active</p></div>
+                        <div><p className="text-2xl font-bold text-gray-900">{filteredBatches.filter(b => b.is_active).length}</p><p className="text-sm text-gray-500">Active</p></div>
                     </div>
                 </div>
 

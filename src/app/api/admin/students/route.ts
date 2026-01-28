@@ -105,7 +105,6 @@ export async function GET(request: NextRequest) {
     }
 
     // Optimized efficient fetch with embedded resources (Joins)
-    // Optimized efficient fetch with embedded resources (Joins)
     const { data: studentsData, count, error: queryError } = await supabaseAdmin
       .from('users')
       .select(`
@@ -114,7 +113,7 @@ export async function GET(request: NextRequest) {
         course:courses(id, title, code)
       `, { count: 'exact' })
       .eq('college_id', targetCollegeId)
-      .eq('role', 'student') // Or check logic for student
+      .eq('role', 'student')
       .order('created_at', { ascending: false })
       .range(from, to);
 
@@ -122,12 +121,52 @@ export async function GET(request: NextRequest) {
       throw queryError;
     }
 
+    // Fetch batch enrollments for all students
+    const studentIds = (studentsData || []).map((s: any) => s.id);
+    let batchEnrollments: any[] = [];
+
+    if (studentIds.length > 0) {
+      const { data: enrollments } = await supabaseAdmin
+        .from('student_batch_enrollment' as any)
+        .select(`
+          student_id,
+          batch_id,
+          is_active
+        `)
+        .in('student_id', studentIds)
+        .eq('is_active', true);
+
+      if (enrollments) {
+        // Fetch batch details for active enrollments
+        const batchIds = [...new Set(enrollments.map((e: any) => e.batch_id))];
+        if (batchIds.length > 0) {
+          const { data: batches } = await supabaseAdmin
+            .from('batches')
+            .select('id, name, semester, section, academic_year')
+            .in('id', batchIds);
+
+          // Create a map of batch_id to batch details
+          const batchMap = new Map((batches || []).map((b: any) => [b.id, b]));
+
+          // Combine enrollment with batch details
+          batchEnrollments = enrollments.map((e: any) => ({
+            ...e,
+            batch: batchMap.get(e.batch_id) || null
+          }));
+        }
+      }
+    }
+
+    // Create a map of student_id to their batch enrollment
+    const studentBatchMap = new Map(
+      batchEnrollments.map((e: any) => [e.student_id, e])
+    );
+
     // Map response
     const mappedStudents = (studentsData || []).map((s: any) => {
-      // Supabase returns objects for relations (or arrays if 1:many, assume 1:1 for dept/course on user)
-      // Check if department/course is array or object
       const dept = Array.isArray(s.department) ? s.department[0] : s.department;
       const course = Array.isArray(s.course) ? s.course[0] : s.course;
+      const enrollment = studentBatchMap.get(s.id);
 
       return {
         id: s.id,
@@ -155,7 +194,9 @@ export async function GET(request: NextRequest) {
           id: course.id,
           title: course.title,
           code: course.code
-        } : null
+        } : null,
+        batch_id: enrollment?.batch_id || null,
+        batch: enrollment?.batch || null
       };
     });
 
@@ -192,7 +233,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { first_name, last_name, email, student_id, phone, password, current_semester, admission_year, course_id, department_id, is_active } = body;
+    const { first_name, last_name, email, student_id, phone, password, current_semester, admission_year, course_id, department_id, batch_id, is_active } = body;
 
     // Validation
     if (!first_name || !last_name || !email || !course_id || !department_id || !password) {
@@ -234,6 +275,23 @@ export async function POST(request: NextRequest) {
       // Fields not needed for student
       facultyType: null
     });
+
+    // If batch_id is provided, create enrollment in student_batch_enrollment
+    if (batch_id) {
+      const { error: enrollmentError } = await supabaseAdmin
+        .from('student_batch_enrollment' as any)
+        .insert({
+          student_id: newStudent.id,
+          batch_id: batch_id,
+          is_active: true,
+          enrollment_date: new Date().toISOString().split('T')[0]
+        } as any);
+
+      if (enrollmentError) {
+        console.error('Error creating batch enrollment:', enrollmentError);
+        // Don't fail the whole request, student was created
+      }
+    }
 
     return ApiResponse.created({ student: newStudent.toJSON() });
 

@@ -212,7 +212,7 @@ const DepartmentsPage: React.FC = () => {
                             <Building2 size={24} className="text-[#4D869C]" />
                         </div>
                         <div>
-                            <p className="text-2xl font-bold text-gray-900">{departments.length}</p>
+                            <p className="text-2xl font-bold text-gray-900">{filteredDepartments.length}</p>
                             <p className="text-sm text-gray-500">Total Departments</p>
                         </div>
                     </div>

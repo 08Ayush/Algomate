@@ -118,15 +118,15 @@ const CoursesPage: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
                         <div className="p-3 rounded-xl bg-[#9F7AEA]/10"><GraduationCap size={24} className="text-[#9F7AEA]" /></div>
-                        <div><p className="text-2xl font-bold text-gray-900">{courses.length}</p><p className="text-sm text-gray-500">Total Courses</p></div>
+                        <div><p className="text-2xl font-bold text-gray-900">{filteredCourses.length}</p><p className="text-sm text-gray-500">Total Courses</p></div>
                     </div>
                     <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
                         <div className="p-3 rounded-xl bg-blue-100"><Clock size={24} className="text-blue-600" /></div>
-                        <div><p className="text-2xl font-bold text-gray-900">{courses.reduce((acc, c) => acc + (c.duration_years || 0), 0) / courses.length || 0}</p><p className="text-sm text-gray-500">Avg Duration (yrs)</p></div>
+                        <div><p className="text-2xl font-bold text-gray-900">{filteredCourses.length ? (filteredCourses.reduce((acc, c) => acc + (c.duration_years || 0), 0) / filteredCourses.length).toFixed(1) : 0}</p><p className="text-sm text-gray-500">Avg Duration (yrs)</p></div>
                     </div>
                     <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
                         <div className="p-3 rounded-xl bg-green-100"><GraduationCap size={24} className="text-green-600" /></div>
-                        <div><p className="text-2xl font-bold text-gray-900">{courses.reduce((acc, c) => acc + c.intake, 0)}</p><p className="text-sm text-gray-500">Total Intake</p></div>
+                        <div><p className="text-2xl font-bold text-gray-900">{filteredCourses.reduce((acc, c) => acc + c.intake, 0)}</p><p className="text-sm text-gray-500">Total Intake</p></div>
                     </div>
                 </div>
 

@@ -56,12 +56,24 @@ export async function GET(request: NextRequest) {
     let departmentInfo = null;
     let batchInfo = null;
 
-    const { data: enrollment } = await supabase
+    const { data: enrollment, error: enrollmentError } = await supabase
       .from('student_batch_enrollment')
       .select(`
+        id,
         batch_id,
-        academic_year,
-        batches (
+        is_active,
+        created_at
+      `)
+      .eq('student_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (enrollment && enrollment.batch_id) {
+      // Fetch batch details separately for more reliable join
+      const { data: batch, error: batchError } = await supabase
+        .from('batches')
+        .select(`
           id,
           name,
           semester,
@@ -69,34 +81,34 @@ export async function GET(request: NextRequest) {
           academic_year,
           department_id,
           course_id,
-          departments (
+          departments:department_id (
             id,
             name,
             code
           )
-        )
-      `)
-      .eq('student_id', userId)
-      .eq('is_active', true)
-      .single();
+        `)
+        .eq('id', enrollment.batch_id)
+        .single();
 
-    if (enrollment && enrollment.batches) {
-      const batch = Array.isArray(enrollment.batches) ? enrollment.batches[0] : enrollment.batches;
-      batchInfo = {
-        id: batch.id,
-        name: batch.name,
-        semester: batch.semester,
-        section: batch.section,
-        academic_year: batch.academic_year || enrollment.academic_year
-      };
-
-      if (batch.departments) {
-        const dept = Array.isArray(batch.departments) ? batch.departments[0] : batch.departments;
-        departmentInfo = {
-          id: dept.id,
-          name: dept.name,
-          code: dept.code
+      if (batch) {
+        batchInfo = {
+          id: batch.id,
+          name: batch.name,
+          semester: batch.semester,
+          section: batch.section,
+          academic_year: batch.academic_year
         };
+
+        if (batch.departments) {
+          const dept = Array.isArray(batch.departments) ? batch.departments[0] : batch.departments;
+          if (dept) {
+            departmentInfo = {
+              id: dept.id,
+              name: dept.name,
+              code: dept.code
+            };
+          }
+        }
       }
     }
 

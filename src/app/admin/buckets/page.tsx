@@ -231,19 +231,19 @@ const BucketsPage: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
                         <div className="p-3 rounded-xl bg-[#5A67D8]/10"><ClipboardList size={24} className="text-[#5A67D8]" /></div>
-                        <div><p className="text-2xl font-bold text-gray-900">{buckets.length}</p><p className="text-sm text-gray-500">Total Buckets</p></div>
+                        <div><p className="text-2xl font-bold text-gray-900">{filteredBuckets.length}</p><p className="text-sm text-gray-500">Total Buckets</p></div>
                     </div>
                     <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
                         <div className="p-3 rounded-xl bg-orange-100"><Pen size={24} className="text-orange-600" /></div>
-                        <div><p className="text-2xl font-bold text-gray-900">{buckets.filter(b => b.is_live_for_creators).length}</p><p className="text-sm text-gray-500">Live for Creators</p></div>
+                        <div><p className="text-2xl font-bold text-gray-900">{filteredBuckets.filter(b => b.is_live_for_creators).length}</p><p className="text-sm text-gray-500">Live for Creators</p></div>
                     </div>
                     <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
                         <div className="p-3 rounded-xl bg-blue-100"><Users size={24} className="text-blue-600" /></div>
-                        <div><p className="text-2xl font-bold text-gray-900">{buckets.filter(b => b.is_live_for_students).length}</p><p className="text-sm text-gray-500">Live for Students</p></div>
+                        <div><p className="text-2xl font-bold text-gray-900">{filteredBuckets.filter(b => b.is_live_for_students).length}</p><p className="text-sm text-gray-500">Live for Students</p></div>
                     </div>
                     <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
                         <div className="p-3 rounded-xl bg-green-100"><CheckCircle size={24} className="text-green-600" /></div>
-                        <div><p className="text-2xl font-bold text-gray-900">{buckets.filter(b => b.is_published).length}</p><p className="text-sm text-gray-500">Published</p></div>
+                        <div><p className="text-2xl font-bold text-gray-900">{filteredBuckets.filter(b => b.is_published).length}</p><p className="text-sm text-gray-500">Published</p></div>
                     </div>
                 </div>
 
@@ -290,8 +290,8 @@ const BucketsPage: React.FC = () => {
                                                     <button
                                                         onClick={() => handleToggleLiveForCreators(bucket)}
                                                         className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${bucket.is_live_for_creators
-                                                                ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
-                                                                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                                            ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                                                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                                                             }`}
                                                         title={bucket.is_live_for_creators ? 'Click to disable' : 'Click to enable'}
                                                     >
@@ -303,8 +303,8 @@ const BucketsPage: React.FC = () => {
                                                     <button
                                                         onClick={() => handleToggleLiveForStudents(bucket)}
                                                         className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${bucket.is_live_for_students
-                                                                ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                                                                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                                            ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                                                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                                                             }`}
                                                         title={bucket.is_live_for_students ? 'Click to disable' : 'Click to enable'}
                                                     >

@@ -42,6 +42,25 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children, activeTab }) =>
     const [showNotifications, setShowNotifications] = useState(false);
     const [notifications, setNotifications] = useState<Notification[]>([]);
 
+    const notificationRef = React.useRef<HTMLDivElement>(null);
+    const profileRef = React.useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+                setShowNotifications(false);
+            }
+            if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+                setShowProfileDropdown(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, []);
+
     useEffect(() => {
         const userData = localStorage.getItem('user');
         if (!userData) {
@@ -55,7 +74,25 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children, activeTab }) =>
         }
         setUser(parsedUser);
         fetchNotifications(parsedUser.id);
+        fetchUserData(parsedUser.id);
     }, [router]);
+
+    const fetchUserData = async (userId: string) => {
+        try {
+            const res = await fetch(`/api/student/dashboard?userId=${userId}&role=student`);
+            const data = await res.json();
+            if (data.success && data.user) {
+                // Merge with existing user data to preserve key fields if any
+                setUser((prev: any) => {
+                    const updated = { ...prev, ...data.user };
+                    localStorage.setItem('user', JSON.stringify(updated));
+                    return updated;
+                });
+            }
+        } catch (e) {
+            console.error('Error fetching user data', e);
+        }
+    };
 
     const fetchNotifications = async (userId: string) => {
         try {
@@ -126,8 +163,8 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children, activeTab }) =>
                             key={id}
                             onClick={() => router.push(path)}
                             className={`flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm transition-all ${activeTab === id
-                                    ? 'bg-white text-[#4D869C] shadow-md'
-                                    : 'text-white/90 hover:bg-white/20'
+                                ? 'bg-white text-[#4D869C] shadow-md'
+                                : 'text-white/90 hover:bg-white/20'
                                 }`}
                         >
                             <Icon size={18} />
@@ -139,7 +176,7 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children, activeTab }) =>
                 {/* Right Side Actions */}
                 <div className="flex items-center gap-3 lg:gap-4">
                     {/* Notifications */}
-                    <div className="relative">
+                    <div className="relative" ref={notificationRef}>
                         <button
                             onClick={() => setShowNotifications(!showNotifications)}
                             className="bg-white/20 hover:bg-white/30 border-none rounded-xl px-3 py-2 cursor-pointer flex items-center transition-all duration-300"
@@ -181,8 +218,8 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children, activeTab }) =>
                                                 >
                                                     <div className="flex items-start gap-3">
                                                         <div className={`p-2 rounded-full ${notification.type === 'system_alert' ? 'bg-orange-100 text-orange-600' :
-                                                                notification.type === 'timetable_published' ? 'bg-green-100 text-green-600' :
-                                                                    'bg-[#4D869C]/10 text-[#4D869C]'
+                                                            notification.type === 'timetable_published' ? 'bg-green-100 text-green-600' :
+                                                                'bg-[#4D869C]/10 text-[#4D869C]'
                                                             }`}>
                                                             {notification.type === 'system_alert' ? <AlertTriangle size={16} /> :
                                                                 notification.type === 'timetable_published' ? <CheckCircle2 size={16} /> :
@@ -209,7 +246,7 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children, activeTab }) =>
                     </div>
 
                     {/* Profile */}
-                    <div className="relative">
+                    <div className="relative" ref={profileRef}>
                         <button
                             onClick={() => setShowProfileDropdown(!showProfileDropdown)}
                             className="flex items-center gap-2 lg:gap-3 bg-transparent border-none cursor-pointer focus:outline-none"
@@ -218,7 +255,7 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children, activeTab }) =>
                                 {user?.first_name?.[0] || 'S'}
                             </div>
                             <div className="hidden lg:block text-left">
-                                <p className="text-white font-medium text-sm">{user?.first_name} {user?.last_name}</p>
+                                <p className="text-white font-medium text-sm">{user?.first_name || 'Student'} {user?.last_name}</p>
                                 <p className="text-white/70 text-xs">Student</p>
                             </div>
                             <ChevronDown size={16} className={`text-white transition-transform duration-200 ${showProfileDropdown ? 'rotate-180' : ''}`} />
@@ -238,7 +275,7 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children, activeTab }) =>
                                                 {user?.first_name?.[0] || 'S'}
                                             </div>
                                             <div>
-                                                <p className="font-bold text-gray-800 text-sm m-0">{user?.first_name} {user?.last_name}</p>
+                                                <p className="font-bold text-gray-800 text-sm m-0">{user?.first_name || 'Student'} {user?.last_name || ''}</p>
                                                 <p className="text-xs text-gray-500 m-0 truncate w-[140px]">{user?.email}</p>
                                             </div>
                                         </div>
@@ -286,8 +323,8 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children, activeTab }) =>
                             key={id}
                             onClick={() => router.push(path)}
                             className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all ${activeTab === id
-                                    ? 'text-[#4D869C]'
-                                    : 'text-gray-500'
+                                ? 'text-[#4D869C]'
+                                : 'text-gray-500'
                                 }`}
                         >
                             <Icon size={20} strokeWidth={activeTab === id ? 2.5 : 2} />

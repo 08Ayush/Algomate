@@ -630,11 +630,11 @@ const SubjectAllotmentPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
               <div className="p-3 rounded-xl bg-blue-100"><Users size={24} className="text-blue-600" /></div>
-              <div><p className="text-2xl font-bold text-gray-900">{studentChoices.length}</p><p className="text-sm text-gray-500">Pending Choices</p></div>
+              <div><p className="text-2xl font-bold text-gray-900">{filteredChoices.length}</p><p className="text-sm text-gray-500">Pending Choices</p></div>
             </div>
             <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
               <div className="p-3 rounded-xl bg-green-100"><CheckCircle size={24} className="text-green-600" /></div>
-              <div><p className="text-2xl font-bold text-gray-900">{allotments.length}</p><p className="text-sm text-gray-500">Allotted</p></div>
+              <div><p className="text-2xl font-bold text-gray-900">{filteredAllotments.length}</p><p className="text-sm text-gray-500">Allotted</p></div>
             </div>
             <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
               <div className="p-3 rounded-xl bg-purple-100"><BookOpen size={24} className="text-purple-600" /></div>
@@ -642,7 +642,7 @@ const SubjectAllotmentPage: React.FC = () => {
             </div>
             <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
               <div className="p-3 rounded-xl bg-orange-100"><AlertCircle size={24} className="text-orange-600" /></div>
-              <div><p className="text-2xl font-bold text-gray-900">{studentChoices.length + allotments.length}</p><p className="text-sm text-gray-500">Total Submissions</p></div>
+              <div><p className="text-2xl font-bold text-gray-900">{filteredChoices.length + filteredAllotments.length}</p><p className="text-sm text-gray-500">Total Submissions</p></div>
             </div>
           </div>
         )}

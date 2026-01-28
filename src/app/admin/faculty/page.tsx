@@ -278,7 +278,7 @@ const FacultyPage: React.FC = () => {
                             <Users size={24} className="text-[#7AB2B2]" />
                         </div>
                         <div>
-                            <p className="text-2xl font-bold text-gray-900">{faculty.length}</p>
+                            <p className="text-2xl font-bold text-gray-900">{filteredFaculty.length}</p>
                             <p className="text-sm text-gray-500">Total Faculty</p>
                         </div>
                     </div>
@@ -287,7 +287,7 @@ const FacultyPage: React.FC = () => {
                             <Users size={24} className="text-green-600" />
                         </div>
                         <div>
-                            <p className="text-2xl font-bold text-gray-900">{faculty.filter(f => f.is_active).length}</p>
+                            <p className="text-2xl font-bold text-gray-900">{filteredFaculty.filter(f => f.is_active).length}</p>
                             <p className="text-sm text-gray-500">Active</p>
                         </div>
                     </div>

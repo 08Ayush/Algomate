@@ -150,15 +150,15 @@ const SubjectsPage: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
                         <div className="p-3 rounded-xl bg-[#48BB78]/10"><BookOpen size={24} className="text-[#48BB78]" /></div>
-                        <div><p className="text-2xl font-bold text-gray-900">{subjects.length}</p><p className="text-sm text-gray-500">Total Subjects</p></div>
+                        <div><p className="text-2xl font-bold text-gray-900">{filteredSubjects.length}</p><p className="text-sm text-gray-500">Total Subjects</p></div>
                     </div>
                     <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
                         <div className="p-3 rounded-xl bg-gray-100"><BookOpen size={24} className="text-gray-600" /></div>
-                        <div><p className="text-2xl font-bold text-gray-900">{subjects.filter(s => s.subject_type === 'THEORY').length}</p><p className="text-sm text-gray-500">Theory</p></div>
+                        <div><p className="text-2xl font-bold text-gray-900">{filteredSubjects.filter(s => s.subject_type === 'THEORY').length}</p><p className="text-sm text-gray-500">Theory</p></div>
                     </div>
                     <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
                         <div className="p-3 rounded-xl bg-purple-100"><BookOpen size={24} className="text-purple-600" /></div>
-                        <div><p className="text-2xl font-bold text-gray-900">{subjects.filter(s => s.subject_type === 'LAB').length}</p><p className="text-sm text-gray-500">Labs</p></div>
+                        <div><p className="text-2xl font-bold text-gray-900">{filteredSubjects.filter(s => s.subject_type === 'LAB').length}</p><p className="text-sm text-gray-500">Labs</p></div>
                     </div>
                 </div>
 

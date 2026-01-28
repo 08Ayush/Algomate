@@ -88,8 +88,9 @@ const SubjectsPage: React.FC = () => {
     return colors[category || ''] || 'text-gray-700 bg-gray-50';
   };
 
-  const totalTheory = subjects.filter(s => s.subject_type?.toLowerCase() === 'theory').length;
-  const totalLab = subjects.filter(s => s.subject_type?.toLowerCase() === 'lab' || s.subject_type?.toLowerCase() === 'practical' || s.requires_lab).length;
+  const totalTheory = filteredSubjects.filter(s => s.subject_type?.toLowerCase() === 'theory').length;
+  const totalLab = filteredSubjects.filter(s => s.subject_type?.toLowerCase() === 'lab' || s.subject_type?.toLowerCase() === 'practical' || s.requires_lab).length;
+  const filteredUniqueSemesters = [...new Set(filteredSubjects.map(s => s.semester).filter(Boolean))];
 
   return (
     <FacultyCreatorLayout activeTab="subjects">
@@ -144,7 +145,7 @@ const SubjectsPage: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
             <div className="p-3 rounded-xl bg-blue-100"><BookOpen size={24} className="text-blue-600" /></div>
-            <div><p className="text-2xl font-bold text-gray-900">{subjects.length}</p><p className="text-sm text-gray-500">Total Subjects</p></div>
+            <div><p className="text-2xl font-bold text-gray-900">{filteredSubjects.length}</p><p className="text-sm text-gray-500">Total Subjects</p></div>
           </div>
           <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
             <div className="p-3 rounded-xl bg-green-100"><Clock size={24} className="text-green-600" /></div>
@@ -159,11 +160,11 @@ const SubjectsPage: React.FC = () => {
           </div>
           <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
             <div className="p-3 rounded-xl bg-purple-100"><Tag size={24} className="text-purple-600" /></div>
-            <div><p className="text-2xl font-bold text-gray-900">{subjects.reduce((sum, s) => sum + (s.credits || 0), 0)}</p><p className="text-sm text-gray-500">Total Credits</p></div>
+            <div><p className="text-2xl font-bold text-gray-900">{filteredSubjects.reduce((sum, s) => sum + (s.credits || 0), 0)}</p><p className="text-sm text-gray-500">Total Credits</p></div>
           </div>
           <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
             <div className="p-3 rounded-xl bg-orange-100"><Building size={24} className="text-orange-600" /></div>
-            <div><p className="text-2xl font-bold text-gray-900">{uniqueSemesters.length}</p><p className="text-sm text-gray-500">Semesters</p></div>
+            <div><p className="text-2xl font-bold text-gray-900">{filteredUniqueSemesters.length}</p><p className="text-sm text-gray-500">Semesters</p></div>
           </div>
         </div>
 

@@ -170,38 +170,54 @@ export class SupabaseDashboardQueryService implements IDashboardQueryService {
     async getStudentDashboardData(userId: string, courseId: string, semester: number, collegeId: string): Promise<any> {
         const additionalData: any = {};
 
-        // Fetch batch, faculty, and course batches
+        // 1. Check for explicit batch enrollment first
+        const { data: enrollment } = await this.supabase
+            .from('student_batch_enrollment')
+            .select('batch_id')
+            .eq('student_id', userId)
+            .eq('is_active', true)
+            .maybeSingle();
+
+        // 2. Prepare batch query
+        let batchQuery = this.supabase
+            .from('batches')
+            .select(`
+                id,
+                name,
+                section,
+                semester,
+                academic_year,
+                actual_strength,
+                course_id,
+                department_id,
+                course:courses!course_id (
+                  code
+                ),
+                departments:departments!batches_department_id_fkey (
+                  id,
+                  name,
+                  code
+                )
+            `);
+
+        if (enrollment?.batch_id) {
+            batchQuery = batchQuery.eq('id', enrollment.batch_id);
+        } else {
+            // Fallback: match by course and semester if no specific enrollment
+            batchQuery = batchQuery
+                .eq('college_id', collegeId)
+                .eq('course_id', courseId)
+                .eq('semester', semester)
+                .eq('is_active', true);
+        }
+
+        // 3. Execute queries in parallel
         const [
             { data: batchData },
             { data: facultyMembers },
             { data: courseBatches }
         ] = await Promise.all([
-            this.supabase
-                .from('batches')
-                .select(`
-            id,
-            name,
-            section,
-            semester,
-            academic_year,
-            actual_strength,
-            course_id,
-            department_id,
-            course:courses!course_id (
-              code
-            ),
-            departments:departments!batches_department_id_fkey (
-              id,
-              name,
-              code
-            )
-          `)
-                .eq('college_id', collegeId)
-                .eq('course_id', courseId)
-                .eq('semester', semester)
-                .eq('is_active', true)
-                .limit(1)
-                .maybeSingle(),
+            batchQuery.limit(1).maybeSingle(),
             this.supabase
                 .from('users')
                 .select(`

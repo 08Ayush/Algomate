@@ -234,15 +234,15 @@ const ClassroomsPage: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
                         <div className="p-3 rounded-xl bg-[#5A67D8]/10"><DoorOpen size={24} className="text-[#5A67D8]" /></div>
-                        <div><p className="text-2xl font-bold text-gray-900">{classrooms.length}</p><p className="text-sm text-gray-500">Total Rooms</p></div>
+                        <div><p className="text-2xl font-bold text-gray-900">{filteredClassrooms.length}</p><p className="text-sm text-gray-500">Total Rooms</p></div>
                     </div>
                     <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
                         <div className="p-3 rounded-xl bg-purple-100"><Cpu size={24} className="text-purple-600" /></div>
-                        <div><p className="text-2xl font-bold text-gray-900">{classrooms.filter(c => c.type === 'Lab').length}</p><p className="text-sm text-gray-500">Labs</p></div>
+                        <div><p className="text-2xl font-bold text-gray-900">{filteredClassrooms.filter(c => c.type === 'Lab').length}</p><p className="text-sm text-gray-500">Labs</p></div>
                     </div>
                     <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
                         <div className="p-3 rounded-xl bg-green-100"><Monitor size={24} className="text-green-600" /></div>
-                        <div><p className="text-2xl font-bold text-gray-900">{classrooms.filter(c => c.has_projector).length}</p><p className="text-sm text-gray-500">With Projector</p></div>
+                        <div><p className="text-2xl font-bold text-gray-900">{filteredClassrooms.filter(c => c.has_projector).length}</p><p className="text-sm text-gray-500">With Projector</p></div>
                     </div>
                 </div>
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
 interface DashboardHeaderProps {
@@ -15,7 +15,24 @@ export default function DashboardHeader({ user, onLogout, onToggleSidebar, isSid
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const router = useRouter();
 
+  const notificationRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setShowNotifications(false);
+      }
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setShowProfileMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const handleLogout = () => {
     if (onLogout) {
@@ -67,7 +84,7 @@ export default function DashboardHeader({ user, onLogout, onToggleSidebar, isSid
         <div className="flex items-center space-x-4">
 
           {/* Notifications */}
-          <div className="relative">
+          <div className="relative" ref={notificationRef}>
             <button
               onClick={() => setShowNotifications(!showNotifications)}
               className="p-2 text-gray-400 hover:text-gray-500 hover:bg-gray-100 rounded-lg transition-colors relative"
@@ -94,9 +111,8 @@ export default function DashboardHeader({ user, onLogout, onToggleSidebar, isSid
                   {notifications.map((notification) => (
                     <div key={notification.id} className="p-4 border-b border-gray-100 hover:bg-gray-50">
                       <div className="flex items-start space-x-3">
-                        <div className={`w-2 h-2 rounded-full mt-2 ${
-                          notification.type === 'success' ? 'bg-green-500' : 'bg-blue-500'
-                        }`} />
+                        <div className={`w-2 h-2 rounded-full mt-2 ${notification.type === 'success' ? 'bg-green-500' : 'bg-blue-500'
+                          }`} />
                         <div className="flex-1">
                           <p className="font-medium text-gray-900">{notification.title}</p>
                           <p className="text-sm text-gray-600 mt-1">{notification.message}</p>
@@ -114,7 +130,7 @@ export default function DashboardHeader({ user, onLogout, onToggleSidebar, isSid
           </div>
 
           {/* Profile Avatar */}
-          <div className="relative">
+          <div className="relative" ref={profileRef}>
             <button
               onClick={() => setShowProfileMenu(!showProfileMenu)}
               className="flex items-center space-x-2 p-2 hover:bg-gray-100 rounded-lg transition-colors"

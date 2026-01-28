@@ -238,7 +238,7 @@ const ConstraintsPage: React.FC = () => {
                             <AlertTriangle size={24} className="text-red-600" />
                         </div>
                         <div>
-                            <p className="text-2xl font-bold text-gray-900">{constraints.filter(c => c.rule_type === 'HARD').length}</p>
+                            <p className="text-2xl font-bold text-gray-900">{filteredConstraints.filter(c => c.rule_type === 'HARD').length}</p>
                             <p className="text-sm text-gray-500">Hard Constraints</p>
                         </div>
                     </div>
@@ -247,7 +247,7 @@ const ConstraintsPage: React.FC = () => {
                             <Settings size={24} className="text-blue-600" />
                         </div>
                         <div>
-                            <p className="text-2xl font-bold text-gray-900">{constraints.filter(c => c.rule_type === 'SOFT').length}</p>
+                            <p className="text-2xl font-bold text-gray-900">{filteredConstraints.filter(c => c.rule_type === 'SOFT').length}</p>
                             <p className="text-sm text-gray-500">Soft Constraints</p>
                         </div>
                     </div>
@@ -256,7 +256,7 @@ const ConstraintsPage: React.FC = () => {
                             <CheckCircle size={24} className="text-purple-600" />
                         </div>
                         <div>
-                            <p className="text-2xl font-bold text-gray-900">{constraints.filter(c => c.rule_type === 'PREFERENCE').length}</p>
+                            <p className="text-2xl font-bold text-gray-900">{filteredConstraints.filter(c => c.rule_type === 'PREFERENCE').length}</p>
                             <p className="text-sm text-gray-500">Preferences</p>
                         </div>
                     </div>
@@ -299,8 +299,8 @@ const ConstraintsPage: React.FC = () => {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span className={`px-3 py-1 rounded-full text-sm font-bold ${rule.rule_type === 'HARD' ? 'bg-red-100 text-red-700' :
-                                                        rule.rule_type === 'SOFT' ? 'bg-blue-100 text-blue-700' :
-                                                            'bg-purple-100 text-purple-700'
+                                                    rule.rule_type === 'SOFT' ? 'bg-blue-100 text-blue-700' :
+                                                        'bg-purple-100 text-purple-700'
                                                     }`}>
                                                     {rule.rule_type}
                                                 </span>
