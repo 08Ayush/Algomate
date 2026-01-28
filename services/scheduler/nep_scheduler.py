@@ -773,6 +773,177 @@ class NEPScheduler:
             return False
 
 
+class SolutionCollector(cp_model.CpSolverSolutionCallback):
+    """
+    Callback to collect multiple solutions from CP-SAT solver.
+    Used to generate seed solutions for the Genetic Algorithm.
+    """
+    
+    def __init__(self, start_vars: Dict, room_vars: Dict, time_slots: List, classrooms: List, limit: int = 10):
+        """
+        Initialize the solution collector.
+        
+        Args:
+            start_vars: Dictionary of time slot decision variables
+            room_vars: Dictionary of room decision variables
+            time_slots: List of time slot data
+            classrooms: List of classroom data
+            limit: Maximum number of solutions to collect
+        """
+        cp_model.CpSolverSolutionCallback.__init__(self)
+        self._start_vars = start_vars
+        self._room_vars = room_vars
+        self._time_slots = time_slots
+        self._classrooms = classrooms
+        self._solution_limit = limit
+        self._solutions = []
+        self._solution_count = 0
+    
+    def on_solution_callback(self):
+        """Called when a solution is found."""
+        self._solution_count += 1
+        
+        if len(self._solutions) < self._solution_limit:
+            solution = {
+                'time_slots': {},
+                'rooms': {}
+            }
+            
+            for subject_id, var in self._start_vars.items():
+                slot_idx = self.Value(var)
+                solution['time_slots'][subject_id] = {
+                    'index': slot_idx,
+                    'data': self._time_slots[slot_idx] if slot_idx < len(self._time_slots) else None
+                }
+            
+            for subject_id, var in self._room_vars.items():
+                room_idx = self.Value(var)
+                solution['rooms'][subject_id] = {
+                    'index': room_idx,
+                    'data': self._classrooms[room_idx] if room_idx < len(self._classrooms) else None
+                }
+            
+            self._solutions.append(solution)
+    
+    def solution_count(self) -> int:
+        """Return total number of solutions found."""
+        return self._solution_count
+    
+    def get_solutions(self) -> List[Dict]:
+        """Return collected solutions."""
+        return self._solutions
+
+
+# Extension method for NEPScheduler to support multiple solutions
+def solve_for_multiple_seeds(
+    scheduler: 'NEPScheduler',
+    batch_id: str,
+    num_solutions: int = 10,
+    time_limit_seconds: int = 300
+) -> List[Dict]:
+    """
+    Generate multiple feasible solutions to seed the genetic algorithm.
+    
+    This function is an extension to NEPScheduler that uses the solution callback
+    mechanism to collect multiple valid solutions.
+    
+    Args:
+        scheduler: NEPScheduler instance with data already loaded
+        batch_id: UUID of the batch to schedule
+        num_solutions: Number of seed solutions to generate
+        time_limit_seconds: Maximum solving time
+        
+    Returns:
+        List of solution dictionaries, each containing assignments
+    """
+    print(f"\n{'='*80}")
+    print(f"🌱 Generating {num_solutions} Seed Solutions for GA")
+    print(f"{'='*80}\n")
+    
+    # Ensure data is loaded
+    if not scheduler.subjects:
+        if not scheduler.fetch_batch_data(batch_id):
+            print("❌ Failed to fetch batch data")
+            return []
+    
+    # Create fresh model for multi-solution search
+    scheduler.model = cp_model.CpModel()
+    scheduler.start_vars = {}
+    scheduler.room_vars = {}
+    
+    # Create variables
+    scheduler.create_variables()
+    
+    # Add all constraints
+    scheduler.add_nep_bucket_constraints()
+    scheduler.add_bucket_separation_constraints()
+    scheduler.add_faculty_conflict_constraints()
+    scheduler.add_room_type_constraints()
+    scheduler.add_faculty_availability_constraints()
+    scheduler.add_teaching_practice_time_restrictions()
+    scheduler.add_internship_block_constraints()
+    scheduler.add_dissertation_library_hours()
+    
+    # Create solver with solution callback
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = time_limit_seconds
+    solver.parameters.num_search_workers = 8
+    solver.parameters.enumerate_all_solutions = True
+    
+    # Create collector callback
+    collector = SolutionCollector(
+        start_vars=scheduler.start_vars,
+        room_vars=scheduler.room_vars,
+        time_slots=scheduler.time_slots,
+        classrooms=scheduler.classrooms,
+        limit=num_solutions
+    )
+    
+    print(f"⏳ Searching for up to {num_solutions} solutions (max {time_limit_seconds}s)...")
+    status = solver.Solve(scheduler.model, collector)
+    
+    print(f"✅ Found {collector.solution_count()} total solutions, collected {len(collector.get_solutions())}")
+    
+    # Convert solutions to assignment format
+    solutions = []
+    for idx, raw_solution in enumerate(collector.get_solutions()):
+        assignments = []
+        
+        for subject_id in raw_solution['time_slots'].keys():
+            time_data = raw_solution['time_slots'].get(subject_id, {})
+            room_data = raw_solution['rooms'].get(subject_id, {})
+            
+            # Find subject info
+            subject_info = next(
+                (s for s in scheduler.subjects if s['id'] == subject_id),
+                None
+            )
+            
+            if time_data.get('data') and room_data.get('data'):
+                assignment = {
+                    'subject_id': subject_id,
+                    'subject_code': subject_info['code'] if subject_info else 'UNKNOWN',
+                    'faculty_id': scheduler.subject_faculty_map.get(subject_id),
+                    'classroom_id': room_data['data']['id'],
+                    'time_slot_id': time_data['data']['id'],
+                    'batch_id': batch_id,
+                    'is_lab': subject_info.get('requires_lab', False) if subject_info else False
+                }
+                assignments.append(assignment)
+        
+        solutions.append({
+            'solution_index': idx,
+            'batch_id': batch_id,
+            'assignments': assignments,
+            'num_assignments': len(assignments),
+            'status': 'feasible'
+        })
+    
+    print(f"📦 Prepared {len(solutions)} seed solutions with assignments")
+    
+    return solutions
+
+
 def main():
     """
     Command-line interface for testing the NEP scheduler.
