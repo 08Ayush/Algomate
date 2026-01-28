@@ -29,7 +29,7 @@ export abstract class BaseRepository<T extends keyof Database['public']['Tables'
         const { data, error } = await this.db
             .from(this.tableName)
             .select('*')
-            .eq('id', id)
+            .eq('id' as any, id as any)
             .single();
 
         if (error) {
@@ -40,7 +40,7 @@ export abstract class BaseRepository<T extends keyof Database['public']['Tables'
             throw error;
         }
 
-        return data as Database['public']['Tables'][T]['Row'];
+        return data as unknown as Database['public']['Tables'][T]['Row'];
     }
 
     /**
@@ -53,7 +53,7 @@ export abstract class BaseRepository<T extends keyof Database['public']['Tables'
 
         if (error) throw error;
 
-        return data as Database['public']['Tables'][T]['Row'][];
+        return data as unknown as Database['public']['Tables'][T]['Row'][];
     }
 
     /**
@@ -70,7 +70,7 @@ export abstract class BaseRepository<T extends keyof Database['public']['Tables'
 
         if (error) throw error;
 
-        return result as Database['public']['Tables'][T]['Row'];
+        return result as unknown as Database['public']['Tables'][T]['Row'];
     }
 
     /**
@@ -83,13 +83,13 @@ export abstract class BaseRepository<T extends keyof Database['public']['Tables'
         const { data: result, error } = await this.db
             .from(this.tableName)
             .update(data as any)
-            .eq('id', id)
+            .eq('id' as any, id as any)
             .select()
             .single();
 
         if (error) throw error;
 
-        return result as Database['public']['Tables'][T]['Row'];
+        return result as unknown as Database['public']['Tables'][T]['Row'];
     }
 
     /**
@@ -99,7 +99,7 @@ export abstract class BaseRepository<T extends keyof Database['public']['Tables'
         const { error } = await this.db
             .from(this.tableName)
             .delete()
-            .eq('id', id);
+            .eq('id' as any, id as any);
 
         if (error) throw error;
 

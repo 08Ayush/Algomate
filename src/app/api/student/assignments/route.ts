@@ -7,7 +7,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 // Helper function to decode and verify user from token
 function getAuthenticatedUser(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
-  
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return null;
   }
@@ -46,9 +46,14 @@ export async function GET(request: NextRequest) {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Get published assignments for this batch
+    // Optimized with Joins
     const { data: assignments, error } = await supabase
       .from('assignments')
-      .select('*')
+      .select(`
+        *,
+        batches (name, semester, section),
+        subjects (name, code)
+      `)
       .eq('batch_id', batchId)
       .eq('is_published', true)
       .order('created_at', { ascending: false });
@@ -61,50 +66,34 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Manually fetch related data to avoid join issues
-    const enrichedAssignments = await Promise.all(
-      (assignments || []).map(async (assignment: any) => {
-        const enriched = { ...assignment };
+    if (!assignments || assignments.length === 0) {
+      return NextResponse.json({
+        success: true,
+        assignments: [],
+      });
+    }
 
-        // Fetch batch info if batch_id exists
-        if (assignment.batch_id) {
-          const { data: batch } = await supabase
-            .from('batches')
-            .select('name, semester, section')
-            .eq('id', assignment.batch_id)
-            .single();
-          enriched.batches = batch;
-        }
+    // Bulk fetch submissions for these assignments for the current student
+    const assignmentIds = assignments.map(a => a.id);
+    const { data: submissions } = await supabase
+      .from('assignment_submissions')
+      .select('id, score, percentage, submission_status, submitted_at, assignment_id')
+      .in('assignment_id', assignmentIds)
+      .eq('student_id', user.user_id)
+      .eq('submission_status', 'SUBMITTED');
 
-        // Fetch subject info if subject_id exists
-        if (assignment.subject_id) {
-          const { data: subject } = await supabase
-            .from('subjects')
-            .select('name, code')
-            .eq('id', assignment.subject_id)
-            .single();
-          enriched.subjects = subject;
-        }
+    // Map submissions to assignments in memory
+    const enrichedAssignments = assignments.map((assignment: any) => {
+      const submission = submissions?.find(s => s.assignment_id === assignment.id);
 
-        // Check if student has submitted this assignment
-        const { data: submission } = await supabase
-          .from('assignment_submissions')
-          .select('id, score, percentage, submission_status, submitted_at')
-          .eq('assignment_id', assignment.id)
-          .eq('student_id', user.user_id)
-          .eq('submission_status', 'SUBMITTED')
-          .single();
-        
-        if (submission) {
-          enriched.submission = submission;
-          enriched.has_submitted = true;
-        } else {
-          enriched.has_submitted = false;
-        }
-
-        return enriched;
-      })
-    );
+      return {
+        ...assignment,
+        batches: assignment.batches, // Already joined
+        subjects: assignment.subjects, // Already joined
+        submission: submission || undefined,
+        has_submitted: !!submission
+      };
+    });
 
     return NextResponse.json({
       success: true,

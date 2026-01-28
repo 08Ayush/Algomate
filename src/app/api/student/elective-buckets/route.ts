@@ -42,28 +42,37 @@ export async function GET(request: NextRequest) {
             }, { status: 200 });
         }
 
-        // Fetch buckets that are live for students
+        // Optimized: Fetch buckets with subjects and bulk fetch choices
         const { data: buckets, error: bucketError } = await supabase
             .from('elective_buckets')
             .select(`
-        id,
-        bucket_name,
-        batch_id,
-        min_selection,
-        max_selection,
-        is_common_slot,
-        is_published,
-        is_live_for_students,
-        submission_deadline,
-        created_at,
-        batches:batches (
-          id,
-          name,
-          semester,
-          section,
-          academic_year
-        )
-      `)
+                id,
+                bucket_name,
+                batch_id,
+                min_selection,
+                max_selection,
+                is_common_slot,
+                is_published,
+                is_live_for_students,
+                submission_deadline,
+                created_at,
+                batches:batches (
+                  id,
+                  name,
+                  semester,
+                  section,
+                  academic_year
+                ),
+                subjects (
+                    id,
+                    code,
+                    name,
+                    credit_value,
+                    nep_category,
+                    subject_type,
+                    description
+                )
+            `)
             .eq('batch_id', studentBatchId)
             .eq('is_live_for_students', true)
             .eq('is_published', true);
@@ -73,68 +82,61 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Failed to fetch buckets' }, { status: 500 });
         }
 
-        // For each bucket, fetch subjects linked to it
-        const enrichedBuckets = await Promise.all(
-            (buckets || []).map(async (bucket: any) => {
-                // Get subjects via course_group_id
-                const { data: subjects } = await supabase
-                    .from('subjects')
-                    .select(`
-            id,
-            code,
-            name,
-            credit_value,
-            nep_category,
-            subject_type,
-            description
-          `)
-                    .eq('course_group_id', bucket.id)
-                    .eq('is_active', true);
+        if (!buckets || buckets.length === 0) {
+            return NextResponse.json({
+                success: true,
+                buckets: [],
+                count: 0
+            });
+        }
 
-                // Get student's existing choices for this bucket
-                const { data: studentChoices } = await supabase
-                    .from('student_subject_choices')
-                    .select(`
-            id,
-            subject_id,
-            priority,
-            is_allotted,
-            allotment_status,
-            updated_at
-          `)
-                    .eq('student_id', studentId)
-                    .eq('bucket_id', bucket.id);
+        // Bulk fetch all choices for this student and these buckets
+        const bucketIds = buckets.map(b => b.id);
+        const { data: allChoices } = await supabase
+            .from('student_subject_choices')
+            .select(`
+                id,
+                subject_id,
+                priority,
+                is_allotted,
+                allotment_status,
+                updated_at,
+                bucket_id
+            `)
+            .eq('student_id', studentId)
+            .in('bucket_id', bucketIds);
 
-                // Data consistency fix: Check if multiple subjects are allotted exceeding max_selection
-                let processedChoices = studentChoices || [];
-                const allottedChoices = processedChoices.filter((c: any) => c.is_allotted || c.allotment_status === 'allotted');
+        const enrichedBuckets = buckets.map((bucket: any) => {
+            // Filter choices for this bucket
+            let processedChoices = allChoices?.filter(c => c.bucket_id === bucket.id) || [];
 
-                if (allottedChoices.length > bucket.max_selection) {
-                    // Sort by updated_at desc to keep latest allotments
-                    allottedChoices.sort((a: any, b: any) =>
-                        new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()
-                    );
+            // Data consistency fix: Check if multiple subjects are allotted exceeding max_selection
+            const allottedChoices = processedChoices.filter((c: any) => c.is_allotted || c.allotment_status === 'allotted');
 
-                    // Keep valid ones, mark others as not allotted in the response
-                    const validAllotmentIds = allottedChoices.slice(0, bucket.max_selection).map((c: any) => c.id);
+            if (allottedChoices.length > bucket.max_selection) {
+                // Sort by updated_at desc to keep latest allotments
+                allottedChoices.sort((a: any, b: any) =>
+                    new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()
+                );
 
-                    processedChoices = processedChoices.map((c: any) => {
-                        if (c.is_allotted && !validAllotmentIds.includes(c.id)) {
-                            // This was allotted but exceeds limit and is older - hide allotment status
-                            return { ...c, is_allotted: false, allotment_status: 'pending' };
-                        }
-                        return c;
-                    });
-                }
+                // Keep valid ones
+                const validAllotmentIds = allottedChoices.slice(0, bucket.max_selection).map((c: any) => c.id);
 
-                return {
-                    ...bucket,
-                    subjects: subjects || [],
-                    student_choices: processedChoices,
-                    has_submitted: (processedChoices.length || 0) > 0
-                };
-            })
-        );
+                processedChoices = processedChoices.map((c: any) => {
+                    if (c.is_allotted && !validAllotmentIds.includes(c.id)) {
+                        return { ...c, is_allotted: false, allotment_status: 'pending' };
+                    }
+                    return c;
+                });
+            }
+
+            return {
+                ...bucket,
+                subjects: bucket.subjects || [], // joined subjects
+                student_choices: processedChoices,
+                has_submitted: (processedChoices.length || 0) > 0
+            };
+        });
 
         return NextResponse.json({
             success: true,

@@ -13,7 +13,7 @@ export class CreateElectiveBucketUseCase {
             minSelection: dto.min_selection,
             maxSelection: dto.max_selection,
             isCommonSlot: dto.is_common_slot
-        });
+        } as any);
 
         // Link subjects if provided
         if (dto.subject_ids && dto.subject_ids.length > 0) {

@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import {
-  GetBucketsForBatchUseCase,
-  CreateElectiveBucketUseCase,
-  SupabaseElectiveBucketRepository,
-  CreateElectiveBucketDtoSchema
-} from '@/modules/elective';
-import { authenticate } from '@/shared/middleware/auth';
+import { SupabaseElectiveBucketRepository } from '../../../../modules/elective/infrastructure/persistence/SupabaseElectiveBucketRepository';
+import { GetBucketsForBatchUseCase } from '../../../../modules/elective/application/use-cases/GetBucketsForBatchUseCase';
+import { CreateElectiveBucketUseCase } from '../../../../modules/elective/application/use-cases/CreateElectiveBucketUseCase';
+import { CreateElectiveBucketDtoSchema } from '../../../../modules/elective/application/dto/ElectiveBucketDto';
+import { authenticate } from '../../../../shared/middleware/auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -36,23 +34,25 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
       }
 
-      const buckets = await bucketRepo.findByCollegeId(user.college_id!);
+      // Optimized: Fetch buckets with subjects in a single query
+      const { data: buckets, error } = await supabase
+        .from('elective_buckets')
+        .select(`
+          *,
+          subjects (*)
+        `)
+        .eq('college_id', user.college_id);
 
-      // Enrich with subjects
-      const enriched = await Promise.all(
-        buckets.map(async (bucket) => {
-          const { data: subjects } = await supabase
-            .from('subjects')
-            .select('*')
-            .eq('course_group_id', bucket.id)
-            .eq('college_id', user.college_id);
+      if (error) {
+        throw error;
+      }
 
-          return {
-            ...bucket.toJSON(),
-            subjects: subjects || []
-          };
-        })
-      );
+      // Transform to match expected items format if necessary, 
+      // but usually subjects array from join is compatible with the "enriched" logic
+      const enriched = buckets.map((bucket: any) => ({
+        ...bucket,
+        subjects: bucket.subjects || []
+      }));
 
       return NextResponse.json(enriched);
     }
@@ -120,27 +120,29 @@ export async function GET(request: NextRequest) {
 
         if (nepBuckets && nepBuckets.length > 0) {
           // Enrich with subjects
-          const enriched = await Promise.all(
-            nepBuckets.map(async (bucket: any) => {
-              const { data: subjects } = await supabase
-                .from('subjects')
-                .select('*')
-                .eq('course_group_id', bucket.id)
-                .eq('college_id', user.college_id);
+          // Optimized: Fetch all subjects for these buckets in one query
+          const bucketIds = nepBuckets.map(b => b.id);
+          const { data: allSubjects } = await supabase
+            .from('subjects')
+            .select('*')
+            .in('course_group_id', bucketIds)
+            .eq('college_id', user.college_id);
 
-              return {
-                id: bucket.id,
-                bucket_name: bucket.bucket_name,
-                is_common_slot: bucket.is_common_slot,
-                min_selection: bucket.min_selection,
-                max_selection: bucket.max_selection,
-                batch_id: bucket.batch_id,
-                created_at: bucket.created_at,
-                batch_info: bucket.batches,
-                subjects: subjects || []
-              };
-            })
-          );
+          // Map subjects to buckets in memory
+          const enriched = nepBuckets.map((bucket: any) => {
+            const bucketSubjects = allSubjects?.filter(s => s.course_group_id === bucket.id) || [];
+            return {
+              id: bucket.id,
+              bucket_name: bucket.bucket_name,
+              is_common_slot: bucket.is_common_slot,
+              min_selection: bucket.min_selection,
+              max_selection: bucket.max_selection,
+              batch_id: bucket.batch_id,
+              created_at: bucket.created_at,
+              batch_info: bucket.batches,
+              subjects: bucketSubjects
+            };
+          });
 
           return NextResponse.json(enriched);
         }
@@ -154,20 +156,22 @@ export async function GET(request: NextRequest) {
     const result = await getBucketsUseCase.execute(resolvedBatchId);
 
     // Enrich with subjects
-    const enriched = await Promise.all(
-      result.buckets.map(async (bucket: any) => {
-        const { data: subjects } = await supabase
-          .from('subjects')
-          .select('*')
-          .eq('course_group_id', bucket.id)
-          .eq('college_id', user.college_id);
+    // Optimized: Fetch all subjects for the found buckets
+    const bucketIds = result.buckets.map(b => b.id);
+    const { data: allSubjects } = await supabase
+      .from('subjects')
+      .select('*')
+      .in('course_group_id', bucketIds)
+      .eq('college_id', user.college_id);
 
-        return {
-          ...bucket,
-          subjects: subjects || []
-        };
-      })
-    );
+    // Enrich in memory
+    const enriched = result.buckets.map((bucket: any) => {
+      const bucketSubjects = allSubjects?.filter(s => s.course_group_id === bucket.id) || [];
+      return {
+        ...bucket,
+        subjects: bucketSubjects
+      };
+    });
 
     return NextResponse.json(enriched);
   } catch (error: any) {
