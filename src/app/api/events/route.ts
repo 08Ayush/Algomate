@@ -34,6 +34,12 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status');
     const departmentId = searchParams.get('department_id');
 
+    // Pagination
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '20');
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
     // If fetching a single event by ID
     if (eventId) {
       const { data: eventData, error } = await supabase
@@ -92,8 +98,9 @@ export async function GET(request: NextRequest) {
         *,
         department:departments(id, name, code),
         creator:users!created_by(id, first_name, last_name)
-      `)
-      .order('created_at', { ascending: false });
+      `, { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, to);
 
     if (status && status !== 'all') {
       query = query.eq('status', status);
@@ -103,7 +110,7 @@ export async function GET(request: NextRequest) {
       query = query.eq('department_id', departmentId);
     }
 
-    const { data, error } = await query;
+    const { data, count, error } = await query;
 
     if (error) {
       console.error('Error fetching events:', error);
@@ -136,7 +143,14 @@ export async function GET(request: NextRequest) {
       updated_at: event.updated_at
     }));
 
-    return NextResponse.json({ success: true, data: transformedData, events: transformedData });
+    const meta = {
+      total: count,
+      page,
+      limit,
+      totalPages: Math.ceil((count || 0) / limit)
+    };
+
+    return NextResponse.json({ success: true, data: transformedData, events: transformedData, meta });
   } catch (error: any) {
     console.error('Unexpected error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

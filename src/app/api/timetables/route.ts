@@ -4,7 +4,6 @@ import { Database } from '@/shared/database';
 import { SupabaseTimetableRepository, SupabaseScheduledClassRepository } from '@/modules/timetable/infrastructure/persistence/SupabaseTimetableRepository';
 import { SupabaseUserRepository } from '@/modules/auth/infrastructure/persistence/SupabaseUserRepository';
 import { CreateManualTimetableUseCase } from '@/modules/timetable/application/use-cases/CreateManualTimetableUseCase';
-import { GetTimetablesUseCase } from '@/modules/timetable/application/use-cases/GetTimetablesUseCase';
 import { handleError } from '@/shared/utils/response';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -12,7 +11,15 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 
 // Helper function to get authenticated user
-async function getAuthenticatedUser(request: NextRequest) {
+interface AuthenticatedUser {
+  id: string;
+  department_id: string | null;
+  role: string | null;
+  is_active: boolean | null;
+  college_id: string | null;
+}
+
+async function getAuthenticatedUser(request: NextRequest): Promise<AuthenticatedUser | null> {
   const authHeader = request.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
     return null;
@@ -35,7 +42,7 @@ async function getAuthenticatedUser(request: NextRequest) {
       return null;
     }
 
-    return dbUser;
+    return dbUser as AuthenticatedUser;
   } catch {
     return null;
   }
@@ -59,41 +66,85 @@ export async function GET(request: NextRequest) {
     // Existing logic didn't strictly enforce, but let's pass departmentId from params if any
     const departmentId = searchParams.get('departmentId') || (user.role === 'faculty' ? user.department_id : undefined);
 
-    const timetableRepo = new SupabaseTimetableRepository(supabase);
-    const getTimetablesUseCase = new GetTimetablesUseCase(timetableRepo);
+    // Pagination
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '20');
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
 
-    const timetables = await getTimetablesUseCase.execute({
-      batchId,
-      semester,
-      status,
-      academicYear,
-      departmentId: departmentId as string,
-      collegeId: user.college_id // Pass college_id for college admins
-    });
+    // Optimized efficient fetch with embedded resources (Joins)
+    let query = supabase
+      .from('generated_timetables')
+      // Select all timetable fields, plus join:
+      // - batch: full batch details
+      // - created_by_user: the user details (aliased) who created it (explicitly joining on created_by column)
+      // - generation_task: the task details (aliased) linked by generation_task_id
+      .select(`
+        *,
+        batch:batches(id, name, semester, section, department_id),
+        created_by_user:users!created_by(first_name, last_name, email),
+        generation_task:timetable_generation_tasks!generation_task_id(task_name, status, progress)
+      `, { count: 'exact' });
 
-    const enrichedTimetables = await Promise.all(timetables.map(async (tt) => {
-      // Fetch batch info
-      const { data: batch } = await supabase.from('batches').select('id, name, semester, section, department_id').eq('id', tt.batchId).single();
-      // Fetch creator info
-      const { data: creator } = await supabase.from('users').select('first_name, last_name, email').eq('id', tt.createdBy).single();
+    // Apply filters
+    if (user.role !== 'platform_admin') {
+      query = query.eq('college_id', user.college_id ?? '');
+    }
 
-      // Re-fetch the row to get generation_task_id directly if missing from entity
-      const { data: rawTT } = await supabase.from('generated_timetables').select('generation_task_id').eq('id', tt.id).single();
-      let taskInfo = null;
-      if (rawTT?.generation_task_id) {
-        const { data: task } = await supabase.from('timetable_generation_tasks').select('task_name, status, progress').eq('id', rawTT.generation_task_id).single();
-        taskInfo = task;
-      }
+    if (batchId) query = query.eq('batch_id', batchId);
+    if (semester) query = query.eq('semester', semester);
+    if (status) query = query.eq('status', status);
+    if (academicYear) query = query.eq('academic_year', academicYear);
+    if (departmentId) query = query.eq('department_id', departmentId as string);
 
-      return {
-        ...tt.toJSON(),
-        batch: batch || null,
-        created_by_user: creator || null,
-        generation_task: taskInfo || null
-      };
+    // Default sort
+    query = query.order('created_at', { ascending: false })
+      .range(from, to);
+
+    const { data: enrichedTimetables, count, error: queryError } = await query;
+
+    if (queryError) {
+      throw queryError;
+    }
+
+    // Transform if necessary to match exact shape expected by frontend, 
+    // although the select aliases allow it to match closely.
+    // The previous implementation utilized .toJSON() on the entity, which converts 'batch_id' to 'batchId' (camelCase).
+    // The raw Supabase response will be snake_case (standard DB).
+    // If the frontend expects camelCase, we should map it here.
+
+    // Quick mapper to ensure frontend compatibility
+    const mappedData = enrichedTimetables.map((item: any) => ({
+      id: item.id,
+      title: item.title,
+      departmentId: item.department_id,
+      batchId: item.batch_id,
+      collegeId: item.college_id,
+      semester: item.semester,
+      academicYear: item.academic_year,
+      fitnessScore: item.fitness_score,
+      constraintViolations: item.constraint_violations,
+      generationMethod: item.generation_method,
+      status: item.status,
+      createdBy: item.created_by,
+      publishedAt: item.published_at,
+      createdAt: item.created_at,
+      updatedAt: item.updated_at,
+      // Relations
+      batch: item.batch,
+      created_by_user: item.created_by_user,
+      generation_task: item.generation_task
     }));
 
-    return NextResponse.json({ success: true, data: enrichedTimetables });
+    const meta = {
+      total: count,
+      page,
+      limit,
+      totalPages: Math.ceil((count || 0) / limit)
+    };
+
+    return NextResponse.json({ success: true, data: mappedData, meta });
+
 
   } catch (error) {
     return handleError(error);

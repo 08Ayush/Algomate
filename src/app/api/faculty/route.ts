@@ -17,7 +17,7 @@ async function getAuthenticatedUser(request: NextRequest) {
   try {
     const userString = Buffer.from(token, 'base64').toString();
     const user = JSON.parse(userString);
-    
+
     // Verify user exists and is active - include department_id
     const { data: dbUser, error } = await supabase
       .from('users')
@@ -52,6 +52,12 @@ export async function GET(request: NextRequest) {
     const departmentCode = searchParams.get('department_code');
     let departmentId = searchParams.get('department_id');
 
+    // Pagination
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '20');
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
     console.log('Fetching faculty with params:', { departmentCode, departmentId });
 
     // For non-admin users, enforce department filtering
@@ -75,8 +81,11 @@ export async function GET(request: NextRequest) {
         max_hours_per_week,
         is_active,
         created_at,
-        department:departments!users_department_id_fkey(id, name, code)
-      `)
+        department:departments!users_department_id_fkey(id, name, code),
+        qualified_subjects:faculty_qualified_subjects(
+           subject:subjects(name, code)
+        )
+      `, { count: 'exact' })
       .eq('role', 'faculty')
       .eq('is_active', true);
 
@@ -93,10 +102,10 @@ export async function GET(request: NextRequest) {
 
       if (deptError) {
         console.error('Error fetching department:', deptError);
-        return NextResponse.json({ 
-          success: false, 
+        return NextResponse.json({
+          success: false,
           error: 'Department not found',
-          data: [] 
+          data: []
         });
       }
 
@@ -105,62 +114,64 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const { data: facultyData, error: facultyError } = await query.order('first_name', { ascending: true });
+    const { data: facultyData, count, error: facultyError } = await query
+      .order('first_name', { ascending: true })
+      .range(from, to);
 
     if (facultyError) {
       console.error('Error fetching faculty:', facultyError);
-      return NextResponse.json({ 
-        success: false, 
+      return NextResponse.json({
+        success: false,
         error: facultyError.message,
-        data: [] 
+        data: []
       }, { status: 500 });
     }
 
     console.log(`Found ${facultyData?.length || 0} faculty members`);
 
-    // Fetch subjects for each faculty
-    const facultyWithSubjects = await Promise.all(
-      (facultyData || []).map(async (faculty) => {
-        const { data: subjectsData } = await supabase
-          .from('faculty_qualified_subjects')
-          .select(`
-            subject:subjects(name, code)
-          `)
-          .eq('faculty_id', faculty.id);
+    // Fetched data already includes subjects due to join
+    const facultyWithSubjects = (facultyData || []).map((faculty: any) => {
+      const subjects = faculty.qualified_subjects?.map((qs: any) => qs.subject?.name || qs.subject?.code).filter(Boolean) || [];
 
-        const subjects = subjectsData?.map((s: any) => s.subject?.name || s.subject?.code).filter(Boolean) || [];
+      // Handle department array or object depending on return shape (single vs array relation)
+      const department = Array.isArray(faculty.department) ? faculty.department[0] : faculty.department;
 
-        const department = Array.isArray(faculty.department) ? faculty.department[0] : faculty.department;
-        
-        return {
-          id: faculty.id,
-          first_name: faculty.first_name,
-          last_name: faculty.last_name,
-          email: faculty.email,
-          phone: faculty.phone,
-          college_uid: faculty.college_uid,
-          faculty_type: faculty.faculty_type,
-          department_id: faculty.department_id,
-          department_name: department?.name || '',
-          department_code: department?.code || '',
-          max_hours_per_day: faculty.max_hours_per_day,
-          max_hours_per_week: faculty.max_hours_per_week,
-          is_active: faculty.is_active,
-          subjects: subjects,
-          created_at: faculty.created_at
-        };
-      })
-    );
+      return {
+        id: faculty.id,
+        first_name: faculty.first_name,
+        last_name: faculty.last_name,
+        email: faculty.email,
+        phone: faculty.phone,
+        college_uid: faculty.college_uid,
+        faculty_type: faculty.faculty_type,
+        department_id: faculty.department_id,
+        department_name: department?.name || '',
+        department_code: department?.code || '',
+        max_hours_per_day: faculty.max_hours_per_day,
+        max_hours_per_week: faculty.max_hours_per_week,
+        is_active: faculty.is_active,
+        subjects: subjects,
+        created_at: faculty.created_at
+      };
+    });
 
-    return NextResponse.json({ 
-      success: true, 
+    const meta = {
+      total: count,
+      page,
+      limit,
+      totalPages: Math.ceil((count || 0) / limit)
+    };
+
+    return NextResponse.json({
+      success: true,
       data: facultyWithSubjects,
-      count: facultyWithSubjects.length
+      count: facultyWithSubjects.length,
+      meta
     });
   } catch (error: any) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ 
-      success: false, 
+    return NextResponse.json({
+      success: false,
       error: 'Internal server error',
       data: []
     }, { status: 500 });

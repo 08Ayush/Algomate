@@ -82,41 +82,62 @@ export async function GET(request: NextRequest) {
       targetCollegeId = queryCollegeId;
     }
 
+    // Pagination
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '20');
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
     if (!targetCollegeId) {
       return ApiResponse.badRequest('College ID is required');
     }
 
-    // Fetch users (Admin & Faculty)
-    const users = await userRepository.findByCollege(targetCollegeId, ['admin', 'faculty']);
-
-    // Fetch departments for mapping
-    const departments = await departmentRepository.findByCollege(targetCollegeId);
-    const departmentMap = new Map(departments.map(d => [d.id, { id: d.id, name: d.name, code: d.code }]));
-
-    let filteredUsers = users;
+    // Optimized efficient fetch with embedded resources (Joins)
+    let query = supabaseAdmin
+      .from('users')
+      .select(`
+        *,
+        department:departments(id, name, code)
+      `, { count: 'exact' })
+      .eq('college_id', targetCollegeId)
+      .in('role', ['admin', 'faculty']); // fetch admin and faculty
 
     // Filter by department if restricted
     if (!user.isAdmin() && user.departmentId) {
-      filteredUsers = users.filter(u => u.departmentId === user.departmentId);
+      query = query.eq('department_id', user.departmentId);
     }
 
-    // transform to response format (join department, map role)
-    const mappedFaculty = filteredUsers.map(u => {
-      const uJson = u.toJSON();
+    const { data: usersData, count, error: queryError } = await query
+      .range(from, to);
 
-      // Add department info
-      const dept = u.departmentId ? departmentMap.get(u.departmentId) : null;
+    if (queryError) {
+      throw queryError;
+    }
 
-      // Logic to show 'departments' object as in existing API (using join)
-      // Existing API response: departments: { id, name, code }
-      const userWithDept = {
-        ...uJson,
+    // transform to response format
+    const mappedFaculty = (usersData || []).map((u: any) => {
+      // Handle relation
+      const dept = Array.isArray(u.department) ? u.department[0] : u.department;
+
+      const userWithDept: any = {
+        id: u.id,
+        email: u.email,
+        college_uid: u.college_uid,
+        first_name: u.first_name,
+        last_name: u.last_name,
+        role: u.role,
+        college_id: u.college_id,
+        department_id: u.department_id,
+        faculty_type: u.faculty_type,
+        is_active: u.is_active,
+        created_at: u.created_at,
+        updated_at: u.updated_at,
         departments: dept || null
       };
 
       // Map faculty_type back to role for display
-      if (u.role === UserRole.FACULTY && (u.facultyType === FacultyType.CREATOR || u.facultyType === FacultyType.PUBLISHER)) {
-        userWithDept.role = u.facultyType;
+      if (u.role === UserRole.FACULTY && (u.faculty_type === FacultyType.CREATOR || u.faculty_type === FacultyType.PUBLISHER)) {
+        userWithDept.role = u.faculty_type;
       }
 
       return userWithDept;
@@ -125,8 +146,16 @@ export async function GET(request: NextRequest) {
     // Sort by name (existing API: first_name)
     mappedFaculty.sort((a, b) => (a.first_name || '').localeCompare(b.first_name || ''));
 
+    const meta = {
+      total: count,
+      page,
+      limit,
+      totalPages: Math.ceil((count || 0) / limit)
+    };
+
     return NextResponse.json({
-      faculty: mappedFaculty
+      faculty: mappedFaculty,
+      meta
     });
 
   } catch (error: any) {

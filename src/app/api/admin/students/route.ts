@@ -87,6 +87,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const queryCollegeId = searchParams.get('college_id');
 
+    // Pagination
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '20');
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
     let targetCollegeId = user.collegeId;
 
     // Super admin can view any college's students
@@ -98,26 +104,48 @@ export async function GET(request: NextRequest) {
       return ApiResponse.badRequest('College ID is required');
     }
 
-    // Fetch Students
-    const students = await userRepository.findByCollege(targetCollegeId, ['student']);
+    // Optimized efficient fetch with embedded resources (Joins)
+    // Optimized efficient fetch with embedded resources (Joins)
+    const { data: studentsData, count, error: queryError } = await supabaseAdmin
+      .from('users')
+      .select(`
+        *,
+        department:departments(id, name, code),
+        course:courses(id, title, code)
+      `, { count: 'exact' })
+      .eq('college_id', targetCollegeId)
+      .eq('role', 'student') // Or check logic for student
+      .order('created_at', { ascending: false })
+      .range(from, to);
 
-    // Fetch Departments and Courses for joining
-    const [departments, courses] = await Promise.all([
-      departmentRepository.findByCollege(targetCollegeId),
-      courseRepository.findByCollege(targetCollegeId)
-    ]);
-
-    const departmentMap = new Map(departments.map(d => [d.id, d]));
-    const courseMap = new Map(courses.map(c => [c.id, c]));
+    if (queryError) {
+      throw queryError;
+    }
 
     // Map response
-    const mappedStudents = students.map(s => {
-      const sJson = s.toJSON();
-      const dept = s.departmentId ? departmentMap.get(s.departmentId) : null;
-      const course = s.courseId ? courseMap.get(s.courseId) : null;
+    const mappedStudents = (studentsData || []).map((s: any) => {
+      // Supabase returns objects for relations (or arrays if 1:many, assume 1:1 for dept/course on user)
+      // Check if department/course is array or object
+      const dept = Array.isArray(s.department) ? s.department[0] : s.department;
+      const course = Array.isArray(s.course) ? s.course[0] : s.course;
 
       return {
-        ...sJson,
+        id: s.id,
+        email: s.email,
+        college_uid: s.college_uid,
+        first_name: s.first_name,
+        last_name: s.last_name,
+        role: s.role,
+        college_id: s.college_id,
+        department_id: s.department_id,
+        student_id: s.student_id,
+        course_id: s.course_id,
+        current_semester: s.current_semester,
+        admission_year: s.admission_year,
+        is_active: s.is_active,
+        created_at: s.created_at,
+        updated_at: s.updated_at,
+
         departments: dept ? {
           id: dept.id,
           name: dept.name,
@@ -134,8 +162,16 @@ export async function GET(request: NextRequest) {
     // Sort by created_at desc
     mappedStudents.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
+    const meta = {
+      total: count,
+      page,
+      limit,
+      totalPages: Math.ceil((count || 0) / limit)
+    };
+
     return NextResponse.json({
-      students: mappedStudents
+      students: mappedStudents,
+      meta
     });
 
   } catch (error: any) {
@@ -194,7 +230,6 @@ export async function POST(request: NextRequest) {
       currentSemester: current_semester || 1,
       admissionYear: year,
       studentId: student_id || null,
-      phone: phone || null,
       isActive: is_active !== undefined ? is_active : true,
       // Fields not needed for student
       facultyType: null
