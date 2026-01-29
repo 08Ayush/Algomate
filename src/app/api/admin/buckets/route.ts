@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { authenticate } from '@/shared/middleware/auth';
+import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,22 +31,45 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch buckets with related data using joins
-    const { data: buckets, error } = await supabase
+    let query = supabase
       .from('elective_buckets')
       .select(`
         *,
         batches:batch_id(id, name, semester, section, academic_year, department_id, departments:department_id(id, name)),
         bucket_subjects(subject_id, subjects:subject_id(*))
-      `)
+      `, { count: 'exact' })
       .eq('college_id', collegeId)
       .order('created_at', { ascending: false });
+
+    // Pagination (Dual-Mode)
+    const { page, limit, isPaginated } = getPaginationParams(request);
+
+    if (isPaginated && page && limit) {
+      const { from, to } = getPaginationRange(page, limit);
+      query = query.range(from, to);
+    } else {
+      query = query.limit(500); // Safety cap
+    }
+
+    const { data: buckets, count, error } = await query;
 
     if (error) {
       console.error('Error fetching buckets:', error);
       throw error;
     }
 
-    return NextResponse.json({ buckets: buckets || [] });
+    if (isPaginated && page && limit) {
+      const paginatedResult = createPaginatedResponse(buckets || [], count || 0, page, limit);
+      return NextResponse.json({
+        buckets: paginatedResult.data,
+        meta: paginatedResult.meta
+      });
+    } else {
+      return NextResponse.json({
+        buckets: buckets || [],
+        meta: { total: buckets?.length || 0 }
+      });
+    }
   } catch (error: any) {
     console.error('Error fetching admin buckets:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

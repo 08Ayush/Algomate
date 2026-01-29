@@ -64,6 +64,8 @@ async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) 
   }
 }
 
+import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
+
 // GET - Fetch faculty for authenticated user's college
 export async function GET(request: NextRequest) {
   try {
@@ -82,11 +84,8 @@ export async function GET(request: NextRequest) {
       targetCollegeId = queryCollegeId;
     }
 
-    // Pagination
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
-    const from = (page - 1) * limit;
-    const to = from + limit - 1;
+    // Pagination (Dual-Mode)
+    const { page, limit, isPaginated } = getPaginationParams(request);
 
     if (!targetCollegeId) {
       return ApiResponse.badRequest('College ID is required');
@@ -107,8 +106,15 @@ export async function GET(request: NextRequest) {
       query = query.eq('department_id', user.departmentId);
     }
 
-    const { data: usersData, count, error: queryError } = await query
-      .range(from, to);
+    // Apply Pagination or Safety Limit
+    if (isPaginated && page && limit) {
+      const { from, to } = getPaginationRange(page, limit);
+      query = query.range(from, to).order('first_name', { ascending: true });
+    } else {
+      query = query.limit(500).order('first_name', { ascending: true }); // Safety cap
+    }
+
+    const { data: usersData, count, error: queryError } = await query;
 
     if (queryError) {
       throw queryError;
@@ -143,20 +149,21 @@ export async function GET(request: NextRequest) {
       return userWithDept;
     });
 
-    // Sort by name (existing API: first_name)
-    mappedFaculty.sort((a, b) => (a.first_name || '').localeCompare(b.first_name || ''));
+    // JS Sort is redundant now as it is done in query, but kept for grouping stability if needed.
+    // However, Supabase order is usually enough.
 
-    const meta = {
-      total: count,
-      page,
-      limit,
-      totalPages: Math.ceil((count || 0) / limit)
-    };
-
-    return NextResponse.json({
-      faculty: mappedFaculty,
-      meta
-    });
+    if (isPaginated && page && limit) {
+      const paginatedResult = createPaginatedResponse(mappedFaculty, count || 0, page, limit);
+      return NextResponse.json({
+        faculty: paginatedResult.data,
+        meta: paginatedResult.meta
+      });
+    } else {
+      return NextResponse.json({
+        faculty: mappedFaculty,
+        meta: { total: count || 0 }
+      });
+    }
 
   } catch (error: any) {
     return handleError(error);

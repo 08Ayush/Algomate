@@ -19,26 +19,44 @@ export class SupabaseClassroomRepository implements IClassroomRepository {
         return Classroom.fromDatabase(data);
     }
 
-    async findByCollegeId(collegeId: string): Promise<Classroom[]> {
-        const { data, error } = await this.db
+    async findByCollegeId(collegeId: string, page?: number, limit?: number): Promise<{ items: Classroom[], total: number }> {
+        let query = this.db
             .from('classrooms')
-            .select('*')
+            .select('*', { count: 'exact' })
             .eq('college_id', collegeId)
             .order('name');
 
+        if (page && limit) {
+            const from = (page - 1) * limit;
+            const to = from + limit - 1;
+            query = query.range(from, to);
+        }
+
+        const { data, error, count } = await query;
+
         if (error) throw error;
-        return (data || []).map(row => Classroom.fromDatabase(row));
+        const items = (data || []).map(row => Classroom.fromDatabase(row));
+        return { items, total: count || items.length };
     }
 
-    async findByDepartmentId(departmentId: string): Promise<Classroom[]> {
-        const { data, error } = await this.db
+    async findByDepartmentId(departmentId: string, page?: number, limit?: number): Promise<{ items: Classroom[], total: number }> {
+        let query = this.db
             .from('classrooms')
-            .select('*')
+            .select('*', { count: 'exact' })
             .eq('department_id', departmentId)
             .order('name');
 
+        if (page && limit) {
+            const from = (page - 1) * limit;
+            const to = from + limit - 1;
+            query = query.range(from, to);
+        }
+
+        const { data, error, count } = await query;
+
         if (error) throw error;
-        return (data || []).map(row => Classroom.fromDatabase(row));
+        const items = (data || []).map(row => Classroom.fromDatabase(row));
+        return { items, total: count || items.length };
     }
 
     async create(classroom: Omit<Classroom, 'id' | 'createdAt' | 'updatedAt' | 'toJSON'>): Promise<Classroom> {

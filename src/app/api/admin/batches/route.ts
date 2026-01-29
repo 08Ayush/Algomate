@@ -59,6 +59,8 @@ async function authenticateUser(request: NextRequest, requireAdmin = false) {
   }
 }
 
+import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
+
 export async function GET(request: NextRequest) {
   try {
     // Authenticate user - allow read access for creator/publisher
@@ -70,6 +72,9 @@ export async function GET(request: NextRequest) {
     // Get college_id from query parameter (for super_admin) or use user's college_id
     const { searchParams } = new URL(request.url);
     const queryCollegeId = searchParams.get('college_id');
+
+    // Pagination
+    const { page, limit, isPaginated } = getPaginationParams(request);
 
     let targetCollegeId = user.college_id;
 
@@ -88,7 +93,7 @@ export async function GET(request: NextRequest) {
           name,
           code
         )
-      `)
+      `, { count: 'exact' })
       .eq('is_active', true);
 
     // Filter by college
@@ -101,17 +106,35 @@ export async function GET(request: NextRequest) {
       query = query.eq('department_id', user.department_id);
     }
 
-    const { data: batches, error } = await query.order('created_at', { ascending: false });
+    // Apply pagination range only if requested
+    if (isPaginated && page && limit) {
+      const { from, to } = getPaginationRange(page, limit);
+      query = query.range(from, to);
+    }
+
+    const { data: batches, count, error } = await query.order('created_at', { ascending: false });
 
     if (error) {
       console.error('Database error:', error);
       return NextResponse.json({ error: 'Failed to fetch batches' }, { status: 500 });
     }
 
-    return NextResponse.json({
-      batches: batches || [],
-      message: `Found ${batches?.length || 0} batches`
-    });
+    // Handle Response based on mode
+    if (isPaginated && page && limit) {
+      const paginatedResult = createPaginatedResponse(batches || [], count || 0, page, limit);
+      return NextResponse.json({
+        batches: paginatedResult.data,
+        meta: paginatedResult.meta,
+        message: `Found ${paginatedResult.data.length} batches`
+      });
+    } else {
+      // Fetch All Mode
+      return NextResponse.json({
+        batches: batches || [],
+        meta: { total: batches?.length || 0 },
+        message: `Found ${batches?.length || 0} batches`
+      });
+    }
 
   } catch (error) {
     console.error('Server error:', error);

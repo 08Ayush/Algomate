@@ -42,14 +42,25 @@ export class SupabaseDepartmentRepository implements IDepartmentRepository {
         return data.map(row => this.mapToEntity(row));
     }
 
-    async findByCollege(collegeId: string): Promise<Department[]> {
-        const { data, error } = await this.db
+    async findByCollege(collegeId: string, page?: number, limit?: number): Promise<{ items: Department[]; total: number }> {
+        let query = this.db
             .from('departments')
-            .select('*')
+            .select('*', { count: 'exact' })
             .eq('college_id', collegeId);
 
+        if (page && limit) {
+            const from = (page - 1) * limit;
+            const to = from + limit - 1;
+            query = query.range(from, to);
+        }
+
+        const { data, error, count } = await query;
+
         if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+        return {
+            items: (data || []).map(row => this.mapToEntity(row)),
+            total: count || 0
+        };
     }
 
     async create(department: Pick<Department, 'name' | 'code' | 'collegeId' | 'description'>): Promise<Department> {

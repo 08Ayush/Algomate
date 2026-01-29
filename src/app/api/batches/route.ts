@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -81,6 +82,9 @@ export async function GET(request: NextRequest) {
       deptId = deptData?.id;
     }
 
+    // Pagination (Dual-Mode)
+    const { page, limit, isPaginated } = getPaginationParams(request);
+
     // Build query to fetch batches
     let query = supabase
       .from('batches')
@@ -109,7 +113,7 @@ export async function GET(request: NextRequest) {
           bucket_name,
           subjects:subjects(id, name, code)
         )
-      `)
+      `, { count: 'exact' })
       .eq('is_active', true);
 
     // Filter by department if provided
@@ -117,7 +121,18 @@ export async function GET(request: NextRequest) {
       query = query.eq('department_id', deptId);
     }
 
-    const { data: batchesData, error: batchesError } = await query.order('semester', { ascending: true }).order('section', { ascending: true });
+    // Default sort
+    query = query.order('semester', { ascending: true }).order('section', { ascending: true });
+
+    // Apply Pagination or Safety Limit
+    if (isPaginated && page && limit) {
+      const { from, to } = getPaginationRange(page, limit);
+      query = query.range(from, to);
+    } else {
+      query = query.limit(500); // Safety cap
+    }
+
+    const { data: batchesData, count, error: batchesError } = await query;
 
     if (batchesError) {
       console.error('Error fetching batches:', batchesError);
@@ -154,24 +169,35 @@ export async function GET(request: NextRequest) {
       elective_buckets: batch.elective_buckets
     })) || [];
 
-    // Calculate statistics
-    const totalBatches = transformedData.length;
-    const totalStudents = transformedData.reduce((sum: number, b: any) => sum + (b.actual_strength || 0), 0);
+    // Calculate statistics (on current slice)
     const semesterGroups = transformedData.reduce((acc: any, batch: any) => {
       acc[batch.semester] = (acc[batch.semester] || 0) + 1;
       return acc;
     }, {});
 
-    return NextResponse.json({
-      success: true,
-      data: transformedData,
-      statistics: {
-        totalBatches,
-        totalStudents,
-        semesterGroups
-      },
-      count: transformedData.length
-    });
+    const statistics = {
+      totalBatches: count || 0,
+      totalStudents: transformedData.reduce((sum: number, b: any) => sum + (b.actual_strength || 0), 0),
+      semesterGroups
+    };
+
+    if (isPaginated && page && limit) {
+      const paginatedResult = createPaginatedResponse(transformedData, count || 0, page, limit);
+      return NextResponse.json({
+        success: true,
+        data: paginatedResult.data,
+        statistics,
+        meta: paginatedResult.meta
+      });
+    } else {
+      return NextResponse.json({
+        success: true,
+        data: transformedData,
+        statistics,
+        count: transformedData.length,
+        meta: { total: count || 0 }
+      });
+    }
   } catch (error: any) {
     console.error('Unexpected error:', error);
     return NextResponse.json({

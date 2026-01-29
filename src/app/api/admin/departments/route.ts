@@ -73,6 +73,10 @@ async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) 
   }
 }
 
+import { getPaginationParams, createPaginatedResponse } from '@/shared/utils/pagination';
+
+// ... (existing imports)
+
 // GET - Fetch departments for authenticated user's college
 export async function GET(request: NextRequest) {
   try {
@@ -86,6 +90,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const queryCollegeId = searchParams.get('college_id');
 
+    // Pagination
+    const { page, limit } = getPaginationParams(request);
+
     let targetCollegeId = user.collegeId;
 
     // Super admin can view any college's departments
@@ -98,11 +105,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Execute Use Case
-    const departments = await getDepartmentsByCollegeUseCase.execute(targetCollegeId);
+    const result = await getDepartmentsByCollegeUseCase.execute(targetCollegeId, page, limit);
+
+    const paginated = createPaginatedResponse(result.departments, result.total, page, limit);
 
     // Return with "departments" key to match legacy response structure
     return NextResponse.json({
-      departments
+      departments: paginated.data,
+      meta: paginated.meta
     });
 
   } catch (error: any) {

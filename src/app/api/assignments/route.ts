@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -200,14 +201,37 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const { page, limit, isPaginated } = getPaginationParams(request);
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get assignments created by this faculty member
-    const { data: assignments, error } = await supabase
+    // Build query with joins
+    let query = supabase
       .from('assignments')
-      .select('*')
-      .eq('college_id', user.college_id)
-      .order('created_at', { ascending: false });
+      .select(`
+        *,
+        batches(id, name, semester, section),
+        subjects:subject_id(id, name, code),
+        users(id, first_name, last_name)
+      `, { count: 'exact' })
+      .eq('college_id', user.college_id);
+
+    // Only faculty members see only their created assignments
+    if (user.role === 'faculty') {
+      query = query.eq('created_by', user.user_id);
+    }
+
+    // Default sort
+    query = query.order('created_at', { ascending: false });
+
+    // Apply Pagination or Safety Limit
+    if (isPaginated && page && limit) {
+      const { from, to } = getPaginationRange(page, limit);
+      query = query.range(from, to);
+    } else {
+      query = query.limit(500); // Safety cap
+    }
+
+    const { data: assignments, count, error } = await query;
 
     if (error) {
       console.error('Get assignments error:', error);
@@ -217,47 +241,27 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Manually fetch related data to avoid join issues
-    const enrichedAssignments = await Promise.all(
-      (assignments || []).map(async (assignment: any) => {
-        const enriched = { ...assignment };
+    // Mapping for compatibility
+    const enrichedAssignments = (assignments || []).map((assignment: any) => ({
+      ...assignment,
+      subjects: assignment.subjects,
+      users: assignment.users ? { name: `${assignment.users.first_name || ''} ${assignment.users.last_name || ''}`.trim() } : null
+    }));
 
-        // Fetch batch info if batch_id exists
-        if (assignment.batch_id) {
-          const { data: batch } = await supabase
-            .from('batches')
-            .select('name, semester, section')
-            .eq('id', assignment.batch_id)
-            .single();
-          enriched.batches = batch;
-        }
-
-        // Fetch subject info if subject_id exists
-        if (assignment.subject_id) {
-          const { data: subject } = await supabase
-            .from('subjects')
-            .select('name, code')
-            .eq('id', assignment.subject_id)
-            .single();
-          enriched.subjects = subject;
-        }
-
-        // Fetch creator info
-        const { data: creator } = await supabase
-          .from('users')
-          .select('name')
-          .eq('id', assignment.created_by)
-          .single();
-        enriched.users = creator;
-
-        return enriched;
-      })
-    );
-
-    return NextResponse.json({
-      success: true,
-      assignments: enrichedAssignments,
-    });
+    if (isPaginated && page && limit) {
+      const paginatedResult = createPaginatedResponse(enrichedAssignments, count || 0, page, limit);
+      return NextResponse.json({
+        success: true,
+        assignments: paginatedResult.data,
+        meta: paginatedResult.meta
+      });
+    } else {
+      return NextResponse.json({
+        success: true,
+        assignments: enrichedAssignments,
+        meta: { total: enrichedAssignments.length }
+      });
+    }
 
   } catch (error: any) {
     console.error('Get assignments error:', error);

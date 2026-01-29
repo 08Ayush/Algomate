@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
 
 // Create server-side supabase client with service role key
 const supabaseAdmin = createClient(
@@ -41,6 +42,9 @@ export async function GET(request: NextRequest) {
       }, { status: 500 })
     }
 
+    // Pagination (Dual-Mode)
+    const { page, limit, isPaginated } = getPaginationParams(request);
+
     // Build query - filter by college_id if provided
     let query = supabaseAdmin
       .from('departments')
@@ -51,7 +55,7 @@ export async function GET(request: NextRequest) {
         description,
         is_active,
         college_id
-      `)
+      `, { count: 'exact' })
       .eq('is_active', true);
 
     // Filter by college_id if provided
@@ -59,7 +63,18 @@ export async function GET(request: NextRequest) {
       query = query.eq('college_id', college_id);
     }
 
-    const { data: departments, error } = await query.order('name');
+    // Default sort
+    query = query.order('name');
+
+    // Apply Pagination or Safety Limit
+    if (isPaginated && page && limit) {
+      const { from, to } = getPaginationRange(page, limit);
+      query = query.range(from, to);
+    } else {
+      query = query.limit(500); // Safety cap
+    }
+
+    const { data: departments, count, error } = await query;
 
     if (error) {
       console.error('Department fetch error:', error)
@@ -69,10 +84,21 @@ export async function GET(request: NextRequest) {
       }, { status: 500 })
     }
 
-    return NextResponse.json({
-      departments: departments || [],
-      count: departments?.length || 0
-    })
+    if (isPaginated && page && limit) {
+      const paginatedResult = createPaginatedResponse(departments || [], count || 0, page, limit);
+      return NextResponse.json({
+        success: true,
+        departments: paginatedResult.data,
+        meta: paginatedResult.meta
+      });
+    } else {
+      return NextResponse.json({
+        success: true,
+        departments: departments || [],
+        count: departments?.length || 0,
+        meta: { total: count || 0 }
+      });
+    }
 
   } catch (error) {
     console.error('Unexpected error:', error)

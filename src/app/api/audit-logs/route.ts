@@ -7,6 +7,7 @@ import {
   getAuditStatistics,
   AuditAction,
 } from '@/lib/auditLog';
+import { getPaginationParams, createPaginatedResponse } from '@/shared/utils/pagination';
 
 // ============================================================================
 // GET - Query audit logs
@@ -92,8 +93,9 @@ export async function GET(request: NextRequest) {
     const recordId = searchParams.get('record_id') || undefined;
     const dateFrom = searchParams.get('date_from') || undefined;
     const dateTo = searchParams.get('date_to') || undefined;
-    const limit = parseInt(searchParams.get('limit') || '50');
-    const offset = parseInt(searchParams.get('offset') || '0');
+
+    // Pagination (Dual-Mode)
+    const { page, limit, offset, isPaginated } = getPaginationParams(request);
 
     const result = await getAuditLogs({
       user_id: userId,
@@ -102,21 +104,28 @@ export async function GET(request: NextRequest) {
       record_id: recordId,
       date_from: dateFrom,
       date_to: dateTo,
-      limit,
-      offset,
+      limit: isPaginated ? limit : undefined,
+      offset: isPaginated ? offset : undefined,
     });
 
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 500 });
     }
 
-    return NextResponse.json({
-      success: true,
-      data: result.data,
-      total: result.total,
-      limit,
-      offset,
-    });
+    if (isPaginated && page && limit) {
+      const paginatedResult = createPaginatedResponse(result.data || [], result.total || 0, page, limit);
+      return NextResponse.json({
+        success: true,
+        data: paginatedResult.data,
+        meta: paginatedResult.meta,
+      });
+    } else {
+      return NextResponse.json({
+        success: true,
+        data: result.data,
+        meta: { total: result.total || 0 },
+      });
+    }
   } catch (error) {
     console.error('❌ Audit logs GET error:', error);
     return NextResponse.json(

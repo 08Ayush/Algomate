@@ -16,12 +16,19 @@ const courseRepo = new SupabaseCourseRepository(supabase);
 const getCoursesUseCase = new GetCoursesUseCase(courseRepo);
 const createCourseUseCase = new CreateCourseUseCase(courseRepo);
 
+import { getPaginationParams, createPaginatedResponse } from '@/shared/utils/pagination';
+
+// ... (existing imports)
+
 export async function GET(request: NextRequest) {
   try {
     const user = await authenticate(request);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    // Pagination
+    const { page, limit, isPaginated } = getPaginationParams(request);
 
     const { searchParams } = new URL(request.url);
     const departmentId = searchParams.get('departmentId');
@@ -39,10 +46,24 @@ export async function GET(request: NextRequest) {
 
     const result = await getCoursesUseCase.execute(
       targetCollegeId,
-      departmentId || undefined
+      departmentId || undefined,
+      page,
+      limit
     );
 
-    return NextResponse.json({ courses: result.courses || [] });
+    if (isPaginated && page && limit) {
+      const paginatedResult = createPaginatedResponse(result.courses || [], result.total || 0, page, limit);
+      return NextResponse.json({
+        courses: paginatedResult.data,
+        meta: paginatedResult.meta
+      });
+    } else {
+      return NextResponse.json({
+        courses: result.courses || [],
+        meta: { total: result.total || 0 }
+      });
+    }
+
   } catch (error: any) {
     console.error('Error fetching courses:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

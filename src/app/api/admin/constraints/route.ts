@@ -19,6 +19,8 @@ function getAuthenticatedUser(request: NextRequest) {
     }
 }
 
+import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
+
 export async function GET(request: NextRequest) {
     try {
         const user = getAuthenticatedUser(request);
@@ -26,19 +28,45 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
         }
 
+        // Pagination (Dual-Mode)
+        const { page, limit, isPaginated } = getPaginationParams(request);
+
         // Use college_id directly as confirmed by the User's schema update
-        const { data: constraints, error } = await supabase
+        let query = supabase
             .from('constraint_rules')
-            .select('*')
+            .select('*', { count: 'exact' })
             .eq('college_id', user.college_id)
             .order('created_at', { ascending: false });
+
+        // Apply Pagination or Safety Limit
+        if (isPaginated && page && limit) {
+            const { from, to } = getPaginationRange(page, limit);
+            query = query.range(from, to);
+        } else {
+            query = query.limit(500); // Safety cap
+        }
+
+        const { data: constraints, count, error } = await query;
 
         if (error) {
             console.error('Error fetching constraints:', error);
             return NextResponse.json({ success: false, error: 'Failed to fetch constraints' }, { status: 500 });
         }
 
-        return NextResponse.json({ success: true, data: constraints || [] });
+        if (isPaginated && page && limit) {
+            const paginatedResult = createPaginatedResponse(constraints || [], count || 0, page, limit);
+            return NextResponse.json({
+                success: true,
+                data: paginatedResult.data,
+                meta: paginatedResult.meta
+            });
+        } else {
+            return NextResponse.json({
+                success: true,
+                data: constraints || [],
+                meta: { total: count || 0 }
+            });
+        }
     } catch (error: any) {
         console.error('SERVER ERROR in constraints route:', error);
         return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });

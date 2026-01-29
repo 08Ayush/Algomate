@@ -16,6 +16,8 @@ const classroomRepo = new SupabaseClassroomRepository(supabase);
 const getClassroomsUseCase = new GetClassroomsUseCase(classroomRepo);
 const createClassroomUseCase = new CreateClassroomUseCase(classroomRepo);
 
+import { getPaginationParams, createPaginatedResponse } from '@/shared/utils/pagination';
+
 export async function GET(request: NextRequest) {
   try {
     const user = await authenticate(request);
@@ -26,6 +28,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const departmentId = searchParams.get('departmentId');
     const queryCollegeId = searchParams.get('college_id');
+
+    // Pagination
+    const { page, limit } = getPaginationParams(request);
 
     // For super_admin, use college_id from query params
     let targetCollegeId = user.college_id;
@@ -39,10 +44,17 @@ export async function GET(request: NextRequest) {
 
     const result = await getClassroomsUseCase.execute(
       targetCollegeId,
-      departmentId || undefined
+      departmentId || undefined,
+      page,
+      limit
     );
 
-    return NextResponse.json({ classrooms: result.classrooms || [] });
+    const paginated = createPaginatedResponse(result.classrooms, result.total, page, limit);
+
+    return NextResponse.json({
+      classrooms: paginated.data,
+      meta: paginated.meta
+    });
   } catch (error: any) {
     console.error('Error fetching classrooms:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

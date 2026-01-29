@@ -9,7 +9,7 @@ import { supabase } from '@/shared/database/client';
 // TYPES
 // ============================================================================
 
-export type AuditAction = 
+export type AuditAction =
   | 'insert' | 'update' | 'delete'
   | 'login' | 'logout' | 'login_failed'
   | 'approve' | 'reject' | 'publish' | 'unpublish'
@@ -133,11 +133,9 @@ export async function getAuditLogs(filters?: {
 
     query = query.order('timestamp', { ascending: false });
 
-    if (filters?.limit) {
-      query = query.limit(filters.limit);
-    }
-
-    if (filters?.offset) {
+    // Apply pagination only if both limit and offset are provided
+    // This supports the Dual-Mode Strategy
+    if (filters?.limit !== undefined && filters?.offset !== undefined) {
       query = query.range(filters.offset, filters.offset + (filters.limit || 10) - 1);
     }
 

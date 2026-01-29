@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -17,7 +18,7 @@ async function getAuthenticatedUser(request: NextRequest) {
   try {
     const userString = Buffer.from(token, 'base64').toString();
     const user = JSON.parse(userString);
-    
+
     // Verify user exists and is active - include department_id
     const { data: dbUser, error } = await supabase
       .from('users')
@@ -66,10 +67,10 @@ export async function GET(request: NextRequest) {
 
       if (deptError) {
         console.error('Error fetching department:', deptError);
-        return NextResponse.json({ 
-          success: false, 
+        return NextResponse.json({
+          success: false,
           error: 'Department not found',
-          data: [] 
+          data: []
         });
       }
 
@@ -80,6 +81,9 @@ export async function GET(request: NextRequest) {
     if (user.role !== 'admin' && !deptId) {
       deptId = user.department_id;
     }
+
+    // Pagination (Dual-Mode)
+    const { page, limit, isPaginated } = getPaginationParams(request);
 
     // Build query to fetch classrooms
     let query = supabase
@@ -100,7 +104,7 @@ export async function GET(request: NextRequest) {
         location_notes,
         is_available,
         department:departments!classrooms_department_id_fkey(id, name, code)
-      `)
+      `, { count: 'exact' })
       .eq('is_available', true);
 
     // Filter by department if provided
@@ -108,14 +112,25 @@ export async function GET(request: NextRequest) {
       query = query.eq('department_id', deptId);
     }
 
-    const { data: classroomsData, error: classroomsError } = await query.order('name', { ascending: true });
+    // Default sort
+    query = query.order('name', { ascending: true });
+
+    // Apply Pagination or Safety Limit
+    if (isPaginated && page && limit) {
+      const { from, to } = getPaginationRange(page, limit);
+      query = query.range(from, to);
+    } else {
+      query = query.limit(500); // Safety cap
+    }
+
+    const { data: classroomsData, count, error: classroomsError } = await query;
 
     if (classroomsError) {
       console.error('Error fetching classrooms:', classroomsError);
-      return NextResponse.json({ 
-        success: false, 
+      return NextResponse.json({
+        success: false,
         error: classroomsError.message,
-        data: [] 
+        data: []
       }, { status: 500 });
     }
 
@@ -124,7 +139,7 @@ export async function GET(request: NextRequest) {
     // Transform data
     const transformedData = classroomsData?.map((classroom: any) => {
       const department = Array.isArray(classroom.department) ? classroom.department[0] : classroom.department;
-      
+
       return {
         id: classroom.id,
         name: classroom.name,
@@ -145,27 +160,35 @@ export async function GET(request: NextRequest) {
       };
     }) || [];
 
-    // Calculate statistics
-    const totalClassrooms = transformedData.length;
-    const lectureHalls = transformedData.filter((c: any) => c.type === 'Lecture Hall').length;
-    const labs = transformedData.filter((c: any) => c.type === 'Lab').length;
-    const smartClassrooms = transformedData.filter((c: any) => c.is_smart_classroom).length;
+    // Calculate statistics (on current slice/total as appropriate)
+    const statistics = {
+      totalClassrooms: count || 0,
+      lectureHalls: transformedData.filter((c: any) => c.type === 'Lecture Hall').length,
+      labs: transformedData.filter((c: any) => c.type === 'Lab').length,
+      smartClassrooms: transformedData.filter((c: any) => c.is_smart_classroom).length,
+    };
 
-    return NextResponse.json({ 
-      success: true, 
-      data: transformedData,
-      statistics: {
-        totalClassrooms,
-        lectureHalls,
-        labs,
-        smartClassrooms
-      },
-      count: transformedData.length
-    });
+    if (isPaginated && page && limit) {
+      const paginatedResult = createPaginatedResponse(transformedData, count || 0, page, limit);
+      return NextResponse.json({
+        success: true,
+        data: paginatedResult.data,
+        statistics,
+        meta: paginatedResult.meta
+      });
+    } else {
+      return NextResponse.json({
+        success: true,
+        data: transformedData,
+        statistics,
+        count: transformedData.length,
+        meta: { total: count || 0 }
+      });
+    }
   } catch (error: any) {
     console.error('Unexpected error:', error);
-    return NextResponse.json({ 
-      success: false, 
+    return NextResponse.json({
+      success: false,
       error: 'Internal server error',
       data: []
     }, { status: 500 });

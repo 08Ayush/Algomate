@@ -48,6 +48,8 @@ async function getAuthenticatedUser(request: NextRequest): Promise<Authenticated
   }
 }
 
+import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
+
 export async function GET(request: NextRequest) {
   try {
     const user = await getAuthenticatedUser(request);
@@ -62,22 +64,14 @@ export async function GET(request: NextRequest) {
     const academicYear = searchParams.get('academicYear') || undefined;
 
     // For filtering by department if explicitly requested
-    // Don't auto-filter by department - let faculty see all college timetables unless explicitly filtered
     const departmentId = searchParams.get('department_id') || searchParams.get('departmentId') || undefined;
 
-    // Pagination
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '100');
-    const from = (page - 1) * limit;
-    const to = from + limit - 1;
+    // Pagination (Dual-Mode)
+    const { page, limit, isPaginated } = getPaginationParams(request);
 
     // Optimized efficient fetch with embedded resources (Joins)
     let query = supabase
       .from('generated_timetables')
-      // Select all timetable fields, plus join:
-      // - batch: full batch details
-      // - created_by_user: the user details (aliased) who created it (explicitly joining on created_by column)
-      // - generation_task: the task details (aliased) linked by generation_task_id
       .select(`
         *,
         batch:batches(id, name, semester, section, department_id),
@@ -97,8 +91,19 @@ export async function GET(request: NextRequest) {
     if (departmentId) query = query.eq('department_id', departmentId as string);
 
     // Default sort
-    query = query.order('created_at', { ascending: false })
-      .range(from, to);
+    query = query.order('created_at', { ascending: false });
+
+    // Apply Pagination if requested
+    if (isPaginated && page && limit) {
+      const { from, to } = getPaginationRange(page, limit);
+      query = query.range(from, to);
+    } else {
+      // Safety: Limit "Fetch All" to reasonable number (e.g., 500) to prevent crash
+      // unless strictly filtered (e.g. by batchId)
+      if (!batchId) {
+        query = query.limit(500);
+      }
+    }
 
     const { data: enrichedTimetables, count, error: queryError } = await query;
 
@@ -106,17 +111,11 @@ export async function GET(request: NextRequest) {
       throw queryError;
     }
 
-    // Transform if necessary to match exact shape expected by frontend, 
-    // although the select aliases allow it to match closely.
-    // The previous implementation utilized .toJSON() on the entity, which converts 'batch_id' to 'batchId' (camelCase).
-    // The raw Supabase response will be snake_case (standard DB).
-    // If the frontend expects camelCase, we should map it here.
-
-    // Quick mapper to ensure frontend compatibility - include both snake_case and camelCase
-    const mappedData = enrichedTimetables.map((item: any) => ({
+    // Quick mapper to ensure frontend compatibility
+    const mappedData = (enrichedTimetables || []).map((item: any) => ({
       id: item.id,
       title: item.title,
-      // Snake case (for frontend compatibility)
+      // Snake case
       department_id: item.department_id,
       batch_id: item.batch_id,
       college_id: item.college_id,
@@ -128,7 +127,7 @@ export async function GET(request: NextRequest) {
       published_at: item.published_at,
       created_at: item.created_at,
       updated_at: item.updated_at,
-      // CamelCase (for other parts of the app)
+      // CamelCase
       departmentId: item.department_id,
       batchId: item.batch_id,
       collegeId: item.college_id,
@@ -149,12 +148,17 @@ export async function GET(request: NextRequest) {
       generation_task: item.generation_task
     }));
 
-    const meta = {
-      total: count,
-      page,
-      limit,
-      totalPages: Math.ceil((count || 0) / limit)
-    };
+    let meta;
+    if (isPaginated && page && limit) {
+      const paginatedResult = createPaginatedResponse(mappedData, count || 0, page, limit);
+      meta = paginatedResult.meta;
+    } else {
+      meta = {
+        total: mappedData.length, // approximation since we might have safety limit
+        page: 1,
+        limit: mappedData.length
+      };
+    }
 
     return NextResponse.json({ success: true, data: mappedData, meta });
 

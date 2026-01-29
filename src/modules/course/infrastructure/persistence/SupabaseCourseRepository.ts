@@ -19,26 +19,48 @@ export class SupabaseCourseRepository implements ICourseRepository {
         return Course.fromDatabase(data);
     }
 
-    async findByCollegeId(collegeId: string): Promise<Course[]> {
-        const { data, error } = await this.db
+    async findByCollegeId(collegeId: string, page?: number, limit?: number): Promise<{ items: Course[], total: number }> {
+        let query = this.db
             .from('courses')
-            .select('*')
+            .select('*', { count: 'exact' })
             .eq('college_id', collegeId)
             .order('title');
 
+        if (page && limit) {
+            const from = (page - 1) * limit;
+            const to = from + limit - 1;
+            query = query.range(from, to);
+        }
+
+        const { data, count, error } = await query;
         if (error) throw error;
-        return (data || []).map(row => Course.fromDatabase(row));
+
+        return {
+            items: (data || []).map(row => Course.fromDatabase(row)),
+            total: count || 0
+        };
     }
 
-    async findByDepartmentId(departmentId: string): Promise<Course[]> {
-        const { data, error } = await this.db
+    async findByDepartmentId(departmentId: string, page?: number, limit?: number): Promise<{ items: Course[], total: number }> {
+        let query = this.db
             .from('courses')
-            .select('*')
+            .select('*', { count: 'exact' })
             .eq('department_id', departmentId)
             .order('title');
 
+        if (page && limit) {
+            const from = (page - 1) * limit;
+            const to = from + limit - 1;
+            query = query.range(from, to);
+        }
+
+        const { data, count, error } = await query;
         if (error) throw error;
-        return (data || []).map(row => Course.fromDatabase(row));
+
+        return {
+            items: (data || []).map(row => Course.fromDatabase(row)),
+            total: count || 0
+        };
     }
 
     async create(course: Omit<Course, 'id' | 'createdAt' | 'updatedAt' | 'toJSON'>): Promise<Course> {

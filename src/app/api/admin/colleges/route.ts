@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -36,6 +37,9 @@ export async function GET(request: NextRequest) {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Pagination (Dual-Mode)
+    const { page, limit, isPaginated } = getPaginationParams(request);
+
     // For college_admin, return only their assigned college
     if (user.role === 'college_admin') {
       if (!user.college_id) {
@@ -47,7 +51,7 @@ export async function GET(request: NextRequest) {
 
       const { data: college, error } = await supabase
         .from('colleges')
-        .select('id, name, code, address, email, phone')
+        .select('id, name, code, address, email, phone', { count: 'exact' })
         .eq('id', user.college_id)
         .single();
 
@@ -59,14 +63,25 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      return NextResponse.json({ colleges: college ? [college] : [] });
+      return NextResponse.json({
+        colleges: college ? [college] : [],
+        meta: { total: college ? 1 : 0 }
+      });
     }
 
     // For super_admin and admin, return all colleges
-    const { data: colleges, error } = await supabase
+    let query = supabase
       .from('colleges')
-      .select('id, name, code, address, email, phone')
+      .select('id, name, code, address, email, phone', { count: 'exact' })
       .order('name');
+
+    // Apply Pagination if requested
+    if (isPaginated && page && limit) {
+      const { from, to } = getPaginationRange(page, limit);
+      query = query.range(from, to);
+    }
+
+    const { data: colleges, count, error } = await query;
 
     if (error) {
       console.error('Error fetching colleges:', error);
@@ -76,7 +91,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ colleges: colleges || [] });
+    if (isPaginated && page && limit) {
+      const paginatedResult = createPaginatedResponse(colleges || [], count || 0, page, limit);
+      return NextResponse.json({
+        colleges: paginatedResult.data,
+        meta: paginatedResult.meta
+      });
+    } else {
+      return NextResponse.json({
+        colleges: colleges || [],
+        meta: { total: count || 0 }
+      });
+    }
 
   } catch (error) {
     console.error('Error in colleges API:', error);

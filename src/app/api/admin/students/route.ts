@@ -76,6 +76,11 @@ async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) 
 }
 
 // GET - Fetch students
+import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
+
+// ... (existing imports)
+
+// GET - Fetch students
 export async function GET(request: NextRequest) {
   try {
     const user = await getAuthenticatedUser(request, false);
@@ -88,10 +93,7 @@ export async function GET(request: NextRequest) {
     const queryCollegeId = searchParams.get('college_id');
 
     // Pagination
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
-    const from = (page - 1) * limit;
-    const to = from + limit - 1;
+    const { page, limit, isPaginated } = getPaginationParams(request);
 
     let targetCollegeId = user.collegeId;
 
@@ -105,7 +107,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Optimized efficient fetch with embedded resources (Joins)
-    const { data: studentsData, count, error: queryError } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('users')
       .select(`
         *,
@@ -114,8 +116,17 @@ export async function GET(request: NextRequest) {
       `, { count: 'exact' })
       .eq('college_id', targetCollegeId)
       .eq('role', 'student')
-      .order('created_at', { ascending: false })
-      .range(from, to);
+      .order('created_at', { ascending: false });
+
+    // Apply Pagination or Safety Limit
+    if (isPaginated && page && limit) {
+      const { from, to } = getPaginationRange(page, limit);
+      query = query.range(from, to);
+    } else {
+      query = query.limit(500); // Safety cap for students list
+    }
+
+    const { data: studentsData, count, error: queryError } = await query;
 
     if (queryError) {
       throw queryError;
@@ -200,15 +211,20 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // Sort by created_at desc
-    mappedStudents.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    // Sort by created_at desc (already sorted in query, but defensive sort here kept if desired, though query sort is better)
+    // Removed redundant JS sort for performance.
 
-    const meta = {
-      total: count,
-      page,
-      limit,
-      totalPages: Math.ceil((count || 0) / limit)
-    };
+    let meta;
+    if (isPaginated && page && limit) {
+      const paginatedResult = createPaginatedResponse(mappedStudents, count || 0, page, limit);
+      meta = paginatedResult.meta;
+    } else {
+      meta = {
+        total: mappedStudents.length,
+        page: 1,
+        limit: 500
+      };
+    }
 
     return NextResponse.json({
       students: mappedStudents,

@@ -26,7 +26,7 @@ async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) 
     // Decode and verify the user token
     const userString = Buffer.from(token, 'base64').toString();
     const user = JSON.parse(userString);
-    
+
     // Verify user exists and is active - include department_id
     const { data: dbUser, error } = await supabaseAdmin
       .from('users')
@@ -48,9 +48,9 @@ async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) 
     if (!requireAdmin) {
       const allowedRoles = ['admin', 'college_admin', 'super_admin'];
       const allowedFacultyTypes = ['creator', 'publisher'];
-      
-      if (!allowedRoles.includes(dbUser.role) && 
-          !(dbUser.role === 'faculty' && allowedFacultyTypes.includes(dbUser.faculty_type))) {
+
+      if (!allowedRoles.includes(dbUser.role) &&
+        !(dbUser.role === 'faculty' && allowedFacultyTypes.includes(dbUser.faculty_type))) {
         return null;
       }
     }
@@ -60,6 +60,8 @@ async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) 
     return null;
   }
 }
+
+import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
 
 // GET - Fetch subjects for authenticated user's college (and department if creator)
 export async function GET(request: NextRequest) {
@@ -76,9 +78,12 @@ export async function GET(request: NextRequest) {
     // Get college_id from query parameter (for super_admin) or use user's college_id
     const { searchParams } = new URL(request.url);
     const queryCollegeId = searchParams.get('college_id');
-    
+
+    // Pagination
+    const { page, limit, isPaginated } = getPaginationParams(request);
+
     let targetCollegeId = user.college_id;
-    
+
     // Super admin can view any college's subjects
     if (user.role === 'super_admin' && queryCollegeId) {
       targetCollegeId = queryCollegeId;
@@ -99,7 +104,7 @@ export async function GET(request: NextRequest) {
           title,
           code
         )
-      `)
+      `, { count: 'exact' })
       .eq('college_id', targetCollegeId);
 
     // Filter by department for non-admin users
@@ -107,7 +112,13 @@ export async function GET(request: NextRequest) {
       query = query.eq('department_id', user.department_id);
     }
 
-    const { data: subjects, error } = await query
+    // Apply pagination range only if requested
+    if (isPaginated && page && limit) {
+      const { from, to } = getPaginationRange(page, limit);
+      query = query.range(from, to);
+    }
+
+    const { data: subjects, count, error } = await query
       .order('semester')
       .order('code');
 
@@ -119,9 +130,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({
-      subjects: subjects || []
-    });
+    if (isPaginated && page && limit) {
+      const paginatedResult = createPaginatedResponse(subjects || [], count || 0, page, limit);
+      return NextResponse.json({
+        subjects: paginatedResult.data,
+        meta: paginatedResult.meta
+      });
+    } else {
+      return NextResponse.json({
+        subjects: subjects || [],
+        meta: { total: subjects?.length || 0 }
+      });
+    }
 
   } catch (error: any) {
     console.error('Subjects API error:', error);
@@ -207,7 +227,7 @@ export async function POST(request: NextRequest) {
 
     // Create the subject - Generate UUID explicitly
     const subjectId = randomUUID();
-    
+
     const insertData = {
       id: subjectId,
       code,

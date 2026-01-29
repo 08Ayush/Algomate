@@ -36,6 +36,10 @@ async function getAuthenticatedUser(request: NextRequest) {
   }
 }
 
+import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
+
+// ... (existing imports)
+
 // GET - Fetch faculty members
 export async function GET(request: NextRequest) {
   try {
@@ -53,10 +57,7 @@ export async function GET(request: NextRequest) {
     let departmentId = searchParams.get('department_id');
 
     // Pagination
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
-    const from = (page - 1) * limit;
-    const to = from + limit - 1;
+    const { page, limit, isPaginated } = getPaginationParams(request);
 
     console.log('Fetching faculty with params:', { departmentCode, departmentId });
 
@@ -83,7 +84,7 @@ export async function GET(request: NextRequest) {
         created_at,
         department:departments!users_department_id_fkey(id, name, code),
         qualified_subjects:faculty_qualified_subjects(
-           subject:subjects(name, code)
+          subject:subjects(name, code)
         )
       `, { count: 'exact' })
       .eq('role', 'faculty')
@@ -114,9 +115,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const { data: facultyData, count, error: facultyError } = await query
-      .order('first_name', { ascending: true })
-      .range(from, to);
+    // Apply Pagination or Safety Limit
+    if (isPaginated && page && limit) {
+      const { from, to } = getPaginationRange(page, limit);
+      query = query
+        .order('first_name', { ascending: true })
+        .range(from, to);
+    } else {
+      query = query
+        .order('first_name', { ascending: true })
+        .limit(500); // Safety cap
+    }
+
+    const { data: facultyData, count, error: facultyError } = await query;
 
     if (facultyError) {
       console.error('Error fetching faculty:', facultyError);
@@ -155,12 +166,17 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    const meta = {
-      total: count,
-      page,
-      limit,
-      totalPages: Math.ceil((count || 0) / limit)
-    };
+    let meta;
+    if (isPaginated && page && limit) {
+      const paginatedResult = createPaginatedResponse(facultyWithSubjects, count || 0, page, limit);
+      meta = paginatedResult.meta;
+    } else {
+      meta = {
+        total: facultyWithSubjects.length,
+        page: 1,
+        limit: 500
+      };
+    }
 
     return NextResponse.json({
       success: true,

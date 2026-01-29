@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -60,6 +61,9 @@ export async function GET(request: NextRequest) {
 
     console.log('Fetching subjects with params:', { departmentCode, departmentId, semester });
 
+    // Pagination (Dual-Mode)
+    const { page, limit, isPaginated } = getPaginationParams(request);
+
     // Build query to fetch subjects
     let query = supabase
       .from('subjects')
@@ -82,7 +86,7 @@ export async function GET(request: NextRequest) {
         is_active,
         course_id,
         department:departments!subjects_department_id_fkey(id, name, code)
-      `)
+      `, { count: 'exact' })
       .eq('is_active', true)
       .eq('college_id', user.college_id); // Only show subjects from user's college
 
@@ -121,7 +125,18 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const { data: subjectsData, error: subjectsError } = await query.order('code', { ascending: true });
+    // Default sort
+    query = query.order('code', { ascending: true });
+
+    // Apply Pagination or Safety Limit
+    if (isPaginated && page && limit) {
+      const { from, to } = getPaginationRange(page, limit);
+      query = query.range(from, to);
+    } else {
+      query = query.limit(500); // Safety cap
+    }
+
+    const { data: subjectsData, count, error: subjectsError } = await query;
 
     if (subjectsError) {
       console.error('Error fetching subjects:', subjectsError);
@@ -140,8 +155,6 @@ export async function GET(request: NextRequest) {
 
       // Get semester directly from subject (single value, not array)
       const semester = subject.semester;
-
-      console.log(`Subject ${subject.code}: Semester ${semester}, Type: ${subject.subject_type}`);
 
       return {
         id: subject.id,
@@ -164,22 +177,20 @@ export async function GET(request: NextRequest) {
         description: subject.description,
         is_active: subject.is_active
       };
-    }) || [];    // Filter by semester if provided
+    }) || [];
+
+    // Filter by semester if provided (on current slice)
     let filteredData = transformedData;
     if (semester) {
       const semNum = parseInt(semester);
       filteredData = transformedData.filter(s => s.semester === semNum);
     }
 
-    // Group by semester
+    // Group by semester (on returned subjects)
     const groupedBySemester: { [key: number]: any[] } = {};
-
-    // Initialize all semester arrays (1-8)
     for (let sem = 1; sem <= 8; sem++) {
       groupedBySemester[sem] = [];
     }
-
-    // Populate with subjects based on their semester column
     filteredData.forEach(subject => {
       const sem = subject.semester;
       if (sem >= 1 && sem <= 8) {
@@ -187,31 +198,34 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // Log grouping results
-    Object.keys(groupedBySemester).forEach(sem => {
-      console.log(`Semester ${sem}: ${groupedBySemester[parseInt(sem)].length} subjects`);
-    });
+    // Statistics (on returned data/total)
+    const statistics = {
+      totalSubjects: count || 0,
+      totalCredits: filteredData.reduce((sum, s) => sum + (s.credits || 0), 0),
+      coreSubjects: filteredData.filter(s => s.is_core_subject).length,
+      theorySubjects: filteredData.filter(s => s.subject_type === 'THEORY').length,
+      labSubjects: filteredData.filter(s => s.subject_type === 'LAB' || s.subject_type === 'PRACTICAL').length,
+    };
 
-    // Calculate statistics
-    const totalSubjects = filteredData.length;
-    const totalCredits = filteredData.reduce((sum, s) => sum + (s.credits || 0), 0);
-    const coreSubjects = filteredData.filter(s => s.is_core_subject).length;
-    const theorySubjects = filteredData.filter(s => s.subject_type === 'THEORY').length;
-    const labSubjects = filteredData.filter(s => s.subject_type === 'LAB' || s.subject_type === 'PRACTICAL').length;
-
-    return NextResponse.json({
-      success: true,
-      data: filteredData,
-      groupedBySemester,
-      statistics: {
-        totalSubjects,
-        totalCredits,
-        coreSubjects,
-        theorySubjects,
-        labSubjects
-      },
-      count: filteredData.length
-    });
+    if (isPaginated && page && limit) {
+      const paginatedResult = createPaginatedResponse(filteredData, count || 0, page, limit);
+      return NextResponse.json({
+        success: true,
+        data: paginatedResult.data,
+        groupedBySemester,
+        statistics,
+        meta: paginatedResult.meta
+      });
+    } else {
+      return NextResponse.json({
+        success: true,
+        data: filteredData,
+        groupedBySemester,
+        statistics,
+        count: filteredData.length,
+        meta: { total: count || 0 }
+      });
+    }
   } catch (error: any) {
     console.error('Unexpected error:', error);
     return NextResponse.json({
