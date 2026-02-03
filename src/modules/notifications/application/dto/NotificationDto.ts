@@ -10,7 +10,9 @@ export const SendNotificationDtoSchema = z.object({
 export type SendNotificationDto = z.infer<typeof SendNotificationDtoSchema>;
 
 export const MarkAsReadDtoSchema = z.object({
-    notification_id: z.string().uuid()
+    notification_ids: z.array(z.string().uuid()).optional(),
+    user_id: z.string().uuid().optional(),
+    mark_all_read: z.boolean().optional()
 });
 
 export type MarkAsReadDto = z.infer<typeof MarkAsReadDtoSchema>;

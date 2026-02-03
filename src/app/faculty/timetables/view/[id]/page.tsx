@@ -276,6 +276,39 @@ export default function ViewTimetablePage() {
     }
   };
 
+  const submitForApproval = async () => {
+    try {
+      if (!timetable) return;
+
+      const userStr = localStorage.getItem('user');
+      if (!userStr) {
+        toast.error('Please log in');
+        return;
+      }
+      const user = JSON.parse(userStr);
+      const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
+
+      const response = await fetch(`/api/timetables/${timetable.id}/submit`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        toast.success('Timetable submitted for approval');
+        fetchTimetableDetails(); // Refresh to update status
+      } else {
+        toast.error(data.error || 'Failed to submit timetable');
+      }
+    } catch (error) {
+      console.error('Error submitting timetable:', error);
+      toast.error('Error submitting timetable');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#CDE8E5] via-[#EEF7FF] to-[#7AB2B2] flex items-center justify-center">
@@ -367,12 +400,20 @@ export default function ViewTimetablePage() {
           {/* Actions */}
           <div className="flex gap-3 mt-6">
             {timetable.status === 'draft' && (
-              <button
-                onClick={() => router.push('/faculty/ai-timetable-creator')}
-                className="flex items-center gap-2 px-4 py-2.5 bg-white text-[#4D869C] rounded-xl font-medium hover:shadow-lg transition-all"
-              >
-                <Edit size={16} /> Edit Timetable
-              </button>
+              <>
+                <button
+                  onClick={submitForApproval}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 hover:shadow-lg transition-all"
+                >
+                  <FileText size={16} /> Submit for Approval
+                </button>
+                <button
+                  onClick={() => router.push('/faculty/ai-timetable-creator')}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-white text-[#4D869C] rounded-xl font-medium hover:shadow-lg transition-all"
+                >
+                  <Edit size={16} /> Edit Timetable
+                </button>
+              </>
             )}
             <button
               onClick={exportToPDF}

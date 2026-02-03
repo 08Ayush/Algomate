@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { notifyAssignmentSubmitted } from '@/lib/notificationService';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -7,7 +8,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 // Helper function to decode and verify user from token
 function getAuthenticatedUser(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
-  
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return null;
   }
@@ -24,9 +25,11 @@ function getAuthenticatedUser(request: NextRequest) {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id: assignmentId } = await params;
+
     const user = getAuthenticatedUser(request);
     if (!user || !user.user_id) {
       return NextResponse.json(
@@ -35,7 +38,6 @@ export async function POST(
       );
     }
 
-    const assignmentId = params.id;
     const body = await request.json();
     const { answers, time_taken, violations } = body;
 
@@ -44,7 +46,7 @@ export async function POST(
     // Fetch assignment to get questions and calculate score
     const { data: assignment, error: assignmentError } = await supabase
       .from('assignments')
-      .select('*')
+      .select('*, users:created_by(id, first_name, last_name)')
       .eq('id', assignmentId)
       .single();
 
@@ -72,7 +74,7 @@ export async function POST(
     let totalScore = 0;
     const questionResponses = [];
 
-    for (const question of questions) {
+    for (const question of questions || []) {
       const studentAnswer = answers[question.id];
       let isCorrect = false;
       let earnedMarks = 0;
@@ -117,7 +119,7 @@ export async function POST(
         time_taken_seconds: time_taken,
         score: totalScore,
         percentage: (totalScore / assignment.total_marks) * 100,
-        auto_graded: !questions.some((q: any) => 
+        auto_graded: !questions?.some((q: any) =>
           q.question_type === 'ESSAY' || q.question_type === 'CODING'
         )
       })
@@ -161,6 +163,24 @@ export async function POST(
         });
     }
 
+    // Notify faculty of submission
+    if (assignment.created_by) {
+      const studentName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Student';
+
+      try {
+        await notifyAssignmentSubmitted({
+          assignmentId,
+          assignmentTitle: assignment.title,
+          studentId: user.user_id,
+          studentName,
+          facultyId: assignment.created_by
+        });
+        console.log('✅ Faculty notified of assignment submission');
+      } catch (notifyError) {
+        console.error('Notification error (non-critical):', notifyError);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       submission: {
@@ -180,3 +200,4 @@ export async function POST(
     );
   }
 }
+

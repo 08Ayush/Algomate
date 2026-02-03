@@ -12,6 +12,8 @@ export interface AuthUser {
     college_id: string | null;
     department_id: string | null;
     faculty_type: 'creator' | 'publisher' | 'general' | 'guest' | null;
+    first_name?: string;
+    last_name?: string;
 }
 
 /**
@@ -59,7 +61,7 @@ export async function authenticate(request: NextRequest): Promise<AuthUser | nul
         // Verify user exists in database using serviceDb (admin access)
         const { data, error } = await serviceDb
             .from('users')
-            .select('id, email, role, college_id, department_id, faculty_type')
+            .select('id, email, role, college_id, department_id, faculty_type, first_name, last_name')
             .eq('id', user.id)
             .single();
 
@@ -77,7 +79,9 @@ export async function authenticate(request: NextRequest): Promise<AuthUser | nul
             role: data.role,
             college_id: data.college_id,
             department_id: data.department_id,
-            faculty_type: data.faculty_type
+            faculty_type: data.faculty_type,
+            first_name: data.first_name,
+            last_name: data.last_name
         };
     } catch (error) {
         console.error('[AUTH] Authentication error (exception):', error);

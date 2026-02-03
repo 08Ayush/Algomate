@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { randomUUID } from 'crypto';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -93,6 +94,7 @@ export async function POST(request: NextRequest) {
         // 4. Insert Notifications
         // Prepare bulk insert data
         const notificationsToInsert = recipientIds.map(recipientId => ({
+            id: randomUUID(),
             recipient_id: recipientId,
             sender_id: user.id,
             type: type,

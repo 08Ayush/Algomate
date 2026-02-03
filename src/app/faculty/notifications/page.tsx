@@ -12,10 +12,16 @@ import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
 
 interface Notification {
   id: string;
-  type: 'timetable_published' | 'schedule_change' | 'system_alert' | 'approval_request' | string;
+  type: string;
   title: string;
   message: string;
   timetable_id?: string;
+  batch_id?: string;
+  content_type?: string;
+  content_id?: string;
+  action_url?: string;
+  priority?: 'low' | 'normal' | 'high' | 'urgent';
+  sender_id?: string;
   is_read: boolean;
   created_at: string;
   read_at?: string;
@@ -79,7 +85,7 @@ const FacultyNotificationsPage: React.FC = () => {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
-      if (data.success || data.data) {
+      if (data.success || data.data || data.batches) {
         setBatches(data.data || data.batches || []);
       }
     } catch (error) {
@@ -179,7 +185,7 @@ const FacultyNotificationsPage: React.FC = () => {
         setNotificationForm({
           title: '',
           message: '',
-          type: 'system_alert',
+          type: 'general_announcement',
           target: 'all',
           batch_id: ''
         });
@@ -198,28 +204,116 @@ const FacultyNotificationsPage: React.FC = () => {
     if (!notification.is_read) {
       markAsRead([notification.id]);
     }
+
+    // Navigate based on action_url or content type
+    if (notification.action_url) {
+      router.push(notification.action_url);
+      return;
+    }
+
+    // Fallback navigation based on content type
     if (notification.timetable_id) {
       router.push(`/faculty/timetables/view/${notification.timetable_id}`);
+    } else if (notification.content_type === 'assignment' && notification.content_id) {
+      router.push(`/faculty/assignments/${notification.content_id}`);
+    } else if (notification.content_type === 'announcement' && notification.content_id) {
+      router.push(`/announcements`);
+    } else if (notification.content_type === 'event' && notification.content_id) {
+      router.push(`/events`);
     }
   };
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
-      case 'timetable_published': return <CheckCircle size={20} className="text-green-600" />;
-      case 'schedule_change': return <RefreshCw size={20} className="text-blue-600" />;
-      case 'system_alert': return <AlertCircle size={20} className="text-orange-600" />;
-      case 'approval_request': return <Calendar size={20} className="text-purple-600" />;
-      default: return <Bell size={20} className="text-gray-600" />;
+      // Timetable notifications
+      case 'timetable_published':
+      case 'timetable_approved':
+      case 'content_approved':
+        return <CheckCircle size={20} className="text-green-600" />;
+      case 'timetable_rejected':
+      case 'content_rejected':
+      case 'event_cancelled':
+      case 'class_cancellation':
+        return <X size={20} className="text-red-600" />;
+      case 'schedule_change':
+      case 'revision_requested':
+        return <RefreshCw size={20} className="text-blue-600" />;
+      case 'conflict_detected':
+      case 'system_alert':
+      case 'maintenance_alert':
+        return <AlertCircle size={20} className="text-orange-600" />;
+
+      // Assignment notifications
+      case 'assignment_created':
+      case 'assignment':
+      case 'exam_test':
+        return <GraduationCap size={20} className="text-purple-600" />;
+      case 'assignment_due':
+      case 'approval_request':
+      case 'content_pending_review':
+        return <Clock size={20} className="text-blue-600" />;
+      case 'assignment_submitted':
+      case 'material_uploaded':
+        return <Users size={20} className="text-blue-600" />;
+      case 'assignment_graded':
+        return <CheckCircle size={20} className="text-green-600" />;
+
+      // Announcement & Event
+      case 'announcement':
+      case 'general_announcement':
+        return <MessageSquare size={20} className="text-blue-600" />;
+      case 'event_created':
+      case 'event_reminder':
+        return <Calendar size={20} className="text-pink-600" />;
+
+      default:
+        return <Bell size={20} className="text-gray-600" />;
     }
   };
 
   const getNotificationBgColor = (type: string) => {
     switch (type) {
-      case 'timetable_published': return 'bg-green-100';
-      case 'schedule_change': return 'bg-blue-100';
-      case 'system_alert': return 'bg-orange-100';
-      case 'approval_request': return 'bg-purple-100';
-      default: return 'bg-gray-100';
+      case 'timetable_published':
+      case 'timetable_approved':
+      case 'content_approved':
+      case 'assignment_graded':
+        return 'bg-green-100';
+
+      case 'timetable_rejected':
+      case 'content_rejected':
+      case 'event_cancelled':
+      case 'assignment_due':
+      case 'class_cancellation':
+        return 'bg-red-100';
+
+      case 'schedule_change':
+      case 'approval_request':
+      case 'content_pending_review':
+      case 'announcement':
+      case 'assignment_submitted':
+      case 'general_announcement':
+      case 'material_uploaded':
+        return 'bg-blue-100';
+
+      case 'system_alert':
+      case 'maintenance_alert':
+      case 'conflict_detected':
+        return 'bg-orange-100';
+
+      case 'assignment_created':
+      case 'assignment':
+      case 'exam_test':
+        return 'bg-purple-100';
+
+      case 'event_created':
+      case 'event_reminder':
+        return 'bg-pink-100';
+
+      case 'revision_requested':
+        return 'bg-yellow-100';
+
+      default:
+        return 'bg-gray-100';
     }
   };
 
@@ -344,10 +438,36 @@ const FacultyNotificationsPage: React.FC = () => {
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#4D869C] outline-none"
               >
                 <option value="all">All Types</option>
-                <option value="timetable_published">Timetable Published</option>
-                <option value="schedule_change">Schedule Changes</option>
-                <option value="system_alert">System Alerts</option>
-                <option value="approval_request">Approval Requests</option>
+                <optgroup label="Timetable">
+                  <option value="timetable_published">Timetable Published</option>
+                  <option value="timetable_approved">Timetable Approved</option>
+                  <option value="timetable_rejected">Timetable Rejected</option>
+                  <option value="schedule_change">Schedule Changes</option>
+                  <option value="conflict_detected">Conflicts</option>
+                </optgroup>
+                <optgroup label="Assignments">
+                  <option value="assignment_created">Assignment Created</option>
+                  <option value="assignment_due">Assignment Due</option>
+                  <option value="assignment_submitted">Assignment Submitted</option>
+                  <option value="assignment_graded">Assignment Graded</option>
+                </optgroup>
+                <optgroup label="Announcements & Events">
+                  <option value="announcement">Announcements</option>
+                  <option value="event_created">Event Created</option>
+                  <option value="event_reminder">Event Reminder</option>
+                  <option value="event_cancelled">Event Cancelled</option>
+                  <option value="general_announcement">General Announcement</option>
+                </optgroup>
+                <optgroup label="Workflow">
+                  <option value="approval_request">Approval Requests</option>
+                  <option value="content_pending_review">Pending Review</option>
+                  <option value="content_approved">Content Approved</option>
+                  <option value="content_rejected">Content Rejected</option>
+                </optgroup>
+                <optgroup label="System">
+                  <option value="system_alert">System Alerts</option>
+                  <option value="maintenance_alert">Maintenance</option>
+                </optgroup>
               </select>
             </div>
           </div>
@@ -475,10 +595,13 @@ const FacultyNotificationsPage: React.FC = () => {
                         onChange={(e) => setNotificationForm({ ...notificationForm, type: e.target.value })}
                         className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#4D869C] outline-none"
                       >
-                        <option value="system_alert">System Alert</option>
-                        <option value="timetable_published">Timetable Published</option>
+                        <option value="general_announcement">General Announcement</option>
+                        <option value="assignment">Assignment</option>
+                        <option value="exam_test">Exam / Test</option>
+                        <option value="class_cancellation">Class Cancellation</option>
+                        <option value="material_uploaded">Material Uploaded</option>
                         <option value="schedule_change">Schedule Change</option>
-                        <option value="approval_request">Approval Request</option>
+                        <option value="system_alert">System Alert</option>
                       </select>
                     </div>
 

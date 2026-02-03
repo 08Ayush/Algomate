@@ -32,7 +32,18 @@ CREATE TYPE subject_type AS ENUM ('THEORY', 'LAB', 'PRACTICAL', 'TUTORIAL');
 CREATE TYPE algorithm_phase AS ENUM ('INITIALIZING', 'CP_SAT', 'GA', 'FINALIZING', 'COMPLETED', 'FAILED');
 CREATE TYPE generation_task_status AS ENUM ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED');
 CREATE TYPE access_level AS ENUM ('READ', 'write', 'admin', 'super_admin');
-CREATE TYPE notification_type AS ENUM ('timetable_published', 'schedule_change', 'system_alert', 'approval_request');
+CREATE TYPE notification_type AS ENUM (
+    -- Content workflow
+    'content_pending_review', 'content_approved', 'content_rejected', 'revision_requested',
+    -- Timetable specific  
+    'timetable_published', 'timetable_approved', 'timetable_rejected', 'schedule_change', 'conflict_detected',
+    -- Assignments
+    'assignment_created', 'assignment_due', 'assignment_submitted', 'assignment_graded',
+    -- Announcements & Events
+    'announcement', 'event_created', 'event_reminder', 'event_cancelled',
+    -- System
+    'system_alert', 'approval_request', 'resource_updated', 'maintenance_alert', 'policy_update'
+);
 CREATE TYPE nep_category AS ENUM (
     'MAJOR', 
     'MINOR', 
@@ -153,6 +164,8 @@ CREATE TABLE users (
     can_create_timetables BOOLEAN DEFAULT FALSE,
     can_publish_timetables BOOLEAN DEFAULT FALSE,
     can_approve_timetables BOOLEAN DEFAULT FALSE,
+    -- Hybrid Scheduler Fields
+    specializations JSONB DEFAULT '[]'::jsonb,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     email_verified BOOLEAN NOT NULL DEFAULT FALSE,
     last_login TIMESTAMPTZ,
@@ -208,6 +221,9 @@ CREATE TABLE classrooms (
     booking_weight DECIMAL(3,2) DEFAULT 1.0 CHECK (booking_weight BETWEEN 0.1 AND 3.0),
     facilities TEXT[] DEFAULT '{}',
     location_notes TEXT,
+    -- Hybrid Scheduler Fields
+    is_lab BOOLEAN DEFAULT FALSE,
+    lab_type VARCHAR(100),
     is_available BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
@@ -266,6 +282,10 @@ CREATE TABLE subjects (
     is_special_event BOOLEAN DEFAULT FALSE,
     special_event_notes TEXT,
     description TEXT,
+    -- Hybrid Scheduler Fields
+    weekly_hours INTEGER DEFAULT 3,
+    is_elective BOOLEAN DEFAULT FALSE,
+    lab_hours INTEGER DEFAULT 0,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
@@ -331,6 +351,9 @@ CREATE TABLE batches (
     semester_start_date DATE,
     semester_end_date DATE,
     is_current_semester BOOLEAN DEFAULT FALSE,
+    -- Hybrid Scheduler Fields
+    student_count INTEGER DEFAULT 60,
+    section_count INTEGER DEFAULT 1,
     CONSTRAINT valid_batch_times CHECK (preferred_start_time < preferred_end_time),
     CONSTRAINT valid_strength CHECK (actual_strength <= expected_strength + 10),
     CONSTRAINT valid_semester_dates CHECK (
@@ -374,6 +397,9 @@ CREATE TABLE time_slots (
     is_break_time BOOLEAN DEFAULT FALSE,
     is_lunch_time BOOLEAN DEFAULT FALSE,
     is_exam_slot BOOLEAN DEFAULT FALSE,
+    -- Hybrid Scheduler Fields
+    slot_number INTEGER,
+    is_lab_slot BOOLEAN DEFAULT FALSE,
     preference_score INT DEFAULT 5 CHECK (preference_score BETWEEN 1 AND 10),
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -456,6 +482,7 @@ CREATE TABLE constraint_rules (
 CREATE TABLE timetable_generation_tasks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     task_name VARCHAR(255) NOT NULL,
+    college_id UUID REFERENCES colleges(id) ON DELETE CASCADE,
     batch_id UUID NOT NULL REFERENCES batches(id) ON DELETE CASCADE,
     academic_year VARCHAR(10) NOT NULL,
     semester INT NOT NULL CHECK (semester BETWEEN 1 AND 8),
@@ -485,11 +512,14 @@ CREATE TABLE timetable_generation_tasks (
 CREATE TABLE generated_timetables (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     generation_task_id UUID NOT NULL REFERENCES timetable_generation_tasks(id) ON DELETE CASCADE,
+    college_id UUID REFERENCES colleges(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     batch_id UUID NOT NULL REFERENCES batches(id) ON DELETE CASCADE,
     academic_year VARCHAR(10) NOT NULL,
     semester INT NOT NULL,
     fitness_score DECIMAL(10,4) NOT NULL DEFAULT 0,
+    hard_constraint_violations INTEGER DEFAULT 0,
+    algorithm_source VARCHAR(50) DEFAULT 'hybrid',
     constraint_violations JSONB DEFAULT '[]',
     optimization_metrics JSONB DEFAULT '{}',
     generation_method VARCHAR(20) DEFAULT 'HYBRID' CHECK (
@@ -505,6 +535,9 @@ CREATE TABLE generated_timetables (
     review_notes TEXT,
     effective_from DATE,
     effective_until DATE,
+    is_active BOOLEAN NOT NULL DEFAULT FALSE,
+    is_published BOOLEAN NOT NULL DEFAULT FALSE,
+    published_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     approved_at TIMESTAMPTZ,
@@ -527,6 +560,7 @@ CREATE TABLE scheduled_classes (
     class_type subject_type DEFAULT 'THEORY',
     session_duration INT DEFAULT 60,
     is_recurring BOOLEAN DEFAULT TRUE,
+    is_elective BOOLEAN DEFAULT FALSE,
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
@@ -565,7 +599,69 @@ CREATE TABLE algorithm_execution_metrics (
     classroom_utilization_rate DECIMAL(5,2) DEFAULT 0,
     time_slot_utilization_rate DECIMAL(5,2) DEFAULT 0,
     workload_distribution_score DECIMAL(8,4) DEFAULT 0,
+    -- Hybrid Scheduler Fields
+    initial_score DECIMAL(10, 6),
+    final_score DECIMAL(10, 6),
+    improvement_percentage DECIMAL(10, 4),
+    solutions_found INTEGER,
+    metrics_json JSONB DEFAULT '{}'::jsonb,
     recorded_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================================================
+-- 4.5 HYBRID SCHEDULER TABLES
+-- ============================================================================
+
+-- GA Population Snapshots (for analysis)
+CREATE TABLE ga_population_snapshots (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    task_id UUID REFERENCES timetable_generation_tasks(id) ON DELETE CASCADE,
+    generation_number INTEGER NOT NULL,
+    population_size INTEGER NOT NULL,
+    best_fitness DECIMAL(10, 6) NOT NULL,
+    worst_fitness DECIMAL(10, 6) NOT NULL,
+    avg_fitness DECIMAL(10, 6) NOT NULL,
+    std_fitness DECIMAL(10, 6),
+    diversity_score DECIMAL(10, 6),
+    best_chromosome JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Scheduling Constraints Configuration - REMOVED (dropped from database)
+-- CREATE TABLE scheduling_constraints (...) - Table has been dropped
+
+-- Faculty Scheduling Preferences (for soft constraints)
+CREATE TABLE faculty_scheduling_preferences (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    faculty_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    preferred_days day_of_week[] DEFAULT ARRAY['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']::day_of_week[],
+    preferred_start_time TIME DEFAULT '09:00',
+    preferred_end_time TIME DEFAULT '17:00',
+    max_hours_per_day INTEGER DEFAULT 6 CHECK (max_hours_per_day > 0 AND max_hours_per_day <= 12),
+    max_hours_per_week INTEGER DEFAULT 25 CHECK (max_hours_per_week > 0 AND max_hours_per_week <= 50),
+    max_consecutive_hours INTEGER DEFAULT 3,
+    prefer_consecutive BOOLEAN DEFAULT TRUE,
+    lunch_break_required BOOLEAN DEFAULT TRUE,
+    preferred_lunch_start TIME DEFAULT '12:30',
+    preferred_lunch_end TIME DEFAULT '13:30',
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(faculty_id)
+);
+
+-- Faculty Subject Assignments
+CREATE TABLE faculty_subject_assignments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    faculty_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    batch_id UUID REFERENCES batches(id) ON DELETE CASCADE,
+    section VARCHAR(10),
+    is_primary BOOLEAN DEFAULT TRUE,
+    academic_year VARCHAR(20),
+    semester INTEGER,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(faculty_id, subject_id, batch_id, section)
 );
 
 -- ============================================================================
@@ -639,9 +735,60 @@ CREATE TABLE notifications (
     message TEXT NOT NULL,
     timetable_id UUID REFERENCES generated_timetables(id) ON DELETE SET NULL,
     batch_id UUID REFERENCES batches(id) ON DELETE CASCADE,
+    -- Extended fields for comprehensive notification system
+    content_type VARCHAR(50) DEFAULT NULL, -- 'timetable', 'assignment', 'announcement', 'event'
+    content_id UUID DEFAULT NULL, -- ID of the related content item
+    priority VARCHAR(20) DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
+    action_url TEXT DEFAULT NULL, -- URL to navigate to when notification is clicked
+    expires_at TIMESTAMPTZ DEFAULT NULL, -- Auto-expire notifications
     is_read BOOLEAN DEFAULT FALSE,
     read_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Announcements table for college/department/batch announcements
+CREATE TABLE announcements (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    college_id UUID NOT NULL REFERENCES colleges(id) ON DELETE CASCADE,
+    department_id UUID REFERENCES departments(id) ON DELETE CASCADE,
+    batch_id UUID REFERENCES batches(id) ON DELETE CASCADE,
+    created_by UUID NOT NULL REFERENCES users(id) ON DELETE SET NULL,
+    
+    -- Content
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    
+    -- Targeting
+    target_type VARCHAR(20) NOT NULL DEFAULT 'college' 
+        CHECK (target_type IN ('batch', 'department', 'college')),
+    target_id UUID NOT NULL,
+    
+    -- Settings
+    priority VARCHAR(20) DEFAULT 'normal' 
+        CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
+    is_pinned BOOLEAN DEFAULT FALSE,
+    is_published BOOLEAN DEFAULT TRUE,
+    
+    -- Attachments (JSON array of file URLs)
+    attachments JSONB DEFAULT NULL,
+    
+    -- Timestamps
+    expires_at TIMESTAMPTZ DEFAULT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Submission question grades for detailed assignment grading
+CREATE TABLE submission_question_grades (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    submission_id UUID NOT NULL REFERENCES assignment_submissions(id) ON DELETE CASCADE,
+    question_id UUID NOT NULL REFERENCES assignment_questions(id) ON DELETE CASCADE,
+    obtained_marks DECIMAL(5,2) DEFAULT 0,
+    feedback TEXT DEFAULT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    -- Ensure unique grade per question per submission
+    CONSTRAINT unique_submission_question UNIQUE (submission_id, question_id)
 );
 
 CREATE TABLE audit_logs (
@@ -658,6 +805,264 @@ CREATE TABLE audit_logs (
     user_agent TEXT,
     session_id UUID,
     created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================================================
+-- 5.5 ADDITIONAL SUPPORTING TABLES
+-- ============================================================================
+
+-- Bucket Subjects - Links subjects to elective buckets with capacity management
+CREATE TABLE bucket_subjects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    bucket_id UUID NOT NULL REFERENCES elective_buckets(id) ON DELETE CASCADE,
+    subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    max_capacity INTEGER DEFAULT 60,
+    current_enrollment INTEGER DEFAULT 0,
+    added_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    added_at TIMESTAMPTZ DEFAULT NOW(),
+    is_active BOOLEAN DEFAULT TRUE,
+    notes TEXT,
+    CONSTRAINT bucket_subjects_max_capacity_check CHECK (max_capacity >= 0),
+    CONSTRAINT bucket_subjects_current_enrollment_check CHECK (current_enrollment >= 0),
+    CONSTRAINT bucket_subjects_check CHECK (current_enrollment <= max_capacity),
+    UNIQUE(bucket_id, subject_id)
+);
+
+-- Subject Allotments Permanent - Tracks permanent subject assignments to students
+CREATE TABLE subject_allotments_permanent (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    bucket_id UUID NOT NULL REFERENCES elective_buckets(id) ON DELETE CASCADE,
+    subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    allotted_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    priority_rank INTEGER CHECK (priority_rank >= 1 AND priority_rank <= 10),
+    student_cgpa NUMERIC(4, 2),
+    allotted_at TIMESTAMPTZ DEFAULT NOW(),
+    algorithm_used VARCHAR(50) DEFAULT 'priority_based',
+    notes TEXT,
+    status VARCHAR(20) DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'DROPPED', 'TRANSFERRED')),
+    CONSTRAINT subject_allotments_permanent_priority_rank_check CHECK (priority_rank >= 1 AND priority_rank <= 10),
+    UNIQUE(student_id, bucket_id)
+);
+
+-- Master Accepted Timetables - Published and approved timetables
+CREATE TABLE master_accepted_timetables (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    original_timetable_id UUID NOT NULL REFERENCES generated_timetables(id),
+    college_id UUID NOT NULL REFERENCES colleges(id),
+    department_id UUID NOT NULL REFERENCES departments(id),
+    batch_id UUID NOT NULL REFERENCES batches(id),
+    academic_year VARCHAR(10) NOT NULL,
+    semester INTEGER NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    fitness_score NUMERIC(10, 4) NOT NULL DEFAULT 0,
+    constraint_violations JSONB DEFAULT '[]'::jsonb,
+    optimization_metrics JSONB DEFAULT '{}'::jsonb,
+    generation_method VARCHAR(20) DEFAULT 'HYBRID',
+    published_by UUID NOT NULL REFERENCES users(id),
+    approved_by UUID REFERENCES users(id),
+    published_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    approved_at TIMESTAMPTZ,
+    effective_from DATE NOT NULL,
+    effective_until DATE NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    is_locked BOOLEAN DEFAULT FALSE,
+    total_classes INTEGER NOT NULL DEFAULT 0,
+    faculty_count INTEGER NOT NULL DEFAULT 0,
+    classroom_count INTEGER NOT NULL DEFAULT 0,
+    occupied_faculty_ids UUID[] DEFAULT '{}'::UUID[],
+    occupied_classroom_ids UUID[] DEFAULT '{}'::UUID[],
+    occupied_time_slot_ids UUID[] DEFAULT '{}'::UUID[],
+    has_external_conflicts BOOLEAN DEFAULT FALSE,
+    conflict_details JSONB DEFAULT '{}'::jsonb,
+    conflict_resolved_at TIMESTAMPTZ,
+    publisher_notes TEXT,
+    approval_notes TEXT,
+    revision_reason TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    archived_at TIMESTAMPTZ
+);
+
+-- Master Scheduled Classes - Individual class schedules from master timetables
+CREATE TABLE master_scheduled_classes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    master_timetable_id UUID NOT NULL REFERENCES master_accepted_timetables(id),
+    original_scheduled_class_id UUID NOT NULL REFERENCES scheduled_classes(id),
+    college_id UUID NOT NULL REFERENCES colleges(id),
+    department_id UUID NOT NULL REFERENCES departments(id),
+    batch_id UUID NOT NULL REFERENCES batches(id),
+    subject_id UUID NOT NULL REFERENCES subjects(id),
+    faculty_id UUID NOT NULL REFERENCES users(id),
+    classroom_id UUID NOT NULL REFERENCES classrooms(id),
+    time_slot_id UUID NOT NULL REFERENCES time_slots(id),
+    day_of_week day_of_week NOT NULL,
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL,
+    duration_minutes INTEGER NOT NULL,
+    class_type subject_type DEFAULT 'THEORY',
+    credit_hour_number INTEGER NOT NULL,
+    session_duration INTEGER DEFAULT 60,
+    is_recurring BOOLEAN DEFAULT TRUE,
+    assignment_score NUMERIC(8, 4) DEFAULT 0,
+    resource_hash TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Cross Department Conflicts - Tracks conflicts between different departments
+CREATE TABLE cross_department_conflicts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    conflict_type VARCHAR(50) NOT NULL,
+    severity VARCHAR(20) NOT NULL,
+    timetable_id_1 UUID NOT NULL REFERENCES master_accepted_timetables(id),
+    timetable_id_2 UUID NOT NULL REFERENCES master_accepted_timetables(id),
+    department_id_1 UUID NOT NULL REFERENCES departments(id),
+    department_id_2 UUID NOT NULL REFERENCES departments(id),
+    scheduled_class_id_1 UUID REFERENCES master_scheduled_classes(id),
+    scheduled_class_id_2 UUID REFERENCES master_scheduled_classes(id),
+    conflict_description TEXT NOT NULL,
+    conflict_details JSONB DEFAULT '{}'::jsonb,
+    affected_faculty_id UUID REFERENCES users(id),
+    affected_classroom_id UUID REFERENCES classrooms(id),
+    affected_time_slot_id UUID REFERENCES time_slots(id),
+    is_resolved BOOLEAN DEFAULT FALSE,
+    resolution_notes TEXT,
+    resolved_by UUID REFERENCES users(id),
+    resolved_at TIMESTAMPTZ,
+    resolution_priority INTEGER DEFAULT 5,
+    detected_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Resource Utilization Summary - Tracks resource usage statistics
+CREATE TABLE resource_utilization_summary (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    college_id UUID NOT NULL REFERENCES colleges(id),
+    resource_type VARCHAR(50) NOT NULL,
+    resource_id UUID NOT NULL,
+    academic_year VARCHAR(10) NOT NULL,
+    semester INTEGER NOT NULL,
+    total_allocated_hours NUMERIC(10, 2) DEFAULT 0,
+    total_available_hours NUMERIC(10, 2) DEFAULT 0,
+    utilization_percentage NUMERIC(5, 2),
+    department_usage_breakdown JSONB DEFAULT '{}'::jsonb,
+    time_distribution JSONB DEFAULT '{}'::jsonb,
+    is_overutilized BOOLEAN DEFAULT FALSE,
+    is_underutilized BOOLEAN DEFAULT FALSE,
+    capacity_status VARCHAR(20),
+    conflict_count INTEGER DEFAULT 0,
+    last_calculated_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(college_id, resource_type, resource_id, academic_year, semester)
+);
+
+-- Assignment Notifications - Notification system for assignments
+CREATE TABLE assignment_notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    subject_id UUID REFERENCES subjects(id),
+    batch_id UUID REFERENCES batches(id),
+    department_id UUID REFERENCES departments(id),
+    college_id UUID REFERENCES colleges(id),
+    due_date DATE NOT NULL,
+    assigned_date DATE DEFAULT CURRENT_DATE,
+    submission_deadline TIMESTAMPTZ,
+    created_by UUID REFERENCES users(id),
+    total_marks INTEGER DEFAULT 100,
+    passing_marks INTEGER DEFAULT 40,
+    priority VARCHAR(20) DEFAULT 'medium',
+    instructions TEXT,
+    submission_format VARCHAR(255),
+    attachment_urls TEXT[],
+    target_students UUID[],
+    notify_students BOOLEAN DEFAULT TRUE,
+    reminder_date DATE,
+    is_published BOOLEAN DEFAULT TRUE,
+    status VARCHAR(50) DEFAULT 'published',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Assignment Notification Tracking - Tracks notification delivery
+CREATE TABLE assignment_notification_tracking (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    assignment_id UUID NOT NULL REFERENCES assignment_notifications(id),
+    user_id UUID NOT NULL REFERENCES users(id),
+    notification_type VARCHAR(50) NOT NULL DEFAULT 'assignment_created',
+    message TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT FALSE,
+    sent_at TIMESTAMPTZ DEFAULT NOW(),
+    read_at TIMESTAMPTZ
+);
+
+-- Exam Notifications - Notification system for exams
+CREATE TABLE exam_notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    exam_type VARCHAR(50) DEFAULT 'regular',
+    subject_id UUID REFERENCES subjects(id),
+    batch_id UUID REFERENCES batches(id),
+    department_id UUID REFERENCES departments(id),
+    college_id UUID REFERENCES colleges(id),
+    exam_date DATE NOT NULL,
+    exam_start_time TIME NOT NULL,
+    exam_end_time TIME NOT NULL,
+    duration_minutes INTEGER NOT NULL,
+    classroom_id UUID REFERENCES classrooms(id),
+    venue VARCHAR(255),
+    building VARCHAR(100),
+    room_number VARCHAR(50),
+    total_marks INTEGER DEFAULT 100,
+    passing_marks INTEGER DEFAULT 40,
+    priority VARCHAR(20) DEFAULT 'high',
+    syllabus_topics TEXT[],
+    syllabus_chapters TEXT,
+    instructions TEXT,
+    allowed_materials TEXT,
+    is_open_book BOOLEAN DEFAULT FALSE,
+    is_online BOOLEAN DEFAULT FALSE,
+    online_platform VARCHAR(100),
+    online_link TEXT,
+    target_students UUID[],
+    notify_students BOOLEAN DEFAULT TRUE,
+    reminder_date DATE,
+    invigilators UUID[],
+    is_published BOOLEAN DEFAULT TRUE,
+    status VARCHAR(50) DEFAULT 'published',
+    created_by UUID REFERENCES users(id),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Exam Notification Tracking - Tracks exam notification delivery
+CREATE TABLE exam_notification_tracking (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    exam_id UUID NOT NULL REFERENCES exam_notifications(id),
+    user_id UUID NOT NULL REFERENCES users(id),
+    notification_type VARCHAR(50) NOT NULL DEFAULT 'exam_scheduled',
+    message TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT FALSE,
+    sent_at TIMESTAMPTZ DEFAULT NOW(),
+    read_at TIMESTAMPTZ
+);
+
+-- Submission Question Grades - Detailed grading for each question in assignments
+CREATE TABLE submission_question_grades (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    submission_id UUID NOT NULL REFERENCES assignment_submissions(id) ON DELETE CASCADE,
+    question_id UUID NOT NULL REFERENCES assignment_questions(id) ON DELETE CASCADE,
+    obtained_marks NUMERIC(5, 2) DEFAULT 0,
+    feedback TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(submission_id, question_id)
 );
 
 -- ============================================================================
@@ -709,6 +1114,28 @@ CREATE INDEX idx_workflow_approvals_timetable ON workflow_approvals(timetable_id
 CREATE INDEX idx_notifications_recipient ON notifications(recipient_id, is_read, created_at);
 CREATE INDEX idx_algorithm_metrics_task ON algorithm_execution_metrics(generation_task_id);
 CREATE INDEX idx_audit_algorithm_context ON audit_logs USING GIN (algorithm_context);
+
+-- Hybrid Scheduler Indexes
+CREATE INDEX IF NOT EXISTS idx_subjects_is_elective ON subjects(is_elective) WHERE is_elective = TRUE;
+CREATE INDEX IF NOT EXISTS idx_classrooms_is_lab ON classrooms(is_lab) WHERE is_lab = TRUE;
+CREATE INDEX IF NOT EXISTS idx_time_slots_slot_number ON time_slots(slot_number);
+CREATE INDEX IF NOT EXISTS idx_time_slots_day_enum ON time_slots(day);
+CREATE INDEX IF NOT EXISTS idx_hybrid_tasks_college_status ON timetable_generation_tasks(college_id, status);
+CREATE INDEX IF NOT EXISTS idx_hybrid_tasks_created_by ON timetable_generation_tasks(created_by);
+CREATE INDEX IF NOT EXISTS idx_hybrid_timetables_active ON generated_timetables(batch_id, is_active) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_hybrid_classes_faculty_slot ON scheduled_classes(faculty_id, time_slot_id);
+CREATE INDEX IF NOT EXISTS idx_hybrid_classes_room_slot ON scheduled_classes(classroom_id, time_slot_id);
+CREATE INDEX IF NOT EXISTS idx_hybrid_classes_batch_slot ON scheduled_classes(batch_id, time_slot_id);
+CREATE INDEX IF NOT EXISTS idx_hybrid_metrics_task ON algorithm_execution_metrics(generation_task_id);
+CREATE INDEX IF NOT EXISTS idx_hybrid_snapshots_task_gen ON ga_population_snapshots(task_id, generation_number);
+CREATE INDEX IF NOT EXISTS idx_faculty_assignments ON faculty_subject_assignments(faculty_id, subject_id);
+
+-- Additional Supporting Tables Indexes
+CREATE INDEX IF NOT EXISTS idx_bucket_subjects_bucket ON bucket_subjects(bucket_id);
+CREATE INDEX IF NOT EXISTS idx_bucket_subjects_subject ON bucket_subjects(subject_id);
+CREATE INDEX IF NOT EXISTS idx_permanent_allotments_student ON subject_allotments_permanent(student_id);
+CREATE INDEX IF NOT EXISTS idx_permanent_allotments_bucket ON subject_allotments_permanent(bucket_id);
+CREATE INDEX IF NOT EXISTS idx_submission_grades_submission ON submission_question_grades(submission_id);
 
 -- ============================================================================
 -- 7. MULTI-COLLEGE ALGORITHM HELPER VIEWS
@@ -797,6 +1224,98 @@ WHERE ts.is_active = TRUE AND NOT ts.is_break_time AND NOT ts.is_lunch_time
 GROUP BY ts.id;
 
 -- ============================================================================
+-- 7.5 HYBRID SCHEDULER VIEWS
+-- ============================================================================
+
+-- View for easy constraint lookup - REMOVED (scheduling_constraints table dropped)
+-- CREATE OR REPLACE VIEW v_scheduling_constraints_summary AS (...) - View has been dropped
+
+-- View for task execution summary
+CREATE OR REPLACE VIEW v_task_execution_summary AS
+SELECT 
+    t.id as task_id,
+    c.name as college_name,
+    b.name as batch_name,
+    t.task_name,
+    t.status::text as status,
+    t.current_phase::text as current_phase,
+    t.progress as progress_percentage,
+    t.current_message as progress_message,
+    t.created_at,
+    t.started_at,
+    t.completed_at,
+    t.execution_time_seconds as duration_seconds,
+    t.best_fitness_score,
+    t.solutions_generated,
+    t.error_details,
+    m.cpsat_solutions_found as cpsat_solutions,
+    m.cpsat_execution_time_ms / 1000.0 as cpsat_duration_seconds,
+    m.cpsat_variables_created,
+    m.cpsat_constraints_generated,
+    m.ga_best_fitness as ga_score,
+    m.ga_execution_time_ms / 1000.0 as ga_duration_seconds,
+    m.ga_generations_completed as ga_generations,
+    m.ga_fitness_improvement,
+    m.total_execution_time_ms / 1000.0 as total_duration_seconds,
+    m.hard_constraints_satisfied,
+    m.soft_constraints_satisfied,
+    m.faculty_utilization_rate,
+    m.classroom_utilization_rate
+FROM timetable_generation_tasks t
+LEFT JOIN colleges c ON c.id = (SELECT college_id FROM batches WHERE id = t.batch_id)
+JOIN batches b ON t.batch_id = b.id
+LEFT JOIN algorithm_execution_metrics m ON m.generation_task_id = t.id
+ORDER BY t.created_at DESC;
+
+-- View for active semester batches with computed is_active_semester flag
+CREATE OR REPLACE VIEW active_semester_batchs AS
+SELECT 
+    b.*,
+    CASE 
+        WHEN b.is_active = TRUE AND (
+            (b.semester_start_date IS NULL OR CURRENT_DATE >= b.semester_start_date) AND
+            (b.semester_end_date IS NULL OR CURRENT_DATE <= b.semester_end_date)
+        ) THEN TRUE
+        ELSE FALSE
+    END as is_active_semester
+FROM batches b
+WHERE b.is_active = TRUE
+ORDER BY b.college_id, b.department_id, b.semester;
+
+-- View for detailed subject allotments with student, subject, bucket, and allotted_by information
+CREATE OR REPLACE VIEW subject_allotments_detailed AS
+SELECT 
+    sa.id,
+    sa.student_id,
+    sa.bucket_id,
+    sa.subject_id,
+    sa.allotted_at,
+    sa.algorithm_used,
+    sa.student_priority,
+    sa.cgpa,
+    -- Student information
+    s.first_name,
+    s.last_name,
+    s.college_uid,
+    s.email,
+    -- Subject information
+    subj.code as subject_code,
+    subj.name as subject_name,
+    subj.credit_value,
+    -- Bucket information
+    eb.bucket_name,
+    eb.batch_id,
+    -- Allotted by information
+    ab.first_name as allotted_by_first_name,
+    ab.last_name as allotted_by_last_name
+FROM subject_allotments sa
+JOIN users s ON sa.student_id = s.id
+JOIN subjects subj ON sa.subject_id = subj.id
+LEFT JOIN elective_buckets eb ON sa.bucket_id = eb.id
+LEFT JOIN users ab ON sa.allotted_by = ab.id
+ORDER BY sa.allotted_at DESC;
+
+-- ============================================================================
 -- 8. FUNCTIONS AND TRIGGERS
 -- ============================================================================
 
@@ -860,6 +1379,78 @@ GRANT EXECUTE ON FUNCTION current_app_user_id() TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION current_app_college_id() TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION current_app_role() TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION current_app_department_id() TO authenticated, anon;
+
+-- ============================================================================
+-- HYBRID SCHEDULER FUNCTIONS
+-- ============================================================================
+
+-- Function to insert default constraints for a college - REMOVED (scheduling_constraints table dropped)
+-- CREATE OR REPLACE FUNCTION insert_default_scheduling_constraints(...) - Function removed
+
+-- Function to get default algorithm configuration
+CREATE OR REPLACE FUNCTION get_default_algorithm_config()
+RETURNS JSONB AS $$
+BEGIN
+    RETURN '{
+        "cpsat": {"max_time_seconds": 300, "num_workers": 8, "num_solutions": 10, "log_search_progress": false},
+        "ga": {"population_size": 100, "generations": 200, "elite_size": 10, "mutation_rate": 0.15, "crossover_rate": 0.8, "tournament_size": 5, "stagnation_limit": 30},
+        "hybrid": {"cpsat_weight": 0.6, "ga_weight": 0.4, "use_cpsat_seed": true, "parallel_mode": true},
+        "constraint_weights": {"minimize_gaps": 50, "preferred_time_slots": 30, "workload_balance": 40, "room_stability": 20, "consecutive_lectures": 35, "department_clustering": 25, "elective_distribution": 30}
+    }'::jsonb;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+-- Function to get latest active timetable for a batch
+CREATE OR REPLACE FUNCTION get_active_timetable(p_batch_id UUID)
+RETURNS UUID AS $$
+DECLARE
+    v_timetable_id UUID;
+BEGIN
+    SELECT id INTO v_timetable_id
+    FROM generated_timetables
+    WHERE batch_id = p_batch_id AND is_active = TRUE
+    ORDER BY created_at DESC
+    LIMIT 1;
+    RETURN v_timetable_id;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- Function to activate a timetable (deactivates others for same batch)
+CREATE OR REPLACE FUNCTION activate_timetable(p_timetable_id UUID)
+RETURNS VOID AS $$
+DECLARE
+    v_batch_id UUID;
+BEGIN
+    SELECT batch_id INTO v_batch_id FROM generated_timetables WHERE id = p_timetable_id;
+    UPDATE generated_timetables SET is_active = FALSE WHERE batch_id = v_batch_id AND is_active = TRUE;
+    UPDATE generated_timetables SET is_active = TRUE WHERE id = p_timetable_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to check for scheduling conflicts
+CREATE OR REPLACE FUNCTION check_scheduling_conflicts(p_timetable_id UUID)
+RETURNS TABLE(conflict_type VARCHAR(50), entity_id UUID, entity_name TEXT, time_slot_id UUID, conflict_count INTEGER) AS $$
+BEGIN
+    -- Faculty conflicts
+    RETURN QUERY
+    SELECT 'faculty_overlap'::VARCHAR(50), sc.faculty_id, u.first_name || ' ' || u.last_name, sc.time_slot_id, COUNT(*)::INTEGER
+    FROM scheduled_classes sc JOIN users u ON sc.faculty_id = u.id
+    WHERE sc.timetable_id = p_timetable_id
+    GROUP BY sc.faculty_id, u.first_name, u.last_name, sc.time_slot_id HAVING COUNT(*) > 1;
+    -- Room conflicts
+    RETURN QUERY
+    SELECT 'room_overlap'::VARCHAR(50), sc.classroom_id, c.name, sc.time_slot_id, COUNT(*)::INTEGER
+    FROM scheduled_classes sc JOIN classrooms c ON sc.classroom_id = c.id
+    WHERE sc.timetable_id = p_timetable_id
+    GROUP BY sc.classroom_id, c.name, sc.time_slot_id HAVING COUNT(*) > 1;
+    -- Batch conflicts
+    RETURN QUERY
+    SELECT 'batch_overlap'::VARCHAR(50), sc.batch_id, b.name, sc.time_slot_id, COUNT(*)::INTEGER
+    FROM scheduled_classes sc JOIN batches b ON sc.batch_id = b.id
+    WHERE sc.timetable_id = p_timetable_id
+    GROUP BY sc.batch_id, b.name, sc.time_slot_id HAVING COUNT(*) > 1;
+END;
+$$ LANGUAGE plpgsql STABLE;
 
 -- ============================================================================
 -- STANDARD TRIGGER FUNCTIONS
@@ -934,6 +1525,9 @@ CREATE TRIGGER update_generated_timetables_updated_at BEFORE UPDATE ON generated
 CREATE TRIGGER update_scheduled_classes_updated_at BEFORE UPDATE ON scheduled_classes FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_student_batch_enrollment_updated_at BEFORE UPDATE ON student_batch_enrollment FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_elective_buckets_updated_at BEFORE UPDATE ON elective_buckets FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- Hybrid Scheduler Triggers
+-- CREATE TRIGGER update_scheduling_constraints_updated_at - REMOVED (scheduling_constraints table dropped)
+CREATE TRIGGER update_faculty_preferences_updated_at BEFORE UPDATE ON faculty_scheduling_preferences FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Apply special event flag trigger
 CREATE TRIGGER set_special_event_flag BEFORE INSERT OR UPDATE OF nep_category ON subjects FOR EACH ROW EXECUTE FUNCTION update_special_event_flag();
@@ -1259,55 +1853,72 @@ EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
 
--- Events table (DEPLOYED SCHEMA - matches actual Supabase database)
--- Note: This is different from the original design in events_schema.sql
+-- Events table
 CREATE TABLE IF NOT EXISTS events (
-    id UUID PRIMARY KEY, -- No default, must be generated in application
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     
     -- Basic Information
     title VARCHAR(255) NOT NULL,
     description TEXT,
-    event_type VARCHAR(50), -- VARCHAR, not ENUM in deployed schema
-    
-    -- Date & Time
-    event_date DATE NOT NULL, -- Note: called 'event_date' not 'start_date'
-    event_time TIME WITHOUT TIME ZONE, -- Note: called 'event_time' not 'start_time'
-    end_time TIME WITHOUT TIME ZONE,
-    
-    -- Location
-    location VARCHAR(255), -- Note: called 'location' not 'venue'
+    event_type event_type NOT NULL,
     
     -- Organizational
-    created_by UUID NOT NULL REFERENCES users(id),
-    published_by UUID REFERENCES users(id),
-    college_id UUID NOT NULL REFERENCES colleges(id), -- REQUIRED in deployed schema
-    department_id UUID REFERENCES departments(id),
+    department_id UUID NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
+    created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    
+    -- Date & Time
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL,
+    
+    -- Location
+    venue VARCHAR(255) NOT NULL,
+    classroom_id UUID REFERENCES classrooms(id) ON DELETE SET NULL,
     
     -- Participants
-    max_participants INTEGER, -- Note: called 'max_participants' not 'expected_participants'
+    expected_participants INTEGER DEFAULT 0,
+    max_registrations INTEGER DEFAULT 0,
+    current_participants INTEGER DEFAULT 0,
     registration_required BOOLEAN DEFAULT FALSE,
-    registration_link TEXT,
-    target_audience JSONB,
+    registration_deadline TIMESTAMP,
+    
+    -- Budget & Resources
+    budget_allocated DECIMAL(15,2) DEFAULT 0,
+    
+    -- Contact Information
+    contact_person VARCHAR(255),
+    contact_email VARCHAR(255),
+    contact_phone VARCHAR(50),
     
     -- Status & Priority
-    status content_status DEFAULT 'draft', -- Uses content_status enum, not event_status
-    priority VARCHAR(20) DEFAULT 'normal', -- VARCHAR (high/normal/low), not INTEGER
-    is_featured BOOLEAN DEFAULT FALSE,
+    status event_status DEFAULT 'pending',
+    priority_level INTEGER DEFAULT 1 CHECK (priority_level BETWEEN 1 AND 5),
     
-    -- Attachments
-    attachment_url TEXT,
-    image_url TEXT,
+    -- Visibility & Permissions
+    is_public BOOLEAN DEFAULT TRUE,
+    
+    -- Conflict Management
+    has_conflict BOOLEAN DEFAULT FALSE,
+    conflicting_events UUID[],
+    queue_position INTEGER,
+    
+    -- Approval Workflow
+    approved_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    approved_at TIMESTAMP,
+    rejection_reason TEXT,
+    rejected_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    rejected_at TIMESTAMP,
     
     -- Metadata
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    published_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
     
-    -- Foreign key constraints
-    CONSTRAINT events_college_id_fkey FOREIGN KEY (college_id) REFERENCES colleges(id),
-    CONSTRAINT events_created_by_fkey FOREIGN KEY (created_by) REFERENCES users(id),
-    CONSTRAINT events_department_id_fkey FOREIGN KEY (department_id) REFERENCES departments(id),
-    CONSTRAINT events_published_by_fkey FOREIGN KEY (published_by) REFERENCES users(id)
+    -- Constraints
+    CONSTRAINT valid_dates CHECK (start_date <= end_date),
+    CONSTRAINT valid_times CHECK (start_time < end_time),
+    CONSTRAINT valid_priority CHECK (priority_level >= 1 AND priority_level <= 5),
+    CONSTRAINT valid_participants CHECK (current_participants <= max_registrations)
 );
 
 -- Event Registrations table
@@ -3025,3 +3636,104 @@ COMMENT ON TABLE system_settings IS 'Key-value store for system-wide configurati
 COMMENT ON COLUMN system_settings.setting_type IS 'Data type of the setting value (string, number, boolean, json)';
 COMMENT ON COLUMN system_settings.category IS 'Category for grouping settings in the admin UI';
 COMMENT ON COLUMN system_settings.is_secret IS 'If true, value should be masked in UI (for passwords, API keys, etc.)';
+
+-- ============================================================================
+-- NOTIFICATION SYSTEM - INDEXES, RLS, AND FUNCTIONS
+-- ============================================================================
+
+-- Notifications indexes
+CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications(recipient_id, is_read, created_at);
+CREATE INDEX IF NOT EXISTS idx_notifications_recipient_unread ON notifications(recipient_id, is_read) WHERE is_read = FALSE;
+CREATE INDEX IF NOT EXISTS idx_notifications_content ON notifications(content_type, content_id) WHERE content_type IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_notifications_priority ON notifications(priority, is_read) WHERE priority IN ('high', 'urgent');
+CREATE INDEX IF NOT EXISTS idx_notifications_expiry ON notifications(expires_at) WHERE expires_at IS NOT NULL;
+
+-- Announcements indexes
+CREATE INDEX IF NOT EXISTS idx_announcements_college ON announcements(college_id, is_published, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_announcements_target ON announcements(target_type, target_id, is_published);
+CREATE INDEX IF NOT EXISTS idx_announcements_pinned ON announcements(college_id, is_pinned DESC, created_at DESC) WHERE is_published = TRUE;
+CREATE INDEX IF NOT EXISTS idx_announcements_expiry ON announcements(expires_at) WHERE expires_at IS NOT NULL;
+
+-- Submission question grades index
+CREATE INDEX IF NOT EXISTS idx_submission_grades_submission ON submission_question_grades(submission_id);
+
+-- Enable RLS on notification tables
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE announcements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE submission_question_grades ENABLE ROW LEVEL SECURITY;
+
+-- Notification RLS policies
+CREATE POLICY "Users can view own notifications" ON notifications FOR SELECT USING (recipient_id = auth.uid());
+CREATE POLICY "Users can update own notifications" ON notifications FOR UPDATE USING (recipient_id = auth.uid());
+
+-- Announcement RLS policies
+CREATE POLICY "Users can view college announcements" ON announcements FOR SELECT 
+USING (
+    college_id IN (SELECT college_id FROM users WHERE id = auth.uid()) 
+    AND is_published = TRUE
+);
+
+CREATE POLICY "Admins can create announcements" ON announcements FOR INSERT 
+WITH CHECK (
+    created_by = auth.uid() AND
+    college_id IN (SELECT college_id FROM users WHERE id = auth.uid())
+);
+
+CREATE POLICY "Creators can update announcements" ON announcements FOR UPDATE 
+USING (
+    created_by = auth.uid() OR
+    EXISTS (
+        SELECT 1 FROM users 
+        WHERE id = auth.uid() 
+        AND college_id = announcements.college_id 
+        AND role IN ('super_admin', 'college_admin', 'admin')
+    )
+);
+
+-- Submission grades RLS policies
+CREATE POLICY "Faculty can manage grades" ON submission_question_grades FOR ALL 
+USING (
+    EXISTS (
+        SELECT 1 FROM users 
+        WHERE id = auth.uid() 
+        AND role IN ('super_admin', 'college_admin', 'admin', 'faculty')
+    )
+);
+
+CREATE POLICY "Students can view own grades" ON submission_question_grades FOR SELECT 
+USING (
+    EXISTS (
+        SELECT 1 FROM assignment_submissions s
+        WHERE s.id = submission_question_grades.submission_id
+        AND s.student_id = auth.uid()
+    )
+);
+
+-- Helper function to cleanup expired notifications
+CREATE OR REPLACE FUNCTION cleanup_expired_notifications()
+RETURNS INTEGER AS $$
+DECLARE
+    deleted_count INTEGER;
+BEGIN
+    DELETE FROM notifications 
+    WHERE expires_at IS NOT NULL AND expires_at < NOW();
+    
+    GET DIAGNOSTICS deleted_count = ROW_COUNT;
+    RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Documentation comments for notification system
+COMMENT ON TABLE notifications IS 'User notifications for all platform events (timetables, assignments, announcements, events, system)';
+COMMENT ON COLUMN notifications.content_type IS 'Type of content: timetable, assignment, announcement, event';
+COMMENT ON COLUMN notifications.content_id IS 'UUID of the related content item';
+COMMENT ON COLUMN notifications.priority IS 'Priority level: low, normal, high, urgent';
+COMMENT ON COLUMN notifications.action_url IS 'URL to navigate to when notification is clicked';
+COMMENT ON COLUMN notifications.expires_at IS 'When the notification should auto-expire';
+
+COMMENT ON TABLE announcements IS 'College-wide, department, or batch-specific announcements';
+COMMENT ON COLUMN announcements.target_type IS 'Scope of announcement: batch, department, or college';
+COMMENT ON COLUMN announcements.target_id IS 'ID of the target (batch_id, department_id, or college_id)';
+
+COMMENT ON TABLE submission_question_grades IS 'Individual question grades for assignment submissions';
+COMMENT ON FUNCTION cleanup_expired_notifications IS 'Deletes notifications that have passed their expiration date';

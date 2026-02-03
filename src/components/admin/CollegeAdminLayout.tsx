@@ -143,6 +143,7 @@ const CollegeAdminLayout: React.FC<CollegeAdminLayoutProps> = ({ children, activ
         { id: 'buckets', icon: ClipboardList, label: 'Elective Buckets', path: '/admin/buckets' },
         { id: 'subject-allotment', icon: CheckSquare, label: 'Subject Allotment', path: '/admin/subject-allotment' },
         { id: 'constraints', icon: Settings, label: 'Constraints', path: '/admin/constraints' },
+        { id: 'communication', icon: Bell, label: 'Communication', path: '/admin/communication' },
     ];
 
     if (!user) {

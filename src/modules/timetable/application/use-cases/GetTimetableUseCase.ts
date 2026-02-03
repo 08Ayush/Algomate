@@ -79,14 +79,18 @@ export class GetTimetableUseCase {
                 }
 
                 // Fetch classroom details
-                const { data: classroom } = await supabase
-                    .from('classrooms')
-                    .select('name, room_number')
-                    .eq('id', cls.classroomId)
-                    .single();
+                if (cls.classroomId) {
+                    const { data: classroom, error: classroomError } = await supabase
+                        .from('classrooms')
+                        .select('name')
+                        .eq('id', cls.classroomId)
+                        .single();
 
-                if (classroom) {
-                    classJson.classroom_name = classroom.room_number || classroom.name;
+                    if (classroomError) {
+                        console.error('❌ Classroom lookup error:', classroomError);
+                    } else if (classroom) {
+                        classJson.classroom_name = classroom.name;
+                    }
                 }
 
                 // Fetch time slot details (includes day, start_time, end_time)
