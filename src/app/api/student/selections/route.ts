@@ -68,6 +68,29 @@ export async function POST(request: NextRequest) {
       academicYear: academic_year
     });
 
+    // Check if selection caused a lock (or if it's returned as locked)
+    if (selection.isLocked) {
+      // Notify Student
+      try {
+        // We need bucket name. Fetch from DB.
+        const { data: subjectData } = await supabase
+          .from('subjects')
+          .select('course_group_id, course_groups:elective_buckets!course_group_id(bucket_name)')
+          .eq('id', subject_id)
+          .single();
+
+        const bucketName = (subjectData as any)?.course_groups?.bucket_name || 'Elective Bucket';
+
+        const { notifyNEPSelectionLocked } = await import('@/lib/notificationService');
+        await notifyNEPSelectionLocked({
+          studentId: student_id,
+          bucketName: bucketName
+        });
+      } catch (loErr) {
+        console.error('Lock notification error:', loErr);
+      }
+    }
+
     // Use Case doesn't verify DB constraints like triggers do, but internal logic mimics it.
     // Return matching structure
     return NextResponse.json({

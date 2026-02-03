@@ -93,6 +93,30 @@ export async function POST(
       return NextResponse.json({ error: 'Failed to update bucket' }, { status: 500 });
     }
 
+    const isPublished = is_live && !bucket.student_live_at; // Only notify if it wasn't live before? Or just always if is_live is true?
+    // The update logic overwrites. If student_live_at was null, it's a new publish.
+    // But we don't know if it was null before update.
+    // However, usually this toggle is significant.
+
+    if (is_live) {
+      // Send Notification
+      try {
+        const batchId = (bucket.batches as any)?.id || bucket.batch_id;
+        if (batchId) {
+          const { notifyNEPBucketPublished } = await import('@/lib/notificationService');
+          await notifyNEPBucketPublished({
+            bucketId: bucket.id,
+            bucketName: bucket.bucket_name,
+            batchId: batchId,
+            publisherId: admin_id,
+            publisherName: 'College Admin' // Placeholder as we don't have name readily available
+          });
+        }
+      } catch (nErr) {
+        console.error('Notification error:', nErr);
+      }
+    }
+
     return NextResponse.json({
       bucket,
       message: is_live

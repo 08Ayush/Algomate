@@ -2,7 +2,9 @@
 
 ## Overview
 
-This document describes the complete notification system implementation for the Academic Compass platform.
+This document describes the complete notification system implementation for the **Academic Compass** platform. It covers In-App notifications for Timetables, Assignments, Proctoring, Events, and System Administration.
+
+**Current Status:** ✅ **Core In-App Workflows Implemented** | ⚠️ **Email/Reminders Pending**
 
 ## 🔧 Database Migration
 
@@ -13,55 +15,56 @@ This document describes the complete notification system implementation for the 
 database/migrations/complete_notification_system.sql
 ```
 
-### What the migration does:
-1. **Extends notification_type ENUM** with 20+ new notification types
-2. **Adds columns to notifications table**: `content_type`, `content_id`, `priority`, `action_url`, `expires_at`
-3. **Creates announcements table** for college/department/batch announcements
-4. **Creates submission_question_grades table** for detailed assignment grading
-5. **Adds performance indexes** for fast notification queries
-6. **Sets up Row Level Security policies**
-
 ---
 
-## 📢 Notification Types
+## 📢 Notification Types (Implemented)
 
 ### Timetable Notifications
-| Type | Description | Recipients |
-|------|-------------|------------|
-| `timetable_published` | Timetable is published | Students, Faculty in batch/department |
-| `timetable_approved` | Timetable approved by HOD | Creator |
-| `timetable_rejected` | Timetable rejected by HOD | Creator |
-| `schedule_change` | Published timetable updated | Affected students/faculty |
-| `approval_request` | Timetable submitted for review | Publishers/HODs |
-| `conflict_detected` | Scheduling conflicts found | Creator, Publishers |
+| Type | Description | Recipients | Status |
+|------|-------------|------------|--------|
+| `timetable_published` | Timetable is published | Students, Faculty in batch/department | ✅ Active |
+| `timetable_approved` | Timetable approved by HOD | Creator | ✅ Active |
+| `timetable_rejected` | Timetable rejected by HOD | Creator | ✅ Active |
+| `schedule_change` | Published timetable updated | Affected students/faculty | ✅ Active |
+| `approval_request` | Timetable submitted for review | Publishers/HODs | ✅ Active |
+| `conflict_detected` | Scheduling conflicts found | Creator, Publishers | ✅ Active |
 
-### Assignment Notifications
-| Type | Description | Recipients |
-|------|-------------|------------|
-| `assignment_created` | New assignment posted | Students in batch |
-| `assignment_due` | Assignment due reminder | Students who haven't submitted |
-| `assignment_submitted` | Student submitted assignment | Faculty/Creator |
-| `assignment_graded` | Assignment has been graded | Student |
+### Assignment & Proctoring Notifications
+| Type | Description | Recipients | Status |
+|------|-------------|------------|--------|
+| `assignment_created` | New assignment posted | Students in batch | ✅ Active |
+| `assignment_submitted` | Student submitted assignment | Faculty/Creator | ✅ Active |
+| `assignment_graded` | Assignment has been graded | Student | ✅ Active |
+| `proctoring_violation` | **Violation detected (Tab Switch)** | Faculty/Creator | ✅ Active |
+| `assignment_due` | Assignment due reminder | Students | ⏳ Pending Cron |
+
+### NEP Curriculum & Electives
+| Type | Description | Recipients | Status |
+|------|-------------|------------|--------|
+| `nep_bucket_created` | Elective Bucket Created | Department Faculty | ✅ Active |
+| `nep_bucket_published` | Bucket Published for Selection | Students in Batch | ✅ Active |
+| `nep_selection_locked` | Student Selection Confirmed | Student | ✅ Active |
+| `nep_subjects_added` | Faculty adds subjects | College Admin | ✅ Active |
+| `nep_allotment_released`| Allotment Result announced | Batch Students | ⏳ Generic |
 
 ### Announcement & Event Notifications
-| Type | Description | Recipients |
-|------|-------------|------------|
-| `announcement` | New announcement | Target audience (batch/dept/college) |
-| `event_created` | New event scheduled | Target audience |
-| `event_reminder` | Event reminder | Registered/target audience |
-| `event_cancelled` | Event cancelled | Registered/target audience |
+| Type | Description | Recipients | Status |
+|------|-------------|------------|--------|
+| `announcement` | New announcement | Target audience (batch/dept/college) | ✅ Active |
+| `event_created` | New event scheduled | Target audience | ✅ Active |
+| `event_reminder` | Event reminder | Registered/target audience | ⏳ Pending Cron |
+| `event_cancelled` | Event cancelled | Registered/target audience | ✅ Active |
 
-### System Notifications
-| Type | Description | Recipients |
-|------|-------------|------------|
-| `system_alert` | System-wide alert | All users in college |
-| `maintenance_alert` | Scheduled maintenance | All users |
-| `resource_updated` | Resource availability changed | Affected faculty |
-| `policy_update` | Platform policy changes | All users |
+### System Notifications (Super Admin)
+| Type | Description | Recipients | Status |
+|------|-------------|------------|--------|
+| `system_alert` | System-wide alert (Global/College) | All users | ✅ Active |
+| `maintenance_alert` | Scheduled maintenance | All users | ✅ Active |
+| `resource_updated` | Resource availability changed | Affected faculty | ✅ Active |
 
 ---
 
-## 🔌 API Endpoints
+## 🔌 API Endpoints (Wired up)
 
 ### Timetable Workflow
 | Endpoint | Method | Notification Triggered |
@@ -71,101 +74,41 @@ database/migrations/complete_notification_system.sql
 | `/api/timetables/[id]/approve` | POST | `timetable_approved`, `timetable_published` |
 | `/api/timetables/[id]/reject` | POST | `timetable_rejected` |
 
-### Assignments
+### Assignments & Proctoring
 | Endpoint | Method | Notification Triggered |
 |----------|--------|------------------------|
 | `/api/assignments` | POST | `assignment_created` (if notifyStudents=true) |
-| `/api/student/assignment/[id]/submit` | POST | `assignment_submitted` |
+| `/api/student/assignment/[id]/submit` | POST | `assignment_submitted`, **`proctoring_violation`** |
 | `/api/assignments/[id]/grade/[submissionId]` | POST | `assignment_graded` |
 
-### Announcements
-| Endpoint | Method | Notification Triggered |
-|----------|--------|------------------------|
-| `/api/announcements` | POST | `announcement` |
-| `/api/announcements` | GET | - |
-
-### Events
-| Endpoint | Method | Notification Triggered |
-|----------|--------|------------------------|
-| `/api/events` | POST | `event_created` |
-| `/api/events` | GET | - |
+### Communication Hub (Admin/Super Admin)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/admin/system-alerts` | POST | Sends `system_alert` to College or Global (Super Admin) |
+| `/api/announcements` | POST | Sends `announcement` to specific audience |
 
 ---
 
-## 🎛️ Notification Options
+## 🚧 Pending / Future Work
 
-All notification-triggering endpoints support these options:
+The following features were identified in the workflow requirements but are **not yet implemented** (requires additional infrastructure):
 
-```typescript
-{
-  notifyStudents: boolean,  // Default: true
-  notifyFaculty: boolean,   // Default: true
-}
-```
+### 1. Automated Reminders (Cron Jobs)
+**Missing Component:** A scheduled task runner (e.g., Vercel Cron, GitHub Actions, or a dedicated Node.js worker).
+*   **`assignment_due`**: "Assignment X is due in 1 hour."
+*   **`event_reminder`**: "Event Y starts tomorrow."
+*   **Implementation Strategy:** Create an API route `/api/cron/reminders` that checks DB for upcoming deadlines each hour.
 
-### Example Usage
+### 2. Comprehensive Email Notifications
+**Current Status:** Only `timetable_published` triggers an email via `/api/email/sendUpdate`.
+**Gap:**
+*   High-Priority Alerts (Proctoring Violations, System Alerts) currently only send In-App notifications.
+*   **Recommendation:** Integrate `emailService` into `notificationService.ts` for 'Urgent' priority notifications.
 
-```typescript
-// Create assignment with notifications
-fetch('/api/assignments', {
-  method: 'POST',
-  body: JSON.stringify({
-    title: 'Quiz 1',
-    batchId: '...',
-    // ... other fields
-    notifyStudents: true  // Students will receive notifications
-  })
-});
-
-// Create announcement
-fetch('/api/announcements', {
-  method: 'POST',
-  body: JSON.stringify({
-    title: 'Important Notice',
-    content: 'This is the announcement content...',
-    targetType: 'department',  // 'batch' | 'department' | 'college'
-    notifyStudents: true,
-    notifyFaculty: true,
-    priority: 'high'
-  })
-});
-
-// Publish timetable with notification control
-fetch('/api/timetables/publish', {
-  method: 'POST',
-  body: JSON.stringify({
-    action: 'approve',
-    timetable_id: '...',
-    notifyStudents: true,
-    notifyFaculty: true
-  })
-});
-```
-
----
-
-## 🔔 UI Components
-
-### NotificationBell Component
-Location: `src/components/NotificationBell.tsx`
-
-Features:
-- Shows unread notification count
-- Dropdown with recent notifications
-- Click to navigate to relevant content
-- Mark as read functionality
-- Priority indicators (Urgent, Important)
-
-### Notifications Page
-Location: `src/app/notifications/page.tsx`
-
-Features:
-- Full list of all notifications
-- Filter by read/unread status
-- Filter by notification type (grouped by category)
-- Mark all as read
-- Refresh functionality
-- Stats dashboard (Total, Unread, Read)
+### 3. Parent/Guardian Alerts
+**Gap:** No "Guardian" role or relationship exists in the User schema.
+*   **Requirement:** "Notify Parent of Absence/Grades".
+*   **Action:** Requires Schema update to link Students to Parents.
 
 ---
 
@@ -182,65 +125,34 @@ Features:
 3. Approve/Reject as Publisher → Check if Creator receives notification
 4. On approval, check if students/faculty receive publication notification
 
-### Step 3: Test Assignment Workflow
-1. Create an assignment → Check if students receive notification
-2. Submit as student → Check if faculty receives notification
-3. Grade as faculty → Check if student receives notification
+### Step 3: Test Assignment & Proctoring
+1. Create an assignment with **"Proctoring Enabled"**.
+2. **Student:** Attempt to switch tabs during the test (simulate violation). Submit.
+3. **Faculty:** Check Bell icon for **"Proctoring Alert"**.
 
-### Step 4: Test Announcements
-1. Create announcement with different target types
-2. Verify correct recipients receive notifications
+### Step 4: Test Communication Hub
+1. **Super Admin:** Go to `/super-admin/communication`. Broadcast a "Global Maintenance" alert.
+2. **User:** Log in as any student/faculty to verify the popup alert.
 
 ---
 
 ## 🗃️ Files Modified/Created
 
-### New Files
-- `database/migrations/complete_notification_system.sql`
-- `src/app/api/announcements/route.ts`
-- `src/app/api/assignments/[id]/grade/[submissionId]/route.ts`
-- `NOTIFICATION_SYSTEM.md` (this file)
+### Key Service
+- `src/lib/notificationService.ts` - Central logic for all In-App notifications.
 
-### Modified Files
-- `src/lib/notificationService.ts` - Enhanced with all notification functions
-- `src/app/api/assignments/route.ts` - Added notification support
-- `src/app/api/events/route.ts` - Added notification support
-- `src/app/api/timetables/publish/route.ts` - Added notification triggers
-- `src/app/api/timetables/[id]/submit/route.ts` - Added notification trigger
-- `src/app/api/timetables/[id]/approve/route.ts` - Added notification triggers
-- `src/app/api/timetables/[id]/reject/route.ts` - Added notification trigger
-- `src/app/api/student/assignment/[id]/submit/route.ts` - Added notification trigger
-- `src/app/notifications/page.tsx` - Extended for new notification types
-- `src/components/NotificationBell.tsx` - Extended for new notification types
+### New Pages
+- `/admin/communication/page.tsx` - College Admin Hub.
+- `/super-admin/communication/page.tsx` - Super Admin Hub.
+
+### Modified APIs
+- `src/app/api/assignments/route.ts`
+- `src/app/api/student/assignment/[id]/submit/route.ts` (Added Proctoring Hooks)
+- `src/components/DashboardHeader.tsx` (Live Notification Feed)
 
 ---
 
-## 🔒 Security Notes
-
-1. **Row Level Security**: All notification tables have RLS enabled
-2. **Server-side only**: Notifications are created server-side using service role key
-3. **User verification**: All endpoints verify user authentication before creating notifications
-4. **College isolation**: Users can only see notifications from their own college
-
----
-
-## 📈 Performance Considerations
-
-1. **Indexed queries**: All common query patterns have indexes
-2. **Singleton Supabase client**: Single instance reused across requests
-3. **Bulk insert**: Multiple notifications created in single database call
-4. **Non-blocking**: Notification failures don't break main operations
-5. **Cleanup function**: `cleanup_expired_notifications()` removes old notifications
-
----
-
-## 🚀 Ready for Production
-
-The notification system is now production-ready with:
-- ✅ Complete database schema
-- ✅ All API integrations
-- ✅ UI components updated
-- ✅ RLS security policies
-- ✅ Performance indexes
-- ✅ Error handling
-- ✅ Logging for debugging
+## � Ready for Production?
+*   ✅ **In-App System**: **YES**. Fully functional.
+*   ⚠️ **Email System**: **PARTIAL**. (Timetables only).
+*   ⚠️ **Reminders**: **NO**. (Needs Cron).

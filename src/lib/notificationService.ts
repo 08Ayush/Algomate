@@ -41,11 +41,18 @@ export type NotificationType =
   | 'assignment_due'
   | 'assignment_submitted'
   | 'assignment_graded'
+  | 'proctoring_violation'
   // Announcements & Events
   | 'announcement'
   | 'event_created'
   | 'event_reminder'
   | 'event_cancelled'
+  // NEP Curriculum
+  | 'nep_bucket_created'
+  | 'nep_subjects_added'
+  | 'nep_bucket_published'
+  | 'nep_selection_locked'
+  | 'nep_allotment_released'
   // System
   | 'system_alert'
   | 'approval_request'
@@ -627,6 +634,30 @@ export async function notifyAssignmentSubmitted(params: {
   });
 }
 
+/**
+ * Notify faculty of proctoring violations
+ */
+export async function notifyProctoringViolation(params: {
+  assignmentId: string;
+  assignmentTitle: string;
+  studentId: string;
+  studentName: string;
+  facultyId: string;
+  violationCount: number;
+}): Promise<{ success: boolean; notificationId?: string; error?: string }> {
+  return createNotification({
+    recipientId: params.facultyId,
+    senderId: params.studentId,
+    type: 'proctoring_violation', // Ensure this is added to NotificationType
+    title: '⚠️ Proctoring Alert',
+    message: `${params.studentName} recorded ${params.violationCount} violation(s) during "${params.assignmentTitle}".`,
+    contentType: 'assignment',
+    contentId: params.assignmentId,
+    priority: 'high',
+    actionUrl: `/faculty/assignments/${params.assignmentId}/submissions`
+  });
+}
+
 // ============================================================================
 // Announcement Notifications
 // ============================================================================
@@ -786,6 +817,139 @@ export async function notifyEventCreated(params: {
     console.error('❌ Error in notifyEventCreated:', error);
     return { success: false, count: 0, error: error.message };
   }
+}
+
+// ============================================================================
+// NEP Curriculum Notifications
+// ============================================================================
+
+/**
+ * Notify faculty when a new elective bucket is created (and requires subjects)
+ */
+export async function notifyNEPBucketCreated(params: {
+  bucketId: string;
+  bucketName: string;
+  departmentId: string;
+  creatorId: string;
+  creatorName: string;
+}): Promise<{ success: boolean; count: number; error?: string }> {
+  try {
+    const faculty = await getDepartmentFaculty(params.departmentId);
+    const recipients = faculty.filter(id => id !== params.creatorId);
+
+    if (recipients.length === 0) return { success: true, count: 0 };
+
+    return await createBulkNotifications(recipients, {
+      senderId: params.creatorId,
+      type: 'nep_bucket_created',
+      title: '📦 New Elective Bucket',
+      message: `${params.creatorName} created bucket "${params.bucketName}". Please add subjects provided by your department.`,
+      contentId: params.bucketId,
+      contentType: 'system',
+      actionUrl: `/faculty/nep/buckets/${params.bucketId}`
+    });
+  } catch (error: any) {
+    console.error('Error in notifyNEPBucketCreated:', error);
+    return { success: false, count: 0, error: error.message };
+  }
+}
+
+/**
+ * Notify admin when faculty adds subjects to a bucket
+ */
+export async function notifySubjectsAddedToBucket(params: {
+  bucketId: string;
+  bucketName: string;
+  subjectCount: number;
+  facultyId: string;
+  facultyName: string;
+  collegeId: string;
+}): Promise<{ success: boolean; count: number; error?: string }> {
+  try {
+    const admins = await getCollegeAdmins(params.collegeId);
+    const recipients = admins.filter(id => id !== params.facultyId);
+
+    if (recipients.length === 0) return { success: true, count: 0 };
+
+    return await createBulkNotifications(recipients, {
+      senderId: params.facultyId,
+      type: 'nep_subjects_added',
+      title: '📚 Subjects Added to Bucket',
+      message: `${params.facultyName} added ${params.subjectCount} subjects to "${params.bucketName}".`,
+      contentId: params.bucketId,
+      contentType: 'system',
+      actionUrl: `/admin/nep/buckets/${params.bucketId}`
+    });
+  } catch (error: any) {
+    console.error('Error in notifySubjectsAddedToBucket:', error);
+    return { success: false, count: 0, error: error.message };
+  }
+}
+
+/**
+ * Notify students when a bucket is published for selection
+ */
+export async function notifyNEPBucketPublished(params: {
+  bucketId: string;
+  bucketName: string;
+  batchId: string;
+  publisherId: string;
+  publisherName: string;
+}): Promise<{ success: boolean; count: number; error?: string }> {
+  try {
+    const students = await getBatchStudents(params.batchId);
+    if (students.length === 0) return { success: true, count: 0 };
+
+    return await createBulkNotifications(students, {
+      senderId: params.publisherId,
+      type: 'nep_bucket_published',
+      title: '🔓 Elective Selection Open',
+      message: `Elective bucket "${params.bucketName}" is now open for selection. Choose your subjects now!`,
+      contentId: params.bucketId,
+      contentType: 'system',
+      priority: 'high',
+      actionUrl: `/student/nep/selection/${params.bucketId}`
+    });
+  } catch (error: any) {
+    console.error('Error in notifyNEPBucketPublished:', error);
+    return { success: false, count: 0, error: error.message };
+  }
+}
+
+/**
+ * Notify student when selection is locked
+ */
+export async function notifyNEPSelectionLocked(params: {
+  studentId: string;
+  bucketName: string;
+}): Promise<{ success: boolean; notificationId?: string; error?: string }> {
+  return createNotification({
+    recipientId: params.studentId,
+    type: 'nep_selection_locked',
+    title: '🔒 Selections Locked',
+    message: `Your selections for "${params.bucketName}" have been confirmed and locked.`,
+    contentType: 'system',
+    priority: 'normal'
+  });
+}
+
+/**
+ * Notify student of allotment result
+ */
+export async function notifyNEPAllotmentReleased(params: {
+  studentId: string;
+  subjectName: string;
+  bucketName: string;
+}): Promise<{ success: boolean; notificationId?: string; error?: string }> {
+  return createNotification({
+    recipientId: params.studentId,
+    type: 'nep_allotment_released',
+    title: '✅ Subject Allotted',
+    message: `You have been allotted "${params.subjectName}" from bucket "${params.bucketName}".`,
+    contentType: 'system',
+    priority: 'high',
+    actionUrl: `/student/timetable`
+  });
 }
 
 // ============================================================================

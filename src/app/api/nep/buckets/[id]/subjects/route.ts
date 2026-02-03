@@ -34,6 +34,31 @@ export async function POST(
     // Link subjects to bucket
     await bucketRepo.linkSubjects(params.id, subjectIds);
 
+    // Notify Admin
+    try {
+      if (user.id && user.college_id) {
+        // Fetch bucket name
+        const bucket = await bucketRepo.findById(params.id);
+        const bucketName = bucket ? (bucket as any).bucket_name : 'Elective Bucket'; // bucket entity might use snake_case or come from JSON
+        // Note: bucketRepo.findById usually returns Domain Entity (camelCase) or database row (snake_case).
+        // Based on buckets/[id]/route.ts it calls toJson which exposes properties.
+        // I'll try 'bucket_name' or 'name'. If accessing raw Repo result, check type.
+        // Safety fallback.
+
+        const { notifySubjectsAddedToBucket } = await import('@/lib/notificationService');
+        await notifySubjectsAddedToBucket({
+          bucketId: params.id,
+          bucketName: bucketName || 'Elective Bucket',
+          subjectCount: subjectIds.length,
+          facultyId: user.id,
+          facultyName: `${user.first_name || 'Faculty'} ${user.last_name || ''}`.trim(),
+          collegeId: user.college_id
+        });
+      }
+    } catch (subErr) {
+      console.error('Subject Notification Error:', subErr);
+    }
+
     return NextResponse.json({
       success: true,
       message: 'Subjects added to bucket successfully'

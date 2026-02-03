@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { notifyAssignmentSubmitted } from '@/lib/notificationService';
+import { notifyAssignmentSubmitted, notifyProctoringViolation } from '@/lib/notificationService';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -161,6 +161,19 @@ export async function POST(
           violation_count: violations,
           detected_at: new Date().toISOString()
         });
+
+      // Notify faculty of severe proctoring violations
+      if (assignment.created_by) {
+        const studentName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Student';
+        await notifyProctoringViolation({
+          assignmentId,
+          assignmentTitle: assignment.title,
+          studentId: user.user_id,
+          studentName,
+          facultyId: assignment.created_by,
+          violationCount: violations
+        }).catch(err => console.error('Proctoring notification error:', err));
+      }
     }
 
     // Notify faculty of submission
