@@ -161,6 +161,116 @@ export default function HybridSchedulerPage() {
     ));
   };
 
+  // Poll task status for real-time updates
+  const pollTaskStatus = async (taskId: string) => {
+    const maxPolls = 120; // 10 minutes max (5s interval)
+    let pollCount = 0;
+
+    const poll = async () => {
+      try {
+        const authToken = Buffer.from(JSON.stringify(user)).toString('base64');
+        const response = await fetch(`/api/scheduler/status/${taskId}`, {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to get status');
+        }
+
+        // Update progress based on status
+        let progress = 0;
+        let phase = 'INITIALIZING';
+
+        switch (data.status) {
+          case 'pending':
+            progress = 5;
+            phase = 'PENDING';
+            break;
+          case 'running':
+            progress = Math.min(50 + pollCount * 2, 90);
+            phase = data.progressMessage?.includes('CP-SAT') ? 'CP-SAT SOLVER' :
+              data.progressMessage?.includes('genetic') ? 'GENETIC OPTIMIZATION' : 'RUNNING';
+            break;
+          case 'completed':
+            progress = 100;
+            phase = 'COMPLETED';
+            break;
+          case 'failed':
+            throw new Error(data.progressMessage || 'Generation failed');
+        }
+
+        setGenerationTask({
+          status: data.status === 'completed' ? 'completed' : data.status === 'failed' ? 'failed' : 'running',
+          phase: phase,
+          progress: progress,
+          message: data.progressMessage || 'Processing...',
+          metrics: data.status === 'completed' ? {
+            strategy: hybridConfig.strategy,
+            execution_time: ((Date.now() - pollCount * 5000) / 1000).toFixed(2),
+            quality_score: data.fitnessScore ? (data.fitnessScore * 100).toFixed(1) : '0',
+            violations: 0
+          } : undefined
+        });
+
+        // If completed, fetch the generated timetable
+        if (data.status === 'completed' && data.timetableId) {
+          try {
+            const authToken = Buffer.from(JSON.stringify(user)).toString('base64');
+            const timetableResponse = await fetch(`/api/timetables/${data.timetableId}`, {
+              headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            if (timetableResponse.ok) {
+              const timetableData = await timetableResponse.json();
+              setGeneratedSchedule({
+                ...timetableData.data || timetableData,
+                timetable_id: data.timetableId,
+                id: data.timetableId,
+                statistics: {
+                  totalAssignments: timetableData.data?.scheduled_classes?.length || 0,
+                  theoryAssignments: timetableData.data?.scheduled_classes?.filter((s: any) => !s.is_lab_session).length || 0,
+                  labAssignments: timetableData.data?.scheduled_classes?.filter((s: any) => s.is_lab_session).length || 0
+                }
+              });
+            } else {
+              // Even if fetch fails, we have the timetableId
+              setGeneratedSchedule({
+                timetable_id: data.timetableId,
+                id: data.timetableId
+              });
+            }
+          } catch (fetchError) {
+            console.error('Failed to fetch timetable details:', fetchError);
+            setGeneratedSchedule({
+              timetable_id: data.timetableId,
+              id: data.timetableId
+            });
+          }
+          return;
+        }
+
+        // If still running, continue polling
+        if (data.status === 'running' || data.status === 'pending') {
+          pollCount++;
+          if (pollCount < maxPolls) {
+            setTimeout(poll, 5000); // Poll every 5 seconds
+          } else {
+            throw new Error('Timeout: Generation took too long');
+          }
+        }
+      } catch (error: any) {
+        setGenerationTask({
+          status: 'failed',
+          phase: 'FAILED',
+          progress: 0,
+          message: error.message || 'Failed to generate timetable'
+        });
+      }
+    };
+
+    poll();
+  };
+
   const startHybridGeneration = async () => {
     if (!selectedBatch) {
       alert('Please select a batch first');
@@ -182,41 +292,43 @@ export default function HybridSchedulerPage() {
       status: 'running',
       phase: 'INITIALIZING',
       progress: 0,
-      message: 'Starting hybrid algorithm...'
+      message: 'Starting hybrid CP-SAT + GA algorithm...'
     });
 
     try {
-      const requestBody = {
-        batch_id: selectedBatch,
-        semester: batch.semester,
-        department_id: batch.department_id || user.department_id,
-        college_id: batch.college_id || user.college_id,
-        academic_year: academicYear,
-        created_by: user.id,
-        hybrid_config: hybridConfig,
-        constraints: constraints.filter(c => c.enabled),
-        enabled_constraint_ids: constraints.filter(c => c.enabled).map(c => c.id)
-      };
-
-      const response = await fetch('/api/hybrid-timetable/generate', {
+      // Use the Python-based scheduler API
+      const authToken = Buffer.from(JSON.stringify(user)).toString('base64');
+      const response = await fetch('/api/scheduler/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          batchId: selectedBatch,
+          collegeId: batch.college_id || user.college_id,
+          config: {
+            cpsatTimeLimit: hybridConfig.cpsatTimeout * 60, // Convert to seconds
+            gaGenerations: hybridConfig.gaMaxGenerations,
+            populationSize: hybridConfig.gaPopulationSize
+          }
+        })
       });
 
       const data = await response.json();
 
-      if (data.success) {
+      if (response.ok && data.taskId) {
         setGenerationTask({
-          status: 'completed',
-          phase: 'COMPLETED',
-          progress: 100,
-          message: 'Timetable generated successfully!',
-          metrics: data.metrics
+          status: 'running',
+          phase: 'STARTED',
+          progress: 10,
+          message: 'Hybrid scheduler process started...'
         });
-        setGeneratedSchedule(data.data);
+
+        // Start polling for status
+        pollTaskStatus(data.taskId);
       } else {
-        throw new Error(data.error || 'Generation failed');
+        throw new Error(data.error || 'Failed to start generation');
       }
     } catch (error: any) {
       setGenerationTask({
@@ -234,6 +346,13 @@ export default function HybridSchedulerPage() {
       return;
     }
 
+    // If timetable_id exists, it's already saved by Python scheduler
+    if (generatedSchedule.timetable_id || generatedSchedule.id) {
+      router.push(`/faculty/timetables/view/${generatedSchedule.timetable_id || generatedSchedule.id}`);
+      return;
+    }
+
+    // Legacy flow: save first then view
     setIsSaving(true);
     try {
       const response = await fetch('/api/hybrid-timetable/save', {
@@ -261,6 +380,13 @@ export default function HybridSchedulerPage() {
 
   const handleSave = async () => {
     if (!generatedSchedule) return;
+
+    // If already saved by Python scheduler, show confirmation
+    const timetableId = generatedSchedule.timetable_id || generatedSchedule.id;
+    if (timetableId) {
+      alert('Timetable already saved as draft!');
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -294,8 +420,30 @@ export default function HybridSchedulerPage() {
   const handleSendToPublisher = async () => {
     if (!generatedSchedule) return;
 
+    const timetableId = generatedSchedule.timetable_id || generatedSchedule.id;
+
     setIsSaving(true);
     try {
+      // If already saved by Python scheduler, just update status
+      if (timetableId) {
+        const authToken = Buffer.from(JSON.stringify(user)).toString('base64');
+        const response = await fetch(`/api/timetables/${timetableId}/status`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ status: 'pending_approval' })
+        });
+
+        if (response.ok) {
+          alert('Timetable sent to publisher for review!');
+          router.push('/faculty/timetables');
+          return;
+        }
+      }
+
+      // Legacy flow: save with status
       const response = await fetch('/api/hybrid-timetable/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

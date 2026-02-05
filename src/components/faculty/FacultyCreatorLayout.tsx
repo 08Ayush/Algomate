@@ -24,7 +24,8 @@ import {
     Zap,
     Eye,
     Cpu,
-    Building2
+    Building2,
+    UserCheck
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -151,6 +152,7 @@ const FacultyCreatorLayout: React.FC<FacultyCreatorLayoutProps> = ({ children, a
                 { id: 'subjects', icon: BookOpen, label: 'Subjects', path: '/faculty/subjects' },
                 { id: 'batches', icon: GraduationCap, label: 'Batches', path: '/faculty/batches' },
                 { id: 'qualifications', icon: Sparkles, label: 'Qualifications', path: '/faculty/qualifications' },
+                { id: 'faculty-assignments', icon: UserCheck, label: 'Faculty Assignments', path: '/faculty/faculty-assignments' },
                 { id: 'assignments', icon: FileText, label: 'Assignments', path: '/faculty/assignments' },
             );
         } else {
