@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { SubmitForApprovalUseCase, SupabaseTimetableRepository } from '@/modules/timetable';
 import { authenticate } from '@/shared/middleware/auth';
+import { notifyTimetableSubmittedForApproval } from '@/lib/notificationService';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -32,6 +33,45 @@ export async function POST(
       user.id,
       user.faculty_type || '' // Pass faculty_type, not department_id
     );
+
+    // Send notification to publishers/approvers
+    if (result.success && result.timetable) {
+      const timetable = result.timetable;
+
+      // Fetch batch and department info for notification
+      const { data: batch } = await supabase
+        .from('batches')
+        .select('id, department_id')
+        .eq('id', timetable.batch_id)
+        .single();
+
+      if (batch) {
+        const creatorName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'A faculty member';
+
+        console.log('📧 Sending notification with params:', {
+          timetableId: id,
+          timetableTitle: timetable.title || 'Untitled Timetable',
+          batchId: timetable.batch_id,
+          departmentId: batch.department_id,
+          creatorId: user.id,
+          creatorName
+        });
+
+        const notifyResult = await notifyTimetableSubmittedForApproval({
+          timetableId: id,
+          timetableTitle: timetable.title || 'Untitled Timetable',
+          batchId: timetable.batch_id,
+          departmentId: batch.department_id,
+          creatorId: user.id,
+          creatorName
+        });
+
+        console.log('📧 Notification result:', notifyResult);
+      } else {
+        console.warn('⚠️ No batch found for timetable:', timetable.batch_id);
+      }
+    }
+
     return NextResponse.json(result);
 
   } catch (error: any) {

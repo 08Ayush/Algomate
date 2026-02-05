@@ -54,7 +54,7 @@ export class LoginUseCase {
             console.warn('⚠️ Shared: Failed to persist session to database. User is logged in but session is not tracked.', error.message);
         }
 
-        // Return result
+        // Return result with extended user data
         return {
             token,
             user: {
@@ -64,7 +64,15 @@ export class LoginUseCase {
                 role: user.role,
                 college_id: user.collegeId,
                 department_id: user.departmentId,
-                faculty_type: user.facultyType
+                faculty_type: user.facultyType,
+                // Extended fields for UI
+                first_name: user.firstName,
+                last_name: user.lastName,
+                student_id: user.studentId,
+                course_id: user.courseId,
+                current_semester: user.currentSemester,
+                admission_year: user.admissionYear,
+                is_active: user.isActive
             }
         };
     }

@@ -1,23 +1,31 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { INotificationRepository } from '../../domain/repositories/INotificationRepository';
-import { Notification } from '../../domain/entities/Notification';
+import { Notification, NotificationType, ContentType, Priority } from '../../domain/entities/Notification';
 import { Database } from '@/shared/database';
 
 export class SupabaseNotificationRepository implements INotificationRepository {
     constructor(private readonly db: SupabaseClient<Database>) { }
 
     private mapToEntity(row: any): Notification {
+        // Handle missing columns gracefully for backwards compatibility
         return new Notification(
             row.id,
-            row.recipient_id, // Mapped from recipient_id
+            row.recipient_id,
             row.title,
             row.message,
-            row.type,
-            row.is_read,
+            row.type as NotificationType,
+            row.is_read ?? false,
             new Date(row.created_at),
-            row.batch_id,
-            row.department_id,
-            row.timetable_id
+            row.batch_id ?? undefined,
+            row.department_id ?? undefined, // May not exist in DB
+            row.timetable_id ?? undefined,
+            row.sender_id ?? undefined,
+            (row.content_type as ContentType) ?? undefined,
+            row.content_id ?? undefined,
+            (row.priority as Priority) ?? 'normal',
+            row.action_url ?? undefined,
+            row.expires_at ? new Date(row.expires_at) : undefined,
+            row.read_at ? new Date(row.read_at) : undefined
         );
     }
 
@@ -39,7 +47,7 @@ export class SupabaseNotificationRepository implements INotificationRepository {
         const { data, error } = await this.db
             .from('notifications' as any)
             .select('*')
-            .eq('recipient_id', userId) // Changed to recipient_id
+            .eq('recipient_id', userId)
             .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -50,7 +58,7 @@ export class SupabaseNotificationRepository implements INotificationRepository {
         const { data, error } = await this.db
             .from('notifications' as any)
             .select('*')
-            .eq('recipient_id', userId) // Changed to recipient_id
+            .eq('recipient_id', userId)
             .eq('is_read', false)
             .order('created_at', { ascending: false });
 
@@ -62,14 +70,20 @@ export class SupabaseNotificationRepository implements INotificationRepository {
         const { data, error } = await this.db
             .from('notifications' as any)
             .insert({
-                recipient_id: notification.userId, // Mapped to recipient_id
+                recipient_id: notification.userId,
+                sender_id: notification.senderId || null,
                 title: notification.title,
                 message: notification.message,
                 type: notification.type,
                 is_read: notification.isRead,
-                batch_id: notification.batchId,
-                department_id: notification.departmentId,
-                timetable_id: notification.timetableId
+                batch_id: notification.batchId || null,
+                department_id: notification.departmentId || null,
+                timetable_id: notification.timetableId || null,
+                content_type: notification.contentType || null,
+                content_id: notification.contentId || null,
+                priority: notification.priority || 'normal',
+                action_url: notification.actionUrl || null,
+                expires_at: notification.expiresAt?.toISOString() || null
             } as any)
             .select()
             .single();
@@ -82,14 +96,20 @@ export class SupabaseNotificationRepository implements INotificationRepository {
         const { data, error } = await this.db
             .from('notifications' as any)
             .insert(notifications.map(n => ({
-                recipient_id: n.userId, // Mapped to recipient_id
+                recipient_id: n.userId,
+                sender_id: n.senderId || null,
                 title: n.title,
                 message: n.message,
                 type: n.type,
                 is_read: n.isRead,
                 batch_id: n.batchId || null,
                 department_id: n.departmentId || null,
-                timetable_id: n.timetableId || null
+                timetable_id: n.timetableId || null,
+                content_type: n.contentType || null,
+                content_id: n.contentId || null,
+                priority: n.priority || 'normal',
+                action_url: n.actionUrl || null,
+                expires_at: n.expiresAt?.toISOString() || null
             })) as any)
             .select();
 
@@ -98,9 +118,13 @@ export class SupabaseNotificationRepository implements INotificationRepository {
     }
 
     async markAsRead(id: string): Promise<Notification> {
+        const updateData: any = {
+            is_read: true,
+            read_at: new Date().toISOString()
+        };
         const { data, error } = await this.db
             .from('notifications' as any)
-            .update({ is_read: true } as any)
+            .update(updateData as any)
             .eq('id', id)
             .select()
             .single();
@@ -109,12 +133,30 @@ export class SupabaseNotificationRepository implements INotificationRepository {
         return this.mapToEntity(data);
     }
 
-    async markAllAsRead(userId: string): Promise<boolean> {
+    async markManyAsRead(ids: string[]): Promise<boolean> {
+        const updateData = {
+            is_read: true,
+            read_at: new Date().toISOString()
+        };
         const { error } = await this.db
             .from('notifications' as any)
-            .update({ is_read: true } as any)
-            .eq('recipient_id', userId) // Changed to recipient_id
-            .eq('is_read', false);
+            .update(updateData as any)
+            .in('id', ids as any);
+
+        if (error) throw error;
+        return true;
+    }
+
+    async markAllAsRead(userId: string): Promise<boolean> {
+        const updateData = {
+            is_read: true,
+            read_at: new Date().toISOString()
+        };
+        const { error } = await this.db
+            .from('notifications' as any)
+            .update(updateData as any)
+            .eq('recipient_id' as any, userId)
+            .eq('is_read' as any, false);
 
         if (error) throw error;
         return true;
@@ -130,14 +172,59 @@ export class SupabaseNotificationRepository implements INotificationRepository {
         return true;
     }
 
+    async deleteMany(ids: string[]): Promise<boolean> {
+        const { error } = await this.db
+            .from('notifications' as any)
+            .delete()
+            .in('id', ids);
+
+        if (error) throw error;
+        return true;
+    }
+
+    async deleteExpired(): Promise<number> {
+        const { data, error } = await this.db
+            .from('notifications' as any)
+            .delete()
+            .lt('expires_at', new Date().toISOString())
+            .select();
+
+        if (error) throw error;
+        return data?.length || 0;
+    }
+
     async countUnreadByUser(userId: string): Promise<number> {
         const { count, error } = await this.db
             .from('notifications' as any)
             .select('*', { count: 'exact', head: true })
-            .eq('recipient_id', userId) // Changed to recipient_id
+            .eq('recipient_id', userId)
             .eq('is_read', false);
 
         if (error) throw error;
         return count || 0;
+    }
+
+    async findByContentType(userId: string, contentType: ContentType): Promise<Notification[]> {
+        const { data, error } = await this.db
+            .from('notifications' as any)
+            .select('*')
+            .eq('recipient_id', userId)
+            .eq('content_type', contentType)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        return data.map(row => this.mapToEntity(row));
+    }
+
+    async findByPriority(userId: string, priority: Priority): Promise<Notification[]> {
+        const { data, error } = await this.db
+            .from('notifications' as any)
+            .select('*')
+            .eq('recipient_id', userId)
+            .eq('priority', priority)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        return data.map(row => this.mapToEntity(row));
     }
 }

@@ -26,6 +26,8 @@ interface EventFormData {
     registration_required: boolean;
     max_registrations: number | null;
     status: string;
+    notify_students: boolean;
+    notify_faculty: boolean;
 }
 
 interface Department {
@@ -66,7 +68,9 @@ export default function CreateEventPage() {
         is_public: true,
         registration_required: false,
         max_registrations: null,
-        status: 'pending' // Default to pending
+        status: 'pending', // Default to pending
+        notify_students: true,
+        notify_faculty: true
     });
 
     const getAuthHeaders = () => {
@@ -178,6 +182,8 @@ export default function CreateEventPage() {
                 max_registrations: formData.max_registrations || 0,
                 expected_participants: formData.expected_participants || 0,
                 priority_level: formData.priority_level || 2,
+                notifyStudents: formData.notify_students,
+                notifyFaculty: formData.notify_faculty
             };
 
             console.log('Submitting event data:', submissionData);
@@ -499,6 +505,41 @@ export default function CreateEventPage() {
                                     </div>
                                 </div>
                             )}
+                        </div>
+                    </motion.div>
+
+                    {/* Notification Settings */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.35 }}
+                        className="bg-white rounded-2xl shadow-lg p-6"
+                    >
+                        <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                            <AlertCircle size={20} className="text-[#4D869C]" />
+                            Notifications
+                        </h2>
+                        <div className="flex gap-6">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    name="notify_students"
+                                    checked={formData.notify_students}
+                                    onChange={handleInputChange}
+                                    className="w-5 h-5 rounded border-gray-300 text-[#4D869C] focus:ring-[#4D869C] transition-all"
+                                />
+                                <span className="text-sm font-medium text-gray-700">Notify Students</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    name="notify_faculty"
+                                    checked={formData.notify_faculty}
+                                    onChange={handleInputChange}
+                                    className="w-5 h-5 rounded border-gray-300 text-[#4D869C] focus:ring-[#4D869C] transition-all"
+                                />
+                                <span className="text-sm font-medium text-gray-700">Notify Faculty</span>
+                            </label>
                         </div>
                     </motion.div>
 

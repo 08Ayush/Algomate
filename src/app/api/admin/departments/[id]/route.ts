@@ -46,10 +46,10 @@ async function getAuthenticatedUser(request: NextRequest) {
 // GET - Fetch single department by ID (accessible to any authenticated user)
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const id = params.id;
+    const { id } = await params;
 
     // Fetch department by ID
     const { data: department, error } = await supabaseAdmin
@@ -82,7 +82,7 @@ export async function GET(
 // PUT - Update department
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Get authenticated user
@@ -94,7 +94,7 @@ export async function PUT(
       );
     }
 
-    const id = params.id;
+    const { id } = await params;
     const { name, code, description } = await request.json();
 
     // Validate required fields
@@ -174,7 +174,7 @@ export async function PUT(
 // DELETE - Delete department
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Get authenticated user
@@ -186,7 +186,7 @@ export async function DELETE(
       );
     }
 
-    const id = params.id;
+    const { id } = await params;
 
     // Check if department exists and belongs to user's college
     const { data: existingDept } = await supabaseAdmin

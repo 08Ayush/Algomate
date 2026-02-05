@@ -193,6 +193,27 @@ export async function POST(request: NextRequest) {
     const dto = CreateElectiveBucketDtoSchema.parse(body);
 
     const result = await createBucketUseCase.execute(dto);
+
+    // Notify Department Faculty
+    try {
+      if (user.id) {
+        // Fallback to user department if not in result
+        const departmentId = (result as any).department_id || user.department_id;
+        if (departmentId) {
+          const { notifyNEPBucketCreated } = await import('@/lib/notificationService');
+          await notifyNEPBucketCreated({
+            bucketId: (result as any).id,
+            bucketName: (result as any).bucket_name,
+            departmentId: departmentId,
+            creatorId: user.id,
+            creatorName: `${user.first_name || 'Admin'} ${user.last_name || ''}`.trim()
+          });
+        }
+      }
+    } catch (notifError) {
+      console.error('Failed to send bucket creation notification:', notifError);
+    }
+
     return NextResponse.json(result);
 
   } catch (error: any) {

@@ -1,15 +1,59 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Bell, X, CheckCheck, AlertCircle } from 'lucide-react';
+import {
+  Bell,
+  X,
+  CheckCheck,
+  AlertCircle,
+  Calendar,
+  FileText,
+  Megaphone,
+  PartyPopper,
+  Settings,
+  XCircle,
+  Clock,
+  RefreshCw,
+  UserCheck
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
+
+// Extended notification types matching the backend
+type NotificationType =
+  | 'timetable_published'
+  | 'timetable_approved'
+  | 'timetable_rejected'
+  | 'schedule_change'
+  | 'conflict_detected'
+  | 'system_alert'
+  | 'approval_request'
+  | 'content_pending_review'
+  | 'content_approved'
+  | 'content_rejected'
+  | 'revision_requested'
+  | 'assignment_created'
+  | 'assignment_due'
+  | 'assignment_submitted'
+  | 'assignment_graded'
+  | 'announcement'
+  | 'event_created'
+  | 'event_reminder'
+  | 'event_cancelled'
+  | 'resource_updated'
+  | 'maintenance_alert'
+  | 'policy_update';
 
 interface Notification {
   id: string;
-  type: 'timetable_published' | 'schedule_change' | 'system_alert' | 'approval_request';
+  type: NotificationType;
   title: string;
   message: string;
   timetable_id?: string;
+  batch_id?: string;
+  content_type?: string;
+  content_id?: string;
+  action_url?: string;
+  priority?: 'low' | 'normal' | 'high' | 'urgent';
   is_read: boolean;
   created_at: string;
 }
@@ -34,7 +78,7 @@ export function NotificationBell() {
   // Poll for new notifications every 30 seconds
   useEffect(() => {
     if (!userId) return;
-    
+
     const interval = setInterval(() => {
       fetchNotifications(userId);
     }, 30000);
@@ -46,7 +90,7 @@ export function NotificationBell() {
     try {
       const response = await fetch(`/api/notifications?user_id=${uid}&limit=10`);
       const data = await response.json();
-      
+
       if (data.success) {
         setNotifications(data.data);
         setUnreadCount(data.unread_count);
@@ -107,24 +151,107 @@ export function NotificationBell() {
 
   const handleNotificationClick = (notification: Notification) => {
     markAsRead(notification.id);
-    
-    // Navigate to timetable if available
+
+    // Navigate based on action_url or content type
+    if (notification.action_url) {
+      let targetUrl = notification.action_url;
+
+      // Transform legacy /admin/timetables/ URLs to correct path
+      if (targetUrl.startsWith('/admin/timetables/')) {
+        const timetableId = targetUrl.replace('/admin/timetables/', '').replace('/edit', '');
+        targetUrl = `/faculty/timetables/view/${timetableId}`;
+      }
+      // Transform legacy /timetable/ URLs to correct path
+      else if (targetUrl.startsWith('/timetable/')) {
+        const timetableId = targetUrl.replace('/timetable/', '');
+        targetUrl = `/faculty/timetables/view/${timetableId}`;
+      }
+
+      router.push(targetUrl);
+      setIsOpen(false);
+      return;
+    }
+
+    // Fallback navigation based on content type
     if (notification.timetable_id) {
       router.push(`/faculty/timetables/view/${notification.timetable_id}`);
-      setIsOpen(false);
+    } else if (notification.content_type === 'assignment' && notification.content_id) {
+      router.push(`/assignments/${notification.content_id}`);
+    } else if (notification.content_type === 'announcement' && notification.content_id) {
+      router.push(`/announcements/${notification.content_id}`);
+    } else if (notification.content_type === 'event' && notification.content_id) {
+      router.push(`/events/${notification.content_id}`);
+    }
+
+    setIsOpen(false);
+  };
+
+  const getNotificationIcon = (type: NotificationType) => {
+    switch (type) {
+      // Timetable notifications
+      case 'timetable_published':
+        return <Calendar className="w-5 h-5 text-green-500" />;
+      case 'timetable_approved':
+        return <CheckCheck className="w-5 h-5 text-green-500" />;
+      case 'timetable_rejected':
+        return <XCircle className="w-5 h-5 text-red-500" />;
+      case 'schedule_change':
+        return <RefreshCw className="w-5 h-5 text-orange-500" />;
+      case 'conflict_detected':
+        return <AlertCircle className="w-5 h-5 text-amber-500" />;
+
+      // Content workflow
+      case 'approval_request':
+      case 'content_pending_review':
+        return <Clock className="w-5 h-5 text-blue-500" />;
+      case 'content_approved':
+        return <CheckCheck className="w-5 h-5 text-green-500" />;
+      case 'content_rejected':
+        return <XCircle className="w-5 h-5 text-red-500" />;
+      case 'revision_requested':
+        return <RefreshCw className="w-5 h-5 text-yellow-500" />;
+
+      // Assignment notifications
+      case 'assignment_created':
+        return <FileText className="w-5 h-5 text-purple-500" />;
+      case 'assignment_due':
+        return <Clock className="w-5 h-5 text-red-500" />;
+      case 'assignment_submitted':
+        return <UserCheck className="w-5 h-5 text-blue-500" />;
+      case 'assignment_graded':
+        return <CheckCheck className="w-5 h-5 text-green-500" />;
+
+      // Announcement & Event notifications
+      case 'announcement':
+        return <Megaphone className="w-5 h-5 text-blue-500" />;
+      case 'event_created':
+      case 'event_reminder':
+        return <PartyPopper className="w-5 h-5 text-pink-500" />;
+      case 'event_cancelled':
+        return <XCircle className="w-5 h-5 text-red-500" />;
+
+      // System notifications
+      case 'system_alert':
+      case 'maintenance_alert':
+        return <AlertCircle className="w-5 h-5 text-red-500" />;
+      case 'resource_updated':
+        return <Settings className="w-5 h-5 text-gray-500" />;
+      case 'policy_update':
+        return <FileText className="w-5 h-5 text-blue-500" />;
+
+      default:
+        return <Bell className="w-5 h-5 text-gray-500" />;
     }
   };
 
-  const getNotificationIcon = (type: string) => {
-    switch (type) {
-      case 'system_alert':
-        return <AlertCircle className="w-5 h-5 text-red-500" />;
-      case 'approval_request':
-        return <CheckCheck className="w-5 h-5 text-blue-500" />;
-      case 'timetable_published':
-        return <CheckCheck className="w-5 h-5 text-green-500" />;
+  const getPriorityStyle = (priority?: string) => {
+    switch (priority) {
+      case 'urgent':
+        return 'border-l-4 border-red-500';
+      case 'high':
+        return 'border-l-4 border-orange-500';
       default:
-        return <Bell className="w-5 h-5 text-gray-500" />;
+        return '';
     }
   };
 
@@ -211,9 +338,8 @@ export function NotificationBell() {
                     <button
                       key={notification.id}
                       onClick={() => handleNotificationClick(notification)}
-                      className={`w-full p-4 text-left hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors ${
-                        !notification.is_read ? 'bg-blue-50 dark:bg-blue-900/10' : ''
-                      }`}
+                      className={`w-full p-4 text-left hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors ${!notification.is_read ? 'bg-blue-50 dark:bg-blue-900/10' : ''
+                        } ${getPriorityStyle(notification.priority)}`}
                     >
                       <div className="flex gap-3">
                         <div className="flex-shrink-0 mt-1">
@@ -231,9 +357,21 @@ export function NotificationBell() {
                           <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2 mb-2 whitespace-pre-wrap">
                             {notification.message}
                           </p>
-                          <span className="text-xs text-gray-500 dark:text-gray-500">
-                            {formatTime(notification.created_at)}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500 dark:text-gray-500">
+                              {formatTime(notification.created_at)}
+                            </span>
+                            {notification.priority === 'urgent' && (
+                              <span className="text-xs bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-1.5 py-0.5 rounded">
+                                Urgent
+                              </span>
+                            )}
+                            {notification.priority === 'high' && (
+                              <span className="text-xs bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 px-1.5 py-0.5 rounded">
+                                Important
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </button>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
+import { notifyAssignmentCreated } from '@/lib/notificationService';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -55,7 +56,8 @@ export async function POST(request: NextRequest) {
       showResultsImmediately,
       allowReview,
       questions,
-      isDraft
+      isDraft,
+      notifyStudents = true // New option to control notifications
     } = body;
 
     // Validate required fields
@@ -151,34 +153,40 @@ export async function POST(request: NextRequest) {
       // Non-critical error, continue
     }
 
-    // Step 4: Send notifications to students (if published)
-    if (!isDraft) {
-      const { data: students } = await supabase
-        .from('student_batch_enrollment')
-        .select('student_id')
-        .eq('batch_id', batchId)
-        .eq('is_active', true);
+    // Step 4: Send notifications to students (if published and notifyStudents is true)
+    if (!isDraft && notifyStudents && scheduledEnd) {
+      const creatorName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Faculty';
 
-      if (students && students.length > 0) {
-        const notifications = students.map((s: any) => ({
-          college_id: user.college_id,
-          user_id: s.student_id,
-          type: 'assignment_created',
-          title: 'New Assignment',
-          message: `New assignment "${title}" has been created`,
-          reference_type: 'assignment',
-          reference_id: assignment.id,
-          is_read: false,
-        }));
-
-        await supabase.from('notifications').insert(notifications);
+      // Fetch subject name if available
+      let subjectName = 'General';
+      if (subjectId) {
+        const { data: subject } = await supabase
+          .from('subjects')
+          .select('name')
+          .eq('id', subjectId)
+          .single();
+        subjectName = subject?.name || 'General';
       }
+
+      await notifyAssignmentCreated({
+        assignmentId: assignment.id,
+        assignmentTitle: title,
+        batchId: batchId,
+        subjectName,
+        dueDate: new Date(scheduledEnd),
+        creatorId: user.user_id,
+        creatorName,
+        notifyStudents: true
+      });
+
+      console.log('✅ Assignment notification sent to students');
     }
 
     return NextResponse.json({
       success: true,
       assignment_id: assignment.id,
       message: isDraft ? 'Assignment saved as draft' : 'Assignment created successfully',
+      notificationsSent: !isDraft && notifyStudents
     });
 
   } catch (error: any) {

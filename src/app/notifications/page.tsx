@@ -17,16 +17,35 @@ import {
   Send,
   ArrowLeft,
   Home,
-  Info
+  Info,
+  FileText,
+  Megaphone,
+  PartyPopper,
+  XCircle,
+  UserCheck,
+  Settings
 } from 'lucide-react';
+
+// Extended notification types
+type NotificationType =
+  | 'timetable_published' | 'timetable_approved' | 'timetable_rejected' | 'schedule_change' | 'conflict_detected'
+  | 'system_alert' | 'approval_request'
+  | 'content_pending_review' | 'content_approved' | 'content_rejected' | 'revision_requested'
+  | 'assignment_created' | 'assignment_due' | 'assignment_submitted' | 'assignment_graded'
+  | 'announcement' | 'event_created' | 'event_reminder' | 'event_cancelled'
+  | 'resource_updated' | 'maintenance_alert' | 'policy_update';
 
 interface Notification {
   id: string;
-  type: 'timetable_published' | 'schedule_change' | 'system_alert' | 'approval_request';
+  type: NotificationType;
   title: string;
   message: string;
   timetable_id?: string;
   batch_id?: string;
+  content_type?: string;
+  content_id?: string;
+  action_url?: string;
+  priority?: 'low' | 'normal' | 'high' | 'urgent';
   sender_id?: string;
   is_read: boolean;
   created_at: string;
@@ -161,33 +180,123 @@ export default function NotificationsPage() {
       markAsRead([notification.id]);
     }
 
+    // Navigate based on action_url or content type
+    if (notification.action_url) {
+      router.push(notification.action_url);
+      return;
+    }
+
+    // Fallback navigation based on content type
     if (notification.timetable_id) {
-      // Redirect based on user role
       if (user?.role === 'college_admin') {
         router.push(`/college-admin/timetables/${notification.timetable_id}`);
       } else if (user?.role === 'student') {
         router.push(`/student/timetable`);
       }
+    } else if (notification.content_type === 'assignment' && notification.content_id) {
+      router.push(`/assignments/${notification.content_id}`);
+    } else if (notification.content_type === 'announcement' && notification.content_id) {
+      router.push(`/announcements`);
+    } else if (notification.content_type === 'event' && notification.content_id) {
+      router.push(`/events`);
     }
   };
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
-      case 'timetable_published': return <CheckCircle size={20} className="text-green-600" />;
-      case 'schedule_change': return <RefreshCw size={20} className="text-blue-600" />;
-      case 'system_alert': return <AlertCircle size={20} className="text-orange-600" />;
-      case 'approval_request': return <Calendar size={20} className="text-purple-600" />;
-      default: return <Bell size={20} className="text-gray-600" />;
+      // Timetable notifications
+      case 'timetable_published':
+      case 'timetable_approved':
+        return <CheckCircle size={20} className="text-green-600" />;
+      case 'timetable_rejected':
+        return <XCircle size={20} className="text-red-600" />;
+      case 'schedule_change':
+        return <RefreshCw size={20} className="text-blue-600" />;
+      case 'conflict_detected':
+        return <AlertCircle size={20} className="text-amber-600" />;
+
+      // Approval workflow
+      case 'approval_request':
+      case 'content_pending_review':
+        return <Clock size={20} className="text-blue-600" />;
+      case 'content_approved':
+        return <CheckCircle size={20} className="text-green-600" />;
+      case 'content_rejected':
+        return <XCircle size={20} className="text-red-600" />;
+      case 'revision_requested':
+        return <RefreshCw size={20} className="text-yellow-600" />;
+
+      // Assignment notifications
+      case 'assignment_created':
+        return <FileText size={20} className="text-purple-600" />;
+      case 'assignment_due':
+        return <Clock size={20} className="text-red-600" />;
+      case 'assignment_submitted':
+        return <UserCheck size={20} className="text-blue-600" />;
+      case 'assignment_graded':
+        return <CheckCircle size={20} className="text-green-600" />;
+
+      // Announcement & Event notifications
+      case 'announcement':
+        return <Megaphone size={20} className="text-blue-600" />;
+      case 'event_created':
+      case 'event_reminder':
+        return <PartyPopper size={20} className="text-pink-600" />;
+      case 'event_cancelled':
+        return <XCircle size={20} className="text-red-600" />;
+
+      // System notifications
+      case 'system_alert':
+      case 'maintenance_alert':
+        return <AlertCircle size={20} className="text-orange-600" />;
+      case 'resource_updated':
+        return <Settings size={20} className="text-gray-600" />;
+      case 'policy_update':
+        return <FileText size={20} className="text-blue-600" />;
+
+      default:
+        return <Bell size={20} className="text-gray-600" />;
     }
   };
 
   const getNotificationBgColor = (type: string) => {
     switch (type) {
-      case 'timetable_published': return 'bg-green-100';
-      case 'schedule_change': return 'bg-blue-100';
-      case 'system_alert': return 'bg-orange-100';
-      case 'approval_request': return 'bg-purple-100';
-      default: return 'bg-gray-100';
+      case 'timetable_published':
+      case 'timetable_approved':
+      case 'content_approved':
+      case 'assignment_graded':
+        return 'bg-green-100';
+
+      case 'timetable_rejected':
+      case 'content_rejected':
+      case 'event_cancelled':
+      case 'assignment_due':
+        return 'bg-red-100';
+
+      case 'schedule_change':
+      case 'approval_request':
+      case 'content_pending_review':
+      case 'announcement':
+      case 'assignment_submitted':
+        return 'bg-blue-100';
+
+      case 'system_alert':
+      case 'maintenance_alert':
+      case 'conflict_detected':
+        return 'bg-orange-100';
+
+      case 'assignment_created':
+        return 'bg-purple-100';
+
+      case 'event_created':
+      case 'event_reminder':
+        return 'bg-pink-100';
+
+      case 'revision_requested':
+        return 'bg-yellow-100';
+
+      default:
+        return 'bg-gray-100';
     }
   };
 
@@ -336,8 +445,8 @@ export default function NotificationsPage() {
                       key={f}
                       onClick={() => setFilter(f)}
                       className={`px-4 py-2 rounded-xl transition-colors font-medium ${filter === f
-                          ? 'bg-[#4D869C] text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        ? 'bg-[#4D869C] text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                         }`}
                     >
                       {f === 'all' ? `All (${notifications.length})` :
@@ -355,10 +464,25 @@ export default function NotificationsPage() {
                   className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#4D869C] outline-none"
                 >
                   <option value="all">All Types</option>
-                  <option value="timetable_published">Timetable Published</option>
-                  <option value="schedule_change">Schedule Changes</option>
-                  <option value="system_alert">System Alerts</option>
-                  <option value="approval_request">Approval Requests</option>
+                  <optgroup label="Timetable">
+                    <option value="timetable_published">Timetable Published</option>
+                    <option value="timetable_approved">Timetable Approved</option>
+                    <option value="timetable_rejected">Timetable Rejected</option>
+                    <option value="schedule_change">Schedule Changes</option>
+                  </optgroup>
+                  <optgroup label="Assignments">
+                    <option value="assignment_created">New Assignment</option>
+                    <option value="assignment_graded">Assignment Graded</option>
+                    <option value="assignment_due">Assignment Due</option>
+                  </optgroup>
+                  <optgroup label="Announcements & Events">
+                    <option value="announcement">Announcements</option>
+                    <option value="event_created">Events</option>
+                  </optgroup>
+                  <optgroup label="System">
+                    <option value="system_alert">System Alerts</option>
+                    <option value="approval_request">Approval Requests</option>
+                  </optgroup>
                 </select>
               </div>
             </div>

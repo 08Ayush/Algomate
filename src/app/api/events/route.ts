@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { notifyEventCreated } from '@/lib/notificationService';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -235,6 +236,43 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('Error creating event:', error);
       return NextResponse.json({ error: error.message, details: error }, { status: 500 });
+    }
+
+    // Send notifications if notifyStudents or notifyFaculty is true
+    const notifyStudents = body.notifyStudents !== false; // Default to true
+    const notifyFaculty = body.notifyFaculty !== false; // Default to true
+
+    if (notifyStudents || notifyFaculty) {
+      // Get creator name
+      const { data: creatorData } = await supabase
+        .from('users')
+        .select('first_name, last_name')
+        .eq('id', created_by)
+        .single();
+
+      const creatorName = creatorData
+        ? `${creatorData.first_name || ''} ${creatorData.last_name || ''}`.trim()
+        : 'Admin';
+
+      try {
+        const notificationResult = await notifyEventCreated({
+          eventId: eventId,
+          eventTitle: title,
+          eventDate: new Date(start_date),
+          location: venue || undefined,
+          departmentId: department_id,
+          collegeId: college_id,
+          creatorId: created_by,
+          creatorName,
+          notifyStudents,
+          notifyFaculty
+        });
+
+        console.log(`✅ Event notifications sent: ${notificationResult.count}`);
+      } catch (notifyError) {
+        console.error('Notification error (non-critical):', notifyError);
+        // Continue - notification failure shouldn't fail event creation
+      }
     }
 
     return NextResponse.json({

@@ -18,7 +18,8 @@ import {
     ChevronDown,
     Key,
     AlertTriangle,
-    Layers
+    Layers,
+    Megaphone
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -113,6 +114,7 @@ const SuperAdminLayout: React.FC<SuperAdminLayoutProps> = ({ children, activeTab
 
     const navItems = [
         { id: 'dashboard', icon: Shield, label: 'Dashboard', path: '/super-admin/dashboard' },
+        { id: 'communication', icon: Megaphone, label: 'Communication', path: '/super-admin/communication' },
         { id: 'colleges', icon: Building2, label: 'Colleges', path: '/super-admin/colleges' },
         { id: 'collegeAdmins', icon: Users, label: 'College Admins', path: '/super-admin/college-admins' },
         { id: 'manage', icon: Layers, label: 'Manage Data', path: '/super-admin/manage' },

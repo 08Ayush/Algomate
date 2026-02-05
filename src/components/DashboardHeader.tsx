@@ -43,15 +43,41 @@ export default function DashboardHeader({ user, onLogout, onToggleSidebar, isSid
     }
   };
 
-  const notifications = [
-    {
-      id: 1,
-      title: "Timetable Published",
-      message: "The Computer Science Semester 1 timetable has been approved and published.",
-      time: "1d ago",
-      type: "success"
+  const [notifications, setNotifications] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchNotifications(user.id);
     }
-  ];
+  }, [user]);
+
+  const fetchNotifications = async (userId: string) => {
+    try {
+      const res = await fetch(`/api/notifications?user_id=${userId}&limit=10`);
+      const data = await res.json();
+      if (data.success) {
+        setNotifications(data.data || []);
+      }
+    } catch (e) {
+      console.error('Error fetching notifications');
+    }
+  };
+
+  const markAsRead = async (notificationId: string) => {
+    try {
+      if (!user?.id) return;
+      await fetch('/api/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: user.id, notification_ids: [notificationId] })
+      });
+      setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n));
+    } catch (e) {
+      console.error('Failed to mark as read');
+    }
+  };
+
+  const unreadCount = notifications.filter(n => !n.is_read).length;
 
   return (
     <header className="bg-white/95 backdrop-blur-md border-b border-slate-200/50 px-6 py-4 sticky top-0 z-40 shadow-sm transition-colors duration-300">
@@ -93,9 +119,9 @@ export default function DashboardHeader({ user, onLogout, onToggleSidebar, isSid
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5zM21 4H8a3 3 0 00-3 3v9a3 3 0 003 3h5l3 3V4z" />
               </svg>
-              {notifications.length > 0 && (
+              {unreadCount > 0 && (
                 <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                  {notifications.length}
+                  {unreadCount}
                 </span>
               )}
             </button>
@@ -103,27 +129,35 @@ export default function DashboardHeader({ user, onLogout, onToggleSidebar, isSid
             {/* Notifications Dropdown */}
             {showNotifications && (
               <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
-                <div className="p-4 border-b border-gray-200">
+                <div className="p-4 border-b border-gray-200 flex justify-between items-center">
                   <h3 className="text-lg font-semibold text-gray-900">Notifications</h3>
-                  <span className="text-sm text-green-600 bg-green-100 px-2 py-1 rounded-full">Published (1)</span>
+                  {unreadCount > 0 && <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">{unreadCount} New</span>}
                 </div>
                 <div className="max-h-80 overflow-y-auto">
-                  {notifications.map((notification) => (
-                    <div key={notification.id} className="p-4 border-b border-gray-100 hover:bg-gray-50">
-                      <div className="flex items-start space-x-3">
-                        <div className={`w-2 h-2 rounded-full mt-2 ${notification.type === 'success' ? 'bg-green-500' : 'bg-blue-500'
-                          }`} />
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-900">{notification.title}</p>
-                          <p className="text-sm text-gray-600 mt-1">{notification.message}</p>
-                          <p className="text-xs text-gray-400 mt-1">{notification.time}</p>
-                          <button className="text-blue-600 hover:text-blue-700 text-sm mt-2">
-                            View Timetable →
-                          </button>
+                  {notifications.length === 0 ? (
+                    <div className="p-4 text-center text-gray-500 text-sm">No notifications</div>
+                  ) : (
+                    notifications.map((notification) => (
+                      <div
+                        key={notification.id}
+                        className={`p-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${!notification.is_read ? 'bg-blue-50/50' : ''}`}
+                        onClick={() => !notification.is_read && markAsRead(notification.id)}
+                      >
+                        <div className="flex items-start space-x-3">
+                          <div className={`w-2 h-2 rounded-full mt-2 ${notification.type === 'system_alert' ? 'bg-red-500' :
+                              notification.type === 'timetable_published' ? 'bg-green-500' :
+                                'bg-blue-500'
+                            }`} />
+                          <div className="flex-1">
+                            <p className={`font-medium text-gray-900 ${!notification.is_read ? 'font-bold' : ''}`}>{notification.title}</p>
+                            <p className="text-sm text-gray-600 mt-1">{notification.message}</p>
+                            <p className="text-xs text-gray-400 mt-1">{new Date(notification.created_at).toLocaleDateString()}</p>
+                          </div>
+                          {!notification.is_read && <div className="w-2 h-2 bg-blue-500 rounded-full"></div>}
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             )}

@@ -11,7 +11,7 @@ import {
     type ScheduledClass as LibScheduledClass,
     type TimeSlot as LibTimeSlot
 } from '@/lib/constraintRules';
-import { createConstraintViolationNotifications } from '@/lib/notifications';
+// import { createConstraintViolationNotifications } from '@/lib/notifications';
 
 interface CreateManualTimetableRequest {
     assignments: any[];
@@ -277,13 +277,19 @@ export class CreateManualTimetableUseCase {
                     constraintViolations: violations
                 });
 
-                await createConstraintViolationNotifications({
+                // Calculate counts for notification
+                const criticalCount = violations.filter(v => v.severity === 'CRITICAL').length;
+
+                // Use new notification service
+                const { notifyConflictsDetected } = await import('@/lib/notificationService');
+                await notifyConflictsDetected({
                     timetableId: createdTimetable.id,
+                    timetableTitle: title || `Manual Timetable - Semester ${semester}`,
                     batchId: finalBatchId,
-                    violations,
-                    creatorId: createdBy,
                     departmentId: finalDepartmentId,
-                    timetableTitle: title || `Manual Timetable`
+                    conflictCount: violations.length,
+                    criticalCount: criticalCount,
+                    creatorId: createdBy
                 });
             }
 
