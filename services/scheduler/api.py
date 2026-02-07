@@ -113,9 +113,9 @@ def update_task_progress(task_id: str, phase: str, progress: float, message: str
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
-    scheduler_logger.info("🚀 Scheduler API starting up...")
+    scheduler_logger.info("Scheduler API starting up...")
     yield
-    scheduler_logger.info("👋 Scheduler API shutting down...")
+    scheduler_logger.info("Scheduler API shutting down...")
 
 
 app = FastAPI(
@@ -160,7 +160,7 @@ async def generate_timetable(request: GenerateRequest, background_tasks: Backgro
     """
     task_id = str(uuid.uuid4())
     
-    scheduler_logger.info(f"📅 New generation request: task={task_id}, batch={request.batch_id}")
+    scheduler_logger.info(f"New generation request: task={task_id}, batch={request.batch_id}")
     
     # Initialize task tracking
     active_tasks[task_id] = {
@@ -241,7 +241,7 @@ async def get_task_status(task_id: str):
     try:
         supabase = get_supabase_client()
         result = supabase.table("timetable_generation_tasks").select(
-            "id, status, progress_message, created_at, updated_at"
+            "id, status, current_message, created_at, updated_at"
         ).eq("id", task_id).single().execute()
         
         if result.data:
@@ -250,7 +250,7 @@ async def get_task_status(task_id: str):
             # Check for associated timetable
             timetable_result = supabase.table("generated_timetables").select(
                 "id, fitness_score"
-            ).eq("task_id", task_id).limit(1).execute()
+            ).eq("generation_task_id", task_id).limit(1).execute()
             
             timetable = timetable_result.data[0] if timetable_result.data else None
             
@@ -259,7 +259,7 @@ async def get_task_status(task_id: str):
                 status=task_data["status"],
                 progress=1.0 if task_data["status"] == "completed" else 0.5,
                 phase=task_data["status"].upper(),
-                message=task_data.get("progress_message"),
+                message=task_data.get("current_message"),
                 timetable_id=timetable["id"] if timetable else None,
                 fitness_score=timetable["fitness_score"] if timetable else None,
                 created_at=task_data.get("created_at"),
@@ -285,7 +285,7 @@ async def cancel_task(task_id: str):
             supabase = get_supabase_client()
             supabase.table("timetable_generation_tasks").update({
                 "status": "cancelled",
-                "progress_message": "Cancelled by user",
+                "current_message": "Cancelled by user",
                 "updated_at": datetime.now().isoformat()
             }).eq("id", task_id).execute()
         except Exception as e:

@@ -207,7 +207,7 @@ class HybridOrchestrator:
             self._update_task_status(task_id, "running", "Saving results")
             
             timetable_id = self._save_solution(
-                task_id, batch_id, college_id, best_chromosome, ga_stats
+                task_id, batch_id, college_id, created_by, best_chromosome, ga_stats
             )
             
             # Step 8: Update task to completed
@@ -369,9 +369,12 @@ class HybridOrchestrator:
         try:
             self.supabase.table("timetable_generation_tasks").insert({
                 "id": task_id,
+                "task_name": f"Hybrid Schedule - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
                 "college_id": college_id,
                 "batch_id": batch_id,
-                "status": "pending",
+                "academic_year": datetime.now().strftime('%Y'),
+                "semester": 1,
+                "status": "PENDING",
                 "created_by": created_by,
                 "algorithm_config": {
                     "cpsat": {
@@ -393,9 +396,19 @@ class HybridOrchestrator:
     def _update_task_status(self, task_id: str, status: str, message: str):
         """Update task status in database."""
         try:
+            # Map status to uppercase enum values
+            status_map = {
+                "pending": "PENDING",
+                "running": "RUNNING",
+                "completed": "COMPLETED",
+                "failed": "FAILED",
+                "cancelled": "CANCELLED"
+            }
+            db_status = status_map.get(status.lower(), status.upper())
+            
             self.supabase.table("timetable_generation_tasks").update({
-                "status": status,
-                "progress_message": message,
+                "status": db_status,
+                "current_message": message,
                 "updated_at": datetime.now().isoformat()
             }).eq("id", task_id).execute()
         except Exception as e:
@@ -406,6 +419,7 @@ class HybridOrchestrator:
         task_id: str,
         batch_id: str,
         college_id: str,
+        created_by: str,
         chromosome: Chromosome,
         ga_stats: EvolutionStats
     ) -> str:
@@ -417,11 +431,15 @@ class HybridOrchestrator:
         try:
             self.supabase.table("generated_timetables").insert({
                 "id": timetable_id,
-                "task_id": task_id,
+                "generation_task_id": task_id,
                 "batch_id": batch_id,
                 "college_id": college_id,
+                "academic_year": datetime.now().strftime('%Y'),
+                "semester": 1,
                 "fitness_score": chromosome.fitness,
                 "is_published": False,
+                "status": "draft",
+                "created_by": created_by,
                 "version": 1,
                 "title": f"Hybrid Timetable - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
             }).execute()
@@ -448,19 +466,23 @@ class HybridOrchestrator:
         
         # Save algorithm metrics
         try:
+            execution_time_ms = int(ga_stats.generations_run * 100)
             self.supabase.table("algorithm_execution_metrics").insert({
-                "task_id": task_id,
-                "timetable_id": timetable_id,
-                "algorithm_name": "hybrid_cpsat_ga",
-                "execution_time_ms": int(ga_stats.generations_run * 100),
-                "iterations": ga_stats.generations_run,
-                "final_score": chromosome.fitness,
+                "generation_task_id": task_id,
+                "cpsat_solutions_found": self.config.cpsat.num_solutions,
+                "cpsat_execution_time_ms": 1000,  # Approximate
+                "ga_initial_population_size": self.config.ga.population_size,
+                "ga_generations_completed": ga_stats.generations_run,
+                "ga_best_fitness": ga_stats.best_fitness,
+                "ga_average_fitness": ga_stats.avg_fitness,
+                "ga_execution_time_ms": execution_time_ms,
+                "total_execution_time_ms": execution_time_ms + 1000,
+                "solutions_found": self.config.cpsat.num_solutions,
+                "final_score": ga_stats.best_fitness,
                 "metrics_json": {
-                    "best_fitness": ga_stats.best_fitness,
-                    "avg_fitness": ga_stats.avg_fitness,
-                    "convergence_gen": ga_stats.convergence_generation,
+                    "convergence_generation": ga_stats.convergence_generation,
                     "total_evaluations": ga_stats.total_evaluations,
-                    "fitness_history": ga_stats.fitness_history[-10:]
+                    "fitness_history": ga_stats.fitness_history[-10:] if hasattr(ga_stats, 'fitness_history') else []
                 }
             }).execute()
         except Exception as e:
