@@ -3,6 +3,8 @@ import { IUserRepository } from '../../domain/repositories/IUserRepository';
 import { User } from '../../domain/entities/User';
 import { Database, UpdateDto } from '@/shared/database';
 import { UserRole, FacultyType } from '@/shared/types';
+import { withCacheAside } from '@/shared/cache/cache-helper';
+import { redisCache } from '@/shared/cache/redis-cache';
 
 /**
  * Supabase User Repository
@@ -41,54 +43,60 @@ export class SupabaseUserRepository implements IUserRepository {
      * Find user by ID
      */
     async findById(id: string): Promise<User | null> {
-        const { data, error } = await this.db
-            .from('users')
-            .select('*')
-            .eq('id', id)
-            .single();
+        return withCacheAside({ key: `user:id:${id}`, ttl: 3600 }, async () => {
+            const { data, error } = await this.db
+                .from('users')
+                .select('*')
+                .eq('id', id)
+                .single();
 
-        if (error) {
-            if (error.code === 'PGRST116') return null; // Not found
-            throw error;
-        }
+            if (error) {
+                if (error.code === 'PGRST116') return null; // Not found
+                throw error;
+            }
 
-        return this.mapToEntity(data);
+            return this.mapToEntity(data);
+        });
     }
 
     /**
      * Find user by email
      */
     async findByEmail(email: string): Promise<User | null> {
-        const { data, error } = await this.db
-            .from('users')
-            .select('*')
-            .eq('email', email)
-            .single();
+        return withCacheAside({ key: `user:email:${email}`, ttl: 3600 }, async () => {
+            const { data, error } = await this.db
+                .from('users')
+                .select('*')
+                .eq('email', email)
+                .single();
 
-        if (error) {
-            if (error.code === 'PGRST116') return null; // Not found
-            throw error;
-        }
+            if (error) {
+                if (error.code === 'PGRST116') return null; // Not found
+                throw error;
+            }
 
-        return this.mapToEntity(data);
+            return this.mapToEntity(data);
+        });
     }
 
     /**
      * Find user by college UID
      */
     async findByCollegeUid(collegeUid: string): Promise<User | null> {
-        const { data, error } = await this.db
-            .from('users')
-            .select('*')
-            .eq('college_uid', collegeUid)
-            .single();
+        return withCacheAside({ key: `user:uid:${collegeUid}`, ttl: 3600 }, async () => {
+            const { data, error } = await this.db
+                .from('users')
+                .select('*')
+                .eq('college_uid', collegeUid)
+                .single();
 
-        if (error) {
-            if (error.code === 'PGRST116') return null; // Not found
-            throw error;
-        }
+            if (error) {
+                if (error.code === 'PGRST116') return null; // Not found
+                throw error;
+            }
 
-        return this.mapToEntity(data);
+            return this.mapToEntity(data);
+        });
     }
 
     /**
@@ -209,6 +217,16 @@ export class SupabaseUserRepository implements IUserRepository {
 
         if (error) throw error;
 
+        // Invalidate cache
+        if (result) {
+            const keys = [
+                `user:id:${id}`,
+                `user:email:${result.email}`,
+                `user:uid:${result.college_uid}`
+            ];
+            await Promise.all(keys.map(k => redisCache.del(k)));
+        }
+
         return this.mapToEntity(result);
     }
 
@@ -216,12 +234,23 @@ export class SupabaseUserRepository implements IUserRepository {
      * Delete user
      */
     async delete(id: string): Promise<boolean> {
+        const user = await this.findById(id);
+
         const { error } = await this.db
             .from('users')
             .delete()
             .eq('id', id);
 
         if (error) throw error;
+
+        if (user) {
+            const keys = [
+                `user:id:${id}`,
+                `user:email:${user.email}`,
+                `user:uid:${user.collegeUid}`
+            ];
+            await Promise.all(keys.map(k => redisCache.del(k)));
+        }
 
         return true;
     }

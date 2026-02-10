@@ -55,7 +55,7 @@ export class LoginUseCase {
         }
 
         // Return result with extended user data
-        return {
+        const result = {
             token,
             user: {
                 id: user.id,
@@ -75,5 +75,12 @@ export class LoginUseCase {
                 is_active: user.isActive
             }
         };
+
+        // Cache Priming (Background - Zero Lag for Dashboard)
+        // By re-fetching by ID now, we ensure 'user:id:...' key is in L1/L2
+        // for the very first dashboard request.
+        this.userRepository.findById(user.id).catch(() => { });
+
+        return result;
     }
 }

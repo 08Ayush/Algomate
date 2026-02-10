@@ -2,6 +2,8 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { IFacultyRepository, IFacultyQualificationRepository } from '../../domain/repositories/IFacultyRepository';
 import { Faculty, FacultyQualification } from '../../domain/entities/Faculty';
 import { BaseRepository, Database } from '@/shared/database';
+import { withCacheAside } from '@/shared/cache/cache-helper';
+import { redisCache } from '@/shared/cache/redis-cache';
 
 export class SupabaseFacultyRepository extends BaseRepository<'users'> implements IFacultyRepository {
     constructor(db: SupabaseClient<Database>) {
@@ -22,19 +24,21 @@ export class SupabaseFacultyRepository extends BaseRepository<'users'> implement
     }
 
     async findById(id: string): Promise<Faculty | null> {
-        const { data, error } = await this.db
-            .from('users')
-            .select('*')
-            .eq('id', id)
-            .eq('role', 'faculty')
-            .single();
+        return withCacheAside({ key: `faculty:id:${id}`, ttl: 3600 }, async () => {
+            const { data, error } = await this.db
+                .from('users')
+                .select('*')
+                .eq('id', id)
+                .eq('role', 'faculty')
+                .single();
 
-        if (error) {
-            if (error.code === 'PGRST116') return null;
-            throw error;
-        }
+            if (error) {
+                if (error.code === 'PGRST116') return null;
+                throw error;
+            }
 
-        return this.mapToEntity(data);
+            return this.mapToEntity(data);
+        });
     }
 
     async findByUserId(userId: string): Promise<Faculty | null> {
@@ -42,14 +46,16 @@ export class SupabaseFacultyRepository extends BaseRepository<'users'> implement
     }
 
     async findByDepartment(departmentId: string): Promise<Faculty[]> {
-        const { data, error } = await this.db
-            .from('users')
-            .select('*')
-            .eq('department_id', departmentId)
-            .eq('role', 'faculty');
+        return withCacheAside({ key: `faculties:dept:${departmentId}`, ttl: 3600 }, async () => {
+            const { data, error } = await this.db
+                .from('users')
+                .select('*')
+                .eq('department_id', departmentId)
+                .eq('role', 'faculty');
 
-        if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+            if (error) throw error;
+            return data.map(row => this.mapToEntity(row));
+        });
     }
 
     async create(faculty: Omit<Faculty, 'id' | 'createdAt' | 'updatedAt'>): Promise<Faculty> {
@@ -123,18 +129,20 @@ export class SupabaseFacultyQualificationRepository implements IFacultyQualifica
     }
 
     async findById(id: string): Promise<FacultyQualification | null> {
-        const { data, error } = await this.db
-            .from('faculty_qualifications' as any)
-            .select('*')
-            .eq('id', id)
-            .single();
+        return withCacheAside({ key: `faculty_qual:id:${id}`, ttl: 3600 }, async () => {
+            const { data, error } = await this.db
+                .from('faculty_qualifications' as any)
+                .select('*')
+                .eq('id', id)
+                .single();
 
-        if (error) {
-            if (error.code === 'PGRST116') return null;
-            throw error;
-        }
+            if (error) {
+                if (error.code === 'PGRST116') return null;
+                throw error;
+            }
 
-        return this.mapToEntity(data);
+            return this.mapToEntity(data);
+        });
     }
 
     async findByFaculty(facultyId: string): Promise<FacultyQualification[]> {
