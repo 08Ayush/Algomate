@@ -1,21 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+
+/**
+ * Scheduler Status API - Proxy to FastAPI Backend
+ */
+
+const SCHEDULER_API_URL = process.env.SCHEDULER_API_URL || "http://localhost:8000";
 
 interface TaskStatus {
   taskId: string;
   status: string;
+  progress: number;
+  phase: string;
   progressMessage: string | null;
   timetableId: string | null;
   fitnessScore: number | null;
-  createdAt: string;
-  updatedAt: string;
-  algorithmConfig: Record<string, unknown> | null;
-  metrics: {
-    cpsat_solutions?: number;
-    ga_generations?: number;
-    total_evaluations?: number;
-    best_fitness?: number;
-  } | null;
+  metrics: Record<string, unknown> | null;
+  createdAt: string | null;
+  updatedAt: string | null;
 }
 
 export async function GET(
@@ -32,113 +33,62 @@ export async function GET(
       );
     }
 
-    // Authenticate
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    console.log(`📊 Proxying status request to FastAPI: task=${taskId}`);
 
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    // Forward to FastAPI backend
+    const fastApiResponse = await fetch(`${SCHEDULER_API_URL}/status/${taskId}`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
 
-    // Handle pending task IDs (temporary IDs returned before process started)
-    if (taskId.startsWith("pending-")) {
-      return NextResponse.json({
-        taskId,
-        status: "pending",
-        progressMessage: "Scheduler is starting...",
-        timetableId: null,
-        fitnessScore: null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        algorithmConfig: null,
-        metrics: null,
-      } as TaskStatus);
-    }
-
-    // Fetch task status from database
-    const { data: task, error: taskError } = await supabase
-      .from("timetable_generation_tasks")
-      .select(
-        `
-        id,
-        status,
-        progress_message,
-        created_at,
-        updated_at,
-        algorithm_config,
-        college_id
-      `
-      )
-      .eq("id", taskId)
-      .single();
-
-    if (taskError || !task) {
-      return NextResponse.json(
-        { error: "Task not found", taskId },
-        { status: 404 }
-      );
-    }
-
-    // Check user has access (same college)
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("college_id")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile || profile.college_id !== task.college_id) {
-      return NextResponse.json(
-        { error: "Access denied to this task" },
-        { status: 403 }
-      );
-    }
-
-    // Fetch associated timetable if exists
-    const { data: timetables } = await supabase
-      .from("generated_timetables")
-      .select("id, fitness_score")
-      .eq("task_id", taskId)
-      .order("created_at", { ascending: false })
-      .limit(1);
-
-    const timetable = timetables?.[0];
-
-    // Fetch algorithm metrics if available
-    let metrics = null;
-    if (timetable) {
-      const { data: metricsData } = await supabase
-        .from("algorithm_execution_metrics")
-        .select("metrics_json, iterations, final_score")
-        .eq("task_id", taskId)
-        .single();
-
-      if (metricsData) {
-        metrics = {
-          ga_generations: metricsData.iterations,
-          best_fitness: metricsData.final_score,
-          ...metricsData.metrics_json,
-        };
+    if (!fastApiResponse.ok) {
+      if (fastApiResponse.status === 404) {
+        return NextResponse.json(
+          { error: "Task not found", taskId },
+          { status: 404 }
+        );
       }
+      const errorData = await fastApiResponse.json().catch(() => ({}));
+      return NextResponse.json(
+        { error: errorData.detail || "Status check failed" },
+        { status: fastApiResponse.status }
+      );
     }
 
+    const data = await fastApiResponse.json();
+
+    // Transform to expected response format
     const response: TaskStatus = {
-      taskId: task.id,
-      status: task.status,
-      progressMessage: task.progress_message,
-      timetableId: timetable?.id || null,
-      fitnessScore: timetable?.fitness_score || null,
-      createdAt: task.created_at,
-      updatedAt: task.updated_at,
-      algorithmConfig: task.algorithm_config,
-      metrics,
+      taskId: data.task_id,
+      status: data.status,
+      progress: data.progress,
+      phase: data.phase,
+      progressMessage: data.message || null,
+      timetableId: data.timetable_id || null,
+      fitnessScore: data.fitness_score || null,
+      metrics: data.metrics || null,
+      createdAt: data.created_at || null,
+      updatedAt: data.updated_at || null,
     };
 
     return NextResponse.json(response);
+
   } catch (error) {
     console.error("Status API error:", error);
+
+    // Check if it's a connection error
+    if (error instanceof TypeError && error.message.includes("fetch")) {
+      return NextResponse.json(
+        {
+          error: "Scheduler service is not running",
+          hint: "Start with: python -m services.scheduler.api"
+        },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json(
       { error: "Internal server error", details: String(error) },
       { status: 500 }
@@ -154,39 +104,29 @@ export async function DELETE(
   try {
     const { taskId } = await params;
 
-    // Authenticate
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    console.log(`🛑 Proxying cancel request to FastAPI: task=${taskId}`);
 
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    // Forward to FastAPI backend
+    const fastApiResponse = await fetch(`${SCHEDULER_API_URL}/cancel/${taskId}`, {
+      method: "DELETE",
+    });
 
-    // Update task status to cancelled
-    const { error: updateError } = await supabase
-      .from("timetable_generation_tasks")
-      .update({
-        status: "cancelled",
-        progress_message: "Cancelled by user",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", taskId);
-
-    if (updateError) {
+    if (!fastApiResponse.ok) {
+      const errorData = await fastApiResponse.json().catch(() => ({}));
       return NextResponse.json(
-        { error: "Failed to cancel task" },
-        { status: 500 }
+        { error: errorData.detail || "Cancel failed" },
+        { status: fastApiResponse.status }
       );
     }
 
+    const data = await fastApiResponse.json();
+
     return NextResponse.json({
-      taskId,
-      status: "cancelled",
+      taskId: data.task_id,
+      status: data.status,
       message: "Task cancellation requested",
     });
+
   } catch (error) {
     console.error("Cancel task error:", error);
     return NextResponse.json(

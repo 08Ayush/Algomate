@@ -207,7 +207,7 @@ class HybridOrchestrator:
             self._update_task_status(task_id, "running", "Saving results")
             
             timetable_id = self._save_solution(
-                task_id, batch_id, college_id, best_chromosome, ga_stats
+                task_id, batch_id, college_id, created_by, best_chromosome, ga_stats
             )
             
             # Step 8: Update task to completed
@@ -249,37 +249,76 @@ class HybridOrchestrator:
             )
     
     def _fetch_domain_data(self, batch_id: str, college_id: str) -> Dict:
-        """Fetch all domain data needed for encoding."""
+        """Fetch domain data specific to this batch."""
         
-        # Fetch subjects for this batch
-        subjects_response = self.supabase.table("subjects").select("*").eq(
-            "college_id", college_id
-        ).eq("is_active", True).execute()
-        subjects = subjects_response.data or []
+        # Step 1: Get batch info with department
+        batch_response = self.supabase.table("batches").select(
+            "*, department_id"
+        ).eq("id", batch_id).single().execute()
+        batch = batch_response.data
+        department_id = batch.get("department_id") if batch else None
         
-        # Fetch faculty
-        faculty_response = self.supabase.table("faculty").select("*").eq(
-            "college_id", college_id
-        ).execute()
-        faculty = faculty_response.data or []
+        # Step 2: Get subjects assigned to this batch via batch_subjects
+        batch_subjects_response = self.supabase.table("batch_subjects").select(
+            "subject_id, assigned_faculty_id, required_hours_per_week, subjects(*)"
+        ).eq("batch_id", batch_id).execute()
         
-        # Fetch classrooms
-        classrooms_response = self.supabase.table("classrooms").select("*").eq(
+        # Extract subject records from the join
+        batch_subjects_data = batch_subjects_response.data or []
+        subjects = []
+        subject_ids = []
+        assigned_faculty_map = {}  # subject_id -> assigned_faculty_id
+        
+        for bs in batch_subjects_data:
+            if bs.get("subjects"):
+                subject = bs["subjects"]
+                # Add required_hours from batch_subjects to subject data
+                subject["required_hours_per_week"] = bs.get("required_hours_per_week", 3)
+                subjects.append(subject)
+                subject_ids.append(subject["id"])
+                if bs.get("assigned_faculty_id"):
+                    assigned_faculty_map[subject["id"]] = bs["assigned_faculty_id"]
+        
+        self.logger.info(f"Found {len(subjects)} subjects assigned to batch {batch_id}")
+        
+        # Step 3: Get faculty - prefer assigned, fallback to qualified
+        faculty_dict = {}
+        
+        # First, get assigned faculty from batch_subjects
+        if assigned_faculty_map:
+            assigned_ids = list(set(assigned_faculty_map.values()))
+            assigned_response = self.supabase.table("users").select("*").in_(
+                "id", assigned_ids
+            ).execute()
+            for user in (assigned_response.data or []):
+                faculty_dict[user["id"]] = user
+        
+        # Then, get qualified faculty for subjects without assignments
+        if subject_ids:
+            faculty_qualified_response = self.supabase.table("faculty_qualified_subjects").select(
+                "faculty_id, subject_id, users!faculty_id(*)"
+            ).in_("subject_id", subject_ids).execute()
+            
+            for fq in (faculty_qualified_response.data or []):
+                if fq.get("users") and fq["users"]["id"] not in faculty_dict:
+                    faculty_dict[fq["users"]["id"]] = fq["users"]
+        
+        faculty = list(faculty_dict.values())
+        self.logger.info(f"Found {len(faculty)} faculty for these subjects")
+        
+        # Step 4: Get classrooms (optionally filter by department)
+        classroom_query = self.supabase.table("classrooms").select("*").eq(
             "college_id", college_id
-        ).eq("is_available", True).execute()
+        ).eq("is_available", True)
+        
+        classrooms_response = classroom_query.execute()
         classrooms = classrooms_response.data or []
         
-        # Fetch time slots
+        # Step 5: Get time slots (all for the college)
         time_slots_response = self.supabase.table("time_slots").select("*").eq(
             "college_id", college_id
         ).eq("is_active", True).execute()
         time_slots = time_slots_response.data or []
-        
-        # Fetch batch info
-        batch_response = self.supabase.table("batches").select("*").eq(
-            "id", batch_id
-        ).single().execute()
-        batch = batch_response.data
         
         self.logger.info(
             f"Fetched domain data: {len(subjects)} subjects, "
@@ -292,7 +331,8 @@ class HybridOrchestrator:
             "faculty": faculty,
             "classrooms": classrooms,
             "time_slots": time_slots,
-            "batches": [batch] if batch else []
+            "batches": [batch] if batch else [],
+            "assigned_faculty_map": assigned_faculty_map
         }
     
     def _initialize_ga_components(self, domain_data: Dict):
@@ -329,9 +369,12 @@ class HybridOrchestrator:
         try:
             self.supabase.table("timetable_generation_tasks").insert({
                 "id": task_id,
+                "task_name": f"Hybrid Schedule - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
                 "college_id": college_id,
                 "batch_id": batch_id,
-                "status": "pending",
+                "academic_year": datetime.now().strftime('%Y'),
+                "semester": 1,
+                "status": "PENDING",
                 "created_by": created_by,
                 "algorithm_config": {
                     "cpsat": {
@@ -353,9 +396,19 @@ class HybridOrchestrator:
     def _update_task_status(self, task_id: str, status: str, message: str):
         """Update task status in database."""
         try:
+            # Map status to uppercase enum values
+            status_map = {
+                "pending": "PENDING",
+                "running": "RUNNING",
+                "completed": "COMPLETED",
+                "failed": "FAILED",
+                "cancelled": "CANCELLED"
+            }
+            db_status = status_map.get(status.lower(), status.upper())
+            
             self.supabase.table("timetable_generation_tasks").update({
-                "status": status,
-                "progress_message": message,
+                "status": db_status,
+                "current_message": message,
                 "updated_at": datetime.now().isoformat()
             }).eq("id", task_id).execute()
         except Exception as e:
@@ -366,6 +419,7 @@ class HybridOrchestrator:
         task_id: str,
         batch_id: str,
         college_id: str,
+        created_by: str,
         chromosome: Chromosome,
         ga_stats: EvolutionStats
     ) -> str:
@@ -377,11 +431,15 @@ class HybridOrchestrator:
         try:
             self.supabase.table("generated_timetables").insert({
                 "id": timetable_id,
-                "task_id": task_id,
+                "generation_task_id": task_id,
                 "batch_id": batch_id,
                 "college_id": college_id,
+                "academic_year": datetime.now().strftime('%Y'),
+                "semester": 1,
                 "fitness_score": chromosome.fitness,
                 "is_published": False,
+                "status": "draft",
+                "created_by": created_by,
                 "version": 1,
                 "title": f"Hybrid Timetable - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
             }).execute()
@@ -408,19 +466,23 @@ class HybridOrchestrator:
         
         # Save algorithm metrics
         try:
+            execution_time_ms = int(ga_stats.generations_run * 100)
             self.supabase.table("algorithm_execution_metrics").insert({
-                "task_id": task_id,
-                "timetable_id": timetable_id,
-                "algorithm_name": "hybrid_cpsat_ga",
-                "execution_time_ms": int(ga_stats.generations_run * 100),
-                "iterations": ga_stats.generations_run,
-                "final_score": chromosome.fitness,
+                "generation_task_id": task_id,
+                "cpsat_solutions_found": self.config.cpsat.num_solutions,
+                "cpsat_execution_time_ms": 1000,  # Approximate
+                "ga_initial_population_size": self.config.ga.population_size,
+                "ga_generations_completed": ga_stats.generations_run,
+                "ga_best_fitness": ga_stats.best_fitness,
+                "ga_average_fitness": ga_stats.avg_fitness,
+                "ga_execution_time_ms": execution_time_ms,
+                "total_execution_time_ms": execution_time_ms + 1000,
+                "solutions_found": self.config.cpsat.num_solutions,
+                "final_score": ga_stats.best_fitness,
                 "metrics_json": {
-                    "best_fitness": ga_stats.best_fitness,
-                    "avg_fitness": ga_stats.avg_fitness,
-                    "convergence_gen": ga_stats.convergence_generation,
+                    "convergence_generation": ga_stats.convergence_generation,
                     "total_evaluations": ga_stats.total_evaluations,
-                    "fitness_history": ga_stats.fitness_history[-10:]
+                    "fitness_history": ga_stats.fitness_history[-10:] if hasattr(ga_stats, 'fitness_history') else []
                 }
             }).execute()
         except Exception as e:

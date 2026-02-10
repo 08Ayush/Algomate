@@ -195,13 +195,17 @@ class ChromosomeEncoder:
         genes = []
         
         for record in scheduled_classes:
+            # Handle class_type ENUM from database (THEORY, LAB, PRACTICAL, TUTORIAL)
+            class_type = record.get("class_type", "THEORY")
+            is_lab = class_type in ["LAB", "PRACTICAL"]
+            
             gene = Gene(
                 subject_id=record["subject_id"],
                 faculty_id=record["faculty_id"],
                 classroom_id=record["classroom_id"],
                 time_slot_id=record["time_slot_id"],
                 batch_id=record["batch_id"],
-                is_lab=record.get("is_lab_session", False)
+                is_lab=is_lab
             )
             genes.append(gene)
         
@@ -220,7 +224,10 @@ class ChromosomeEncoder:
         """
         records = []
         
-        for gene in chromosome.genes:
+        for i, gene in enumerate(chromosome.genes):
+            # Map is_lab to class_type enum value
+            class_type = "LAB" if gene.is_lab else "THEORY"
+            
             record = {
                 "timetable_id": timetable_id,
                 "subject_id": gene.subject_id,
@@ -228,7 +235,8 @@ class ChromosomeEncoder:
                 "classroom_id": gene.classroom_id,
                 "time_slot_id": gene.time_slot_id,
                 "batch_id": gene.batch_id,
-                "is_lab_session": gene.is_lab,
+                "class_type": class_type,
+                "credit_hour_number": i + 1,  # Required field
             }
             records.append(record)
         

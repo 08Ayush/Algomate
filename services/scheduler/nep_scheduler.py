@@ -81,7 +81,7 @@ class NEPScheduler:
             True if data fetched successfully, False otherwise
         """
         try:
-            print(f"📥 Fetching data for batch: {batch_id}")
+            print(f"[FETCH] Fetching data for batch: {batch_id}")
             
             # 1. Fetch Elective Buckets for this batch
             buckets_response = self.supabase.table('elective_buckets') \
@@ -90,7 +90,7 @@ class NEPScheduler:
                 .execute()
             
             if not buckets_response.data:
-                print("⚠️ No elective buckets found for this batch")
+                print("[WARN] No elective buckets found for this batch")
                 return False
                 
             # Process buckets and their subjects
@@ -138,7 +138,7 @@ class NEPScheduler:
                     'subjects': bucket_subjects
                 })
             
-            print(f"✅ Loaded {len(self.buckets)} buckets with {len(self.subjects)} subjects")
+            print(f"[OK] Loaded {len(self.buckets)} buckets with {len(self.subjects)} subjects")
             
             # 2. Fetch Batch info to get college_id
             batch_response = self.supabase.table('batches') \
@@ -168,7 +168,7 @@ class NEPScheduler:
                 for room in classrooms_response.data
             ]
             
-            print(f"✅ Loaded {len(self.classrooms)} classrooms")
+            print(f"[OK] Loaded {len(self.classrooms)} classrooms")
             
             # 4. Fetch Time Slots
             time_slots_response = self.supabase.table('time_slots') \
@@ -192,7 +192,7 @@ class NEPScheduler:
                 if not slot.get('is_break_time', False) and not slot.get('is_lunch_time', False)
             ]
             
-            print(f"✅ Loaded {len(self.time_slots)} time slots")
+            print(f"[OK] Loaded {len(self.time_slots)} time slots")
             
             # 5. Fetch Faculty Assignments & Availability
             for subject in self.subjects:
@@ -219,12 +219,12 @@ class NEPScheduler:
                             av['time_slot_id'] for av in availability_response.data
                         ]
             
-            print(f"✅ Loaded faculty assignments for {len(self.subject_faculty_map)} subjects")
+            print(f"[OK] Loaded faculty assignments for {len(self.subject_faculty_map)} subjects")
             
             return True
             
         except Exception as e:
-            print(f"❌ Error fetching batch data: {str(e)}")
+            print(f"[ERROR] Error fetching batch data: {str(e)}")
             import traceback
             traceback.print_exc()
             return False
@@ -234,7 +234,7 @@ class NEPScheduler:
         Create CP-SAT decision variables for time slots and rooms.
         Only creates variables for regular subjects (not internships/special events).
         """
-        print("\n🔧 Creating CP-SAT variables...")
+        print("\n[BUILD] Creating CP-SAT variables...")
         
         for subject in self.regular_subjects:
             subject_id = subject['id']
@@ -257,10 +257,10 @@ class NEPScheduler:
             # Practical hours typically scheduled separately
             self.duration_vars[subject_id] = subject['lecture_hours'] + subject['tutorial_hours']
         
-        print(f"✅ Created variables for {len(self.regular_subjects)} regular subjects")
+        print(f"[OK] Created variables for {len(self.regular_subjects)} regular subjects")
         
         if self.special_events:
-            print(f"ℹ️  {len(self.special_events)} special events (Internships/Teaching Practice) - handled separately")
+            print(f"[INFO]  {len(self.special_events)} special events (Internships/Teaching Practice) - handled separately")
     
     def add_nep_bucket_constraints(self):
         """
@@ -269,7 +269,7 @@ class NEPScheduler:
         CRITICAL CONSTRAINT: All subjects in a bucket with is_common_slot=True
         MUST start at the exact same time (allows students to choose any one subject).
         """
-        print("\n🔒 Adding NEP Bucket Simultaneity Constraints...")
+        print("\n[LOCK] Adding NEP Bucket Simultaneity Constraints...")
         
         for bucket in self.buckets:
             if not bucket['is_common_slot']:
@@ -295,14 +295,14 @@ class NEPScheduler:
             ]
             self.model.AddAllDifferent(room_vars_for_bucket)
             
-            print(f"  ✓ Bucket '{bucket['name']}': {len(bucket_subjects)} subjects constrained to same time")
+            print(f"  [v] Bucket '{bucket['name']}': {len(bucket_subjects)} subjects constrained to same time")
     
     def add_bucket_separation_constraints(self):
         """
         Ensure different buckets don't overlap in time.
         A student takes ONE subject from EACH bucket, so buckets must be at different times.
         """
-        print("\n🔒 Adding Bucket Separation Constraints...")
+        print("\n[LOCK] Adding Bucket Separation Constraints...")
         
         if len(self.buckets) < 2:
             return  # No separation needed for single bucket
@@ -316,14 +316,14 @@ class NEPScheduler:
         # All buckets must be scheduled at different times
         if len(bucket_representatives) > 1:
             self.model.AddAllDifferent(bucket_representatives)
-            print(f"  ✓ {len(bucket_representatives)} buckets constrained to different time slots")
+            print(f"  [v] {len(bucket_representatives)} buckets constrained to different time slots")
     
     def add_faculty_conflict_constraints(self):
         """
         Prevent faculty from teaching multiple subjects at the same time.
         Critical for shared faculty teaching across departments/buckets.
         """
-        print("\n🔒 Adding Faculty Conflict Constraints...")
+        print("\n[LOCK] Adding Faculty Conflict Constraints...")
         
         # Group subjects by faculty
         faculty_subjects = defaultdict(list)
@@ -338,9 +338,9 @@ class NEPScheduler:
                 subject_times = [self.start_vars[sid] for sid in subject_ids]
                 self.model.AddAllDifferent(subject_times)
                 conflict_count += 1
-                print(f"  ✓ Faculty teaching {len(subject_ids)} subjects - no time conflicts")
+                print(f"  [v] Faculty teaching {len(subject_ids)} subjects - no time conflicts")
         
-        print(f"  ✓ Added constraints for {conflict_count} faculty members")
+        print(f"  [v] Added constraints for {conflict_count} faculty members")
     
     def add_room_type_constraints(self):
         """
@@ -348,7 +348,7 @@ class NEPScheduler:
         - LAB subjects need lab-equipped rooms
         - THEORY subjects can use lecture halls
         """
-        print("\n🔒 Adding Room Type Constraints...")
+        print("\n[LOCK] Adding Room Type Constraints...")
         
         for subject in self.subjects:
             subject_id = subject['id']
@@ -366,13 +366,13 @@ class NEPScheduler:
                         [self.room_vars[subject_id]],
                         [(idx,) for idx in valid_room_indices]
                     )
-                    print(f"  ✓ Subject '{subject['code']}' constrained to {len(valid_room_indices)} lab rooms")
+                    print(f"  [v] Subject '{subject['code']}' constrained to {len(valid_room_indices)} lab rooms")
     
     def add_faculty_availability_constraints(self):
         """
         Respect faculty preferred/available time slots.
         """
-        print("\n🔒 Adding Faculty Availability Constraints...")
+        print("\n[LOCK] Adding Faculty Availability Constraints...")
         
         constraints_added = 0
         for subject_id, faculty_id in self.subject_faculty_map.items():
@@ -396,7 +396,7 @@ class NEPScheduler:
                     )
                     constraints_added += 1
         
-        print(f"  ✓ Added availability constraints for {constraints_added} subjects")
+        print(f"  [v] Added availability constraints for {constraints_added} subjects")
     
     def add_teaching_practice_time_restrictions(self):
         """
@@ -404,7 +404,7 @@ class NEPScheduler:
         - Teaching Practice (Part-time): Morning slots only (9 AM - 12 PM)
         - Theory classes: Afternoon slots only when Teaching Practice is active (1 PM - 4 PM)
         """
-        print("\n🔒 Adding Teaching Practice Time Restrictions...")
+        print("\n[LOCK] Adding Teaching Practice Time Restrictions...")
         
         teaching_practice_subjects = [
             subj for subj in self.special_events 
@@ -412,7 +412,7 @@ class NEPScheduler:
         ]
         
         if not teaching_practice_subjects:
-            print("  ℹ️  No Teaching Practice subjects found")
+            print("  [INFO]  No Teaching Practice subjects found")
             return
         
         # Identify morning and afternoon slots
@@ -429,7 +429,7 @@ class NEPScheduler:
             elif 13 <= hour < 16:
                 afternoon_slots.append(slot['slot_index'])
         
-        print(f"  ℹ️  Found {len(morning_slots)} morning slots and {len(afternoon_slots)} afternoon slots")
+        print(f"  [INFO]  Found {len(morning_slots)} morning slots and {len(afternoon_slots)} afternoon slots")
         
         # For regular theory subjects, restrict to afternoon when Teaching Practice exists
         if morning_slots and afternoon_slots:
@@ -442,11 +442,11 @@ class NEPScheduler:
                         [(idx,) for idx in afternoon_slots]
                     )
             
-            print(f"  ✓ Teaching Practice mode: Theory classes restricted to afternoon ({len(afternoon_slots)} slots)")
+            print(f"  [v] Teaching Practice mode: Theory classes restricted to afternoon ({len(afternoon_slots)} slots)")
         
         # Store Teaching Practice info for solution formatting
         for tp_subject in teaching_practice_subjects:
-            print(f"  ✓ Teaching Practice '{tp_subject['code']}' scheduled for mornings (no room allocation)")
+            print(f"  [v] Teaching Practice '{tp_subject['code']}' scheduled for mornings (no room allocation)")
     
     def add_internship_block_constraints(self):
         """
@@ -455,7 +455,7 @@ class NEPScheduler:
         - Block out specified weeks for students/faculty
         - Ensure no theory subjects scheduled during internship weeks
         """
-        print("\n🔒 Adding Internship Block-Out Constraints...")
+        print("\n[LOCK] Adding Internship Block-Out Constraints...")
         
         internship_subjects = [
             subj for subj in self.special_events 
@@ -463,7 +463,7 @@ class NEPScheduler:
         ]
         
         if not internship_subjects:
-            print("  ℹ️  No Internship subjects found")
+            print("  [INFO]  No Internship subjects found")
             return
         
         for internship in internship_subjects:
@@ -471,10 +471,10 @@ class NEPScheduler:
             end_week = internship.get('block_end_week')
             
             if start_week and end_week:
-                print(f"  ✓ Internship '{internship['code']}' blocks weeks {start_week}-{end_week}")
+                print(f"  [v] Internship '{internship['code']}' blocks weeks {start_week}-{end_week}")
                 print(f"    Students/Faculty unavailable during this period")
             else:
-                print(f"  ✓ Internship '{internship['code']}' scheduled (no room allocation)")
+                print(f"  [v] Internship '{internship['code']}' scheduled (no room allocation)")
         
         # Note: In production, you would:
         # 1. Fetch student enrollment data
@@ -488,7 +488,7 @@ class NEPScheduler:
         - M.Ed/Research students need "Empty Slots" for library/research work
         - Don't schedule formal classes during these slots
         """
-        print("\n🔒 Adding Dissertation/Library Hour Constraints...")
+        print("\n[LOCK] Adding Dissertation/Library Hour Constraints...")
         
         dissertation_subjects = [
             subj for subj in self.special_events 
@@ -496,11 +496,11 @@ class NEPScheduler:
         ]
         
         if not dissertation_subjects:
-            print("  ℹ️  No Dissertation subjects found")
+            print("  [INFO]  No Dissertation subjects found")
             return
         
         for diss_subject in dissertation_subjects:
-            print(f"  ✓ Dissertation '{diss_subject['code']}' - Library hours allocated")
+            print(f"  [v] Dissertation '{diss_subject['code']}' - Library hours allocated")
             print(f"    Students have flexible research time (no formal class)")
         
         # In production, you would reserve specific time slots as "Library Hours"
@@ -518,7 +518,7 @@ class NEPScheduler:
             Dictionary containing the solution or error information
         """
         print(f"\n{'='*80}")
-        print(f"🚀 NEP 2020 Timetable Scheduler - Batch {batch_id}")
+        print(f"[START] NEP 2020 Timetable Scheduler - Batch {batch_id}")
         print(f"{'='*80}\n")
         
         # Step 1: Fetch data from Supabase
@@ -549,7 +549,7 @@ class NEPScheduler:
         self.solver.parameters.log_search_progress = True
         
         # Step 5: Solve
-        print(f"\n⏳ Solving with CP-SAT (max {time_limit_seconds}s)...")
+        print(f"\n[WAIT] Solving with CP-SAT (max {time_limit_seconds}s)...")
         status = self.solver.Solve(self.model)
         
         # Step 6: Process results
@@ -563,7 +563,7 @@ class NEPScheduler:
         Format the CP-SAT solution into a structured JSON response.
         """
         print("\n" + "="*80)
-        print("✅ SOLUTION FOUND!")
+        print("[OK] SOLUTION FOUND!")
         print("="*80 + "\n")
         
         scheduled_classes = []
@@ -582,7 +582,7 @@ class NEPScheduler:
             }
             special_events_summary.append(event_entry)
             
-            print(f"🎓 {event['code']} ({event['nep_category']})")
+            print(f"[GRAD] {event['code']} ({event['nep_category']})")
             print(f"   {event_entry['notes']}")
             print()
         
@@ -622,7 +622,7 @@ class NEPScheduler:
                 scheduled_classes.append(class_entry)
                 bucket_classes.append(class_entry)
                 
-                print(f"📚 {subject['code']} ({subject['nep_category']})")
+                print(f"[BOOK] {subject['code']} ({subject['nep_category']})")
                 print(f"   Time: {time_slot['day']} {time_slot['start_time']}-{time_slot['end_time']}")
                 print(f"   Room: {room['name']}")
                 print()
@@ -690,7 +690,7 @@ class NEPScheduler:
         }
         
         print("\n" + "="*80)
-        print(f"❌ FAILED: {status_map.get(status, 'Unknown error')}")
+        print(f"[ERROR] FAILED: {status_map.get(status, 'Unknown error')}")
         print("="*80 + "\n")
         
         return {
@@ -722,11 +722,11 @@ class NEPScheduler:
             True if saved successfully, False otherwise
         """
         if not self.solution or not self.solution['success']:
-            print("❌ No valid solution to save")
+            print("[ERROR] No valid solution to save")
             return False
         
         try:
-            print("\n💾 Saving solution to database...")
+            print("\n[SAVE] Saving solution to database...")
             
             # 1. Create timetable record
             timetable_data = {
@@ -744,7 +744,7 @@ class NEPScheduler:
                 .execute()
             
             timetable_id = timetable_response.data[0]['id']
-            print(f"✅ Created timetable: {timetable_id}")
+            print(f"[OK] Created timetable: {timetable_id}")
             
             # 2. Insert scheduled classes
             scheduled_classes = []
@@ -762,12 +762,12 @@ class NEPScheduler:
                     .insert(scheduled_classes) \
                     .execute()
                 
-                print(f"✅ Inserted {len(scheduled_classes)} scheduled classes")
+                print(f"[OK] Inserted {len(scheduled_classes)} scheduled classes")
             
             return True
             
         except Exception as e:
-            print(f"❌ Error saving solution: {str(e)}")
+            print(f"[ERROR] Error saving solution: {str(e)}")
             import traceback
             traceback.print_exc()
             return False
@@ -857,13 +857,13 @@ def solve_for_multiple_seeds(
         List of solution dictionaries, each containing assignments
     """
     print(f"\n{'='*80}")
-    print(f"🌱 Generating {num_solutions} Seed Solutions for GA")
+    print(f"[SEED] Generating {num_solutions} Seed Solutions for GA")
     print(f"{'='*80}\n")
     
     # Ensure data is loaded
     if not scheduler.subjects:
         if not scheduler.fetch_batch_data(batch_id):
-            print("❌ Failed to fetch batch data")
+            print("[ERROR] Failed to fetch batch data")
             return []
     
     # Create fresh model for multi-solution search
@@ -899,10 +899,10 @@ def solve_for_multiple_seeds(
         limit=num_solutions
     )
     
-    print(f"⏳ Searching for up to {num_solutions} solutions (max {time_limit_seconds}s)...")
+    print(f"[WAIT] Searching for up to {num_solutions} solutions (max {time_limit_seconds}s)...")
     status = solver.Solve(scheduler.model, collector)
     
-    print(f"✅ Found {collector.solution_count()} total solutions, collected {len(collector.get_solutions())}")
+    print(f"[OK] Found {collector.solution_count()} total solutions, collected {len(collector.get_solutions())}")
     
     # Convert solutions to assignment format
     solutions = []
@@ -939,7 +939,7 @@ def solve_for_multiple_seeds(
             'status': 'feasible'
         })
     
-    print(f"📦 Prepared {len(solutions)} seed solutions with assignments")
+    print(f"[PACK] Prepared {len(solutions)} seed solutions with assignments")
     
     return solutions
 
@@ -963,7 +963,7 @@ def main():
     supabase_key = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
     
     if not supabase_url or not supabase_key:
-        print("❌ Error: Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables")
+        print("[ERROR] Error: Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables")
         sys.exit(1)
     
     # Create scheduler and solve
@@ -974,7 +974,7 @@ def main():
     if args.output:
         with open(args.output, 'w') as f:
             json.dump(solution, f, indent=2)
-        print(f"\n💾 Solution saved to: {args.output}")
+        print(f"\n[SAVE] Solution saved to: {args.output}")
     else:
         print("\n📄 Solution JSON:")
         print(json.dumps(solution, indent=2))
