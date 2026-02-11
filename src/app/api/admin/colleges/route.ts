@@ -1,187 +1,99 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/shared/database/server';
+import { asyncHandler } from '@/shared/middleware/error-handler';
+import { authenticate } from '@/shared/middleware/auth';
 import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+export const GET = asyncHandler(async (request: NextRequest) => {
+  const user = await authenticate(request);
+  if (!user || !['super_admin', 'admin', 'college_admin'].includes(user.role)) {
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+  }
 
-export async function GET(request: NextRequest) {
-  try {
-    // Get user from Authorization header
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+  const { page, limit, isPaginated } = getPaginationParams(request);
+  const { withCacheAside } = await import('@/shared/cache/cache-helper');
+  const { redisCache } = await import('@/shared/cache/redis-cache');
+
+  // College admins can only see their own college
+  if (user.role === 'college_admin') {
+    if (!user.college_id) {
+      return NextResponse.json({ success: false, error: 'No college assigned' }, { status: 400 });
     }
 
-    const token = authHeader.substring(7);
-    let user;
-    try {
-      user = JSON.parse(Buffer.from(token, 'base64').toString());
-    } catch (e) {
-      return NextResponse.json(
-        { error: 'Invalid token' },
-        { status: 401 }
-      );
-    }
+    const cacheKey = redisCache.buildKey(user.college_id, 'admin', 'colleges', 'single');
+    const college = await withCacheAside(
+      { key: cacheKey, ttl: 3600 },
+      async () => {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from('colleges')
+          .select('*')
+          .eq('id', user.college_id)
+          .single();
+        if (error) throw new Error(error.message);
+        return data;
+      }
+    );
 
-    // Check if user has admin role
-    if (!['super_admin', 'admin', 'college_admin'].includes(user.role)) {
-      return NextResponse.json(
-        { error: 'Forbidden - Admin access required' },
-        { status: 403 }
-      );
-    }
+    return NextResponse.json({ success: true, colleges: [college], meta: { total: 1 } });
+  }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  // Super admins and admins see all
+  const cacheKey = redisCache.buildKey('global', 'admin', 'colleges', isPaginated ? `p:${page}:l:${limit}` : 'all');
 
-    // Pagination (Dual-Mode)
-    const { page, limit, isPaginated } = getPaginationParams(request);
+  const result = await withCacheAside(
+    { key: cacheKey, ttl: 3600 },
+    async () => {
+      const supabase = createClient();
+      let query = supabase.from('colleges').select('*', { count: 'exact' });
 
-    // For college_admin, return only their assigned college
-    if (user.role === 'college_admin') {
-      if (!user.college_id) {
-        return NextResponse.json(
-          { error: 'College admin has no assigned college' },
-          { status: 400 }
-        );
+      if (isPaginated && page && limit) {
+        const { from, to } = getPaginationRange(page, limit);
+        query = query.range(from, to);
       }
 
-      const { data: college, error } = await supabase
-        .from('colleges')
-        .select('id, name, code, address, email, phone', { count: 'exact' })
-        .eq('id', user.college_id)
-        .single();
-
-      if (error) {
-        console.error('Error fetching college:', error);
-        return NextResponse.json(
-          { error: 'Failed to fetch college' },
-          { status: 500 }
-        );
-      }
-
-      return NextResponse.json({
-        colleges: college ? [college] : [],
-        meta: { total: college ? 1 : 0 }
-      });
+      const { data, count, error } = await query.order('name');
+      if (error) throw new Error(error.message);
+      return { colleges: data || [], count: count || 0 };
     }
+  );
 
-    // For super_admin and admin, return all colleges
-    let query = supabase
-      .from('colleges')
-      .select('id, name, code, address, email, phone', { count: 'exact' })
-      .order('name');
-
-    // Apply Pagination if requested
-    if (isPaginated && page && limit) {
-      const { from, to } = getPaginationRange(page, limit);
-      query = query.range(from, to);
-    }
-
-    const { data: colleges, count, error } = await query;
-
-    if (error) {
-      console.error('Error fetching colleges:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch colleges' },
-        { status: 500 }
-      );
-    }
-
-    if (isPaginated && page && limit) {
-      const paginatedResult = createPaginatedResponse(colleges || [], count || 0, page, limit);
-      return NextResponse.json({
-        colleges: paginatedResult.data,
-        meta: paginatedResult.meta
-      });
-    } else {
-      return NextResponse.json({
-        colleges: colleges || [],
-        meta: { total: count || 0 }
-      });
-    }
-
-  } catch (error) {
-    console.error('Error in colleges API:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+  if (isPaginated && page && limit) {
+    const paginatedResult = createPaginatedResponse(result.colleges, result.count, page, limit);
+    return NextResponse.json({
+      success: true,
+      colleges: paginatedResult.data,
+      meta: paginatedResult.meta
+    });
   }
-}
 
-export async function POST(request: NextRequest) {
-  try {
-    // Get user from Authorization header
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+  return NextResponse.json({ success: true, colleges: result.colleges, meta: { total: result.count } });
+});
 
-    const token = authHeader.substring(7);
-    let user;
-    try {
-      user = JSON.parse(Buffer.from(token, 'base64').toString());
-    } catch (e) {
-      return NextResponse.json(
-        { error: 'Invalid token' },
-        { status: 401 }
-      );
-    }
-
-    // Only super_admin can create colleges
-    if (user.role !== 'super_admin') {
-      return NextResponse.json(
-        { error: 'Forbidden - Super Admin access required' },
-        { status: 403 }
-      );
-    }
-
-    const body = await request.json();
-    const { name, code, address, contact_email, contact_phone } = body;
-
-    if (!name || !code) {
-      return NextResponse.json(
-        { error: 'Name and code are required' },
-        { status: 400 }
-      );
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    const { data: college, error } = await supabase
-      .from('colleges')
-      .insert({
-        name,
-        code,
-        address,
-        contact_email,
-        contact_phone
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error creating college:', error);
-      return NextResponse.json(
-        { error: 'Failed to create college' },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({ college }, { status: 201 });
-
-  } catch (error) {
-    console.error('Error in colleges API:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+export const POST = asyncHandler(async (request: NextRequest) => {
+  const user = await authenticate(request);
+  if (!user || user.role !== 'super_admin') {
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 });
   }
-}
+
+  const body = await request.json();
+  const { name, code, address, email, phone } = body;
+
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('colleges')
+    .insert({ name, code, address, contact_email: email, contact_phone: phone })
+    .select()
+    .single();
+
+  if (error) {
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  }
+
+  // Invalidate patterns
+  const { invalidateCachePattern } = await import('@/shared/cache/cache-helper');
+  const { redisCache } = await import('@/shared/cache/redis-cache');
+  await invalidateCachePattern(redisCache.buildKey('global', 'admin', 'colleges') + '*');
+
+  return NextResponse.json({ success: true, college: data }, { status: 201 });
+});

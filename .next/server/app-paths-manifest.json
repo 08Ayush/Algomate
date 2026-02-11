@@ -1,0 +1,20 @@
+{
+  "/api/admin/courses/route": "app/api/admin/courses/route.js",
+  "/api/admin/departments/[id]/route": "app/api/admin/departments/[id]/route.js",
+  "/api/assignments/route": "app/api/assignments/route.js",
+  "/api/auth/login/route": "app/api/auth/login/route.js",
+  "/api/classrooms/route": "app/api/classrooms/route.js",
+  "/api/dashboard/recent/route": "app/api/dashboard/recent/route.js",
+  "/api/dashboard/stats/route": "app/api/dashboard/stats/route.js",
+  "/api/faculty/qualifications/route": "app/api/faculty/qualifications/route.js",
+  "/api/faculty/route": "app/api/faculty/route.js",
+  "/api/notifications/route": "app/api/notifications/route.js",
+  "/api/subjects/route": "app/api/subjects/route.js",
+  "/faculty/assignments/page": "app/faculty/assignments/page.js",
+  "/faculty/classrooms/page": "app/faculty/classrooms/page.js",
+  "/faculty/dashboard/page": "app/faculty/dashboard/page.js",
+  "/faculty/faculty-list/page": "app/faculty/faculty-list/page.js",
+  "/faculty/qualifications/page": "app/faculty/qualifications/page.js",
+  "/login/page": "app/login/page.js",
+  "/page": "app/page.js"
+}

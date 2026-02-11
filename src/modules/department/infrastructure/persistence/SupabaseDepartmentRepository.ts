@@ -2,6 +2,8 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { IDepartmentRepository } from '../../domain/repositories/IDepartmentRepository';
 import { Department } from '../../domain/entities/Department';
 import { Database } from '@/shared/database';
+import { withCacheAside } from '@/shared/cache/cache-helper';
+import { redisCache } from '@/shared/cache/redis-cache';
 
 export class SupabaseDepartmentRepository implements IDepartmentRepository {
     constructor(private readonly db: SupabaseClient<Database>) { }
@@ -19,27 +21,31 @@ export class SupabaseDepartmentRepository implements IDepartmentRepository {
     }
 
     async findById(id: string): Promise<Department | null> {
-        const { data, error } = await this.db
-            .from('departments')
-            .select('*')
-            .eq('id', id)
-            .single();
+        return withCacheAside({ key: `dept:id:${id}`, ttl: 3600 }, async () => {
+            const { data, error } = await this.db
+                .from('departments')
+                .select('*')
+                .eq('id', id)
+                .single();
 
-        if (error) {
-            if (error.code === 'PGRST116') return null;
-            throw error;
-        }
+            if (error) {
+                if (error.code === 'PGRST116') return null;
+                throw error;
+            }
 
-        return this.mapToEntity(data);
+            return this.mapToEntity(data);
+        });
     }
 
     async findAll(): Promise<Department[]> {
-        const { data, error } = await this.db
-            .from('departments')
-            .select('*');
+        return withCacheAside({ key: `dept:all`, ttl: 3600 }, async () => {
+            const { data, error } = await this.db
+                .from('departments')
+                .select('*');
 
-        if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+            if (error) throw error;
+            return data.map(row => this.mapToEntity(row));
+        });
     }
 
     async findByCollege(collegeId: string, page?: number, limit?: number): Promise<{ items: Department[]; total: number }> {

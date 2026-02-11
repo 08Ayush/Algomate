@@ -2,6 +2,8 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { ISubjectRepository } from '../../domain/repositories/ISubjectRepository';
 import { Subject } from '../../domain/entities/Subject';
 import { Database } from '@/shared/database';
+import { withCacheAside } from '@/shared/cache/cache-helper';
+import { redisCache } from '@/shared/cache/redis-cache';
 
 export class SupabaseSubjectRepository implements ISubjectRepository {
     constructor(private readonly db: SupabaseClient<Database>) { }
@@ -22,66 +24,74 @@ export class SupabaseSubjectRepository implements ISubjectRepository {
     }
 
     async findById(id: string): Promise<Subject | null> {
-        const { data, error } = await this.db
-            .from('nep_subjects' as any)
-            .select('*')
-            .eq('id', id)
-            .single();
+        return withCacheAside({ key: `subject:id:${id}`, ttl: 3600 }, async () => {
+            const { data, error } = await this.db
+                .from('nep_subjects' as any)
+                .select('*')
+                .eq('id', id)
+                .single();
 
-        if (error) {
-            if (error.code === 'PGRST116') return null;
-            throw error;
-        }
-        return this.mapToEntity(data);
+            if (error) {
+                if (error.code === 'PGRST116') return null;
+                throw error;
+            }
+            return this.mapToEntity(data);
+        });
     }
 
     async findByDepartment(departmentId: string): Promise<Subject[]> {
-        const { data, error } = await this.db
-            .from('nep_subjects' as any)
-            .select('*')
-            .eq('department_id', departmentId);
+        return withCacheAside({ key: `subjects:dept:${departmentId}`, ttl: 3600 }, async () => {
+            const { data, error } = await this.db
+                .from('nep_subjects' as any)
+                .select('*')
+                .eq('department_id', departmentId);
 
-        if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+            if (error) throw error;
+            return data.map(row => this.mapToEntity(row));
+        });
     }
 
     async findBySemester(departmentId: string, semester: number): Promise<Subject[]> {
-        const { data, error } = await this.db
-            .from('nep_subjects' as any)
-            .select('*')
-            .eq('department_id', departmentId)
-            .eq('semester', semester);
+        return withCacheAside({ key: `subjects:dept:${departmentId}:sem:${semester}`, ttl: 3600 }, async () => {
+            const { data, error } = await this.db
+                .from('nep_subjects' as any)
+                .select('*')
+                .eq('department_id', departmentId)
+                .eq('semester', semester);
 
-        if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+            if (error) throw error;
+            return data.map(row => this.mapToEntity(row));
+        });
     }
 
     async findQualifiedSubjects(facultyId: string): Promise<Subject[]> {
-        const { data, error } = await this.db
-            .from('faculty_qualified_subjects' as any)
-            .select(`
-                subject:nep_subjects (
-                    id,
-                    name,
-                    code,
-                    department_id,
-                    semester,
-                    credits,
-                    category,
-                    is_active,
-                    created_at,
-                    updated_at
-                )
-            `)
-            .eq('faculty_id', facultyId);
+        return withCacheAside({ key: `faculty:qualified_subs:${facultyId}`, ttl: 3600 }, async () => {
+            const { data, error } = await this.db
+                .from('faculty_qualified_subjects' as any)
+                .select(`
+                    subject:nep_subjects (
+                        id,
+                        name,
+                        code,
+                        department_id,
+                        semester,
+                        credits,
+                        category,
+                        is_active,
+                        created_at,
+                        updated_at
+                    )
+                `)
+                .eq('faculty_id', facultyId);
 
-        if (error) throw error;
+            if (error) throw error;
 
-        // Map nested subject data to entity, handling potential nulls
-        return (data as any[])
-            .map(row => row.subject)
-            .filter(Boolean)
-            .map(subjectRow => this.mapToEntity(subjectRow));
+            // Map nested subject data to entity, handling potential nulls
+            return (data as any[])
+                .map(row => row.subject)
+                .filter(Boolean)
+                .map(subjectRow => this.mapToEntity(subjectRow));
+        });
     }
 
     async create(subject: Omit<Subject, 'id' | 'createdAt' | 'updatedAt'>): Promise<Subject> {
@@ -99,6 +109,13 @@ export class SupabaseSubjectRepository implements ISubjectRepository {
             .single();
 
         if (error) throw error;
+
+        // Invalidate department and semester lists
+        await Promise.all([
+            redisCache.del(`subjects:dept:${subject.departmentId}`),
+            redisCache.del(`subjects:dept:${subject.departmentId}:sem:${subject.semester}`)
+        ]);
+
         return this.mapToEntity(data);
     }
 
@@ -116,16 +133,37 @@ export class SupabaseSubjectRepository implements ISubjectRepository {
             .single();
 
         if (error) throw error;
+
+        if (result) {
+            await Promise.all([
+                redisCache.del(`subject:id:${id}`),
+                redisCache.del(`subjects:dept:${result.department_id}`),
+                redisCache.del(`subjects:dept:${result.department_id}:sem:${result.semester}`)
+            ]);
+        }
+
         return this.mapToEntity(result);
     }
 
     async delete(id: string): Promise<boolean> {
+        // Fetch first to know which caches to invalidate
+        const item = await this.findById(id);
+
         const { error } = await this.db
             .from('nep_subjects' as any)
             .delete()
             .eq('id', id);
 
         if (error) throw error;
+
+        if (item) {
+            await Promise.all([
+                redisCache.del(`subject:id:${id}`),
+                redisCache.del(`subjects:dept:${item.departmentId}`),
+                redisCache.del(`subjects:dept:${item.departmentId}:sem:${item.semester}`)
+            ]);
+        }
+
         return true;
     }
 }

@@ -2,6 +2,8 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { ITimetableRepository, IScheduledClassRepository } from '../../domain/repositories/ITimetableRepository';
 import { Timetable, ScheduledClass } from '../../domain/entities/Timetable';
 import { Database } from '@/shared/database';
+import { withCacheAside } from '@/shared/cache/cache-helper';
+import { redisCache } from '@/shared/cache/redis-cache';
 
 export class SupabaseTimetableRepository implements ITimetableRepository {
     constructor(private readonly db: SupabaseClient<Database>) { }
@@ -41,38 +43,50 @@ export class SupabaseTimetableRepository implements ITimetableRepository {
     }
 
     async findByDepartment(departmentId: string): Promise<Timetable[]> {
-        // Since department_id might not exist on generated_timetables, 
-        // we filter via the linked batches table
-        const { data, error } = await this.db
-            .from('generated_timetables' as any)
-            .select('*, batches!inner(department_id)')
-            .eq('batches.department_id', departmentId);
+        const cacheKey = `global:timetable:dept:${departmentId}`;
 
-        if (error) throw error;
+        return withCacheAside({ key: cacheKey, ttl: 3600 }, async () => {
+            // Since department_id might not exist on generated_timetables, 
+            // we filter via the linked batches table
+            const { data, error } = await this.db
+                .from('generated_timetables' as any)
+                .select('*, batches!inner(department_id)')
+                .eq('batches.department_id', departmentId);
 
-        // Remove the joined batches property before mapping to avoid type issues if needed,
-        // or just rely on mapToEntity ignoring extra props.
-        return data.map(row => this.mapToEntity(row));
+            if (error) throw error;
+
+            // Remove the joined batches property before mapping to avoid type issues if needed,
+            // or just rely on mapToEntity ignoring extra props.
+            return data.map(row => this.mapToEntity(row));
+        });
     }
 
     async findByCollege(collegeId: string): Promise<Timetable[]> {
-        const { data, error } = await this.db
-            .from('generated_timetables' as any)
-            .select('*')
-            .eq('college_id', collegeId);
+        const cacheKey = `college:${collegeId}:timetable:all`;
 
-        if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+        return withCacheAside({ key: cacheKey, ttl: 3600 }, async () => {
+            const { data, error } = await this.db
+                .from('generated_timetables' as any)
+                .select('*')
+                .eq('college_id', collegeId);
+
+            if (error) throw error;
+            return data.map(row => this.mapToEntity(row));
+        });
     }
 
     async findByBatch(batchId: string): Promise<Timetable[]> {
-        const { data, error } = await this.db
-            .from('generated_timetables' as any)
-            .select('*')
-            .eq('batch_id', batchId);
+        const cacheKey = `global:timetable:batch:${batchId}`;
 
-        if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+        return withCacheAside({ key: cacheKey, ttl: 3600 }, async () => {
+            const { data, error } = await this.db
+                .from('generated_timetables' as any)
+                .select('*')
+                .eq('batch_id', batchId);
+
+            if (error) throw error;
+            return data.map(row => this.mapToEntity(row));
+        });
     }
 
     async create(timetable: Omit<Timetable, 'id' | 'createdAt' | 'updatedAt'>): Promise<Timetable> {
@@ -96,6 +110,15 @@ export class SupabaseTimetableRepository implements ITimetableRepository {
             .single();
 
         if (error) throw error;
+
+        // Invalidate Related Caches
+        const keys = [
+            `global:timetable:dept:${timetable.departmentId}`,
+            `global:timetable:batch:${timetable.batchId}`,
+            `college:${timetable.collegeId}:timetable:all`
+        ];
+        await Promise.all(keys.map(k => redisCache.del(k)));
+
         return this.mapToEntity(data);
     }
 
@@ -123,16 +146,39 @@ export class SupabaseTimetableRepository implements ITimetableRepository {
             .single();
 
         if (error) throw error;
+
+        if (result) {
+            const keys = [
+                `global:timetable:dept:${result.department_id}`,
+                `global:timetable:batch:${result.batch_id}`,
+                `college:${result.college_id}:timetable:all`
+            ];
+            await Promise.all(keys.map(k => redisCache.del(k)));
+        }
+
         return this.mapToEntity(result);
     }
 
     async delete(id: string): Promise<boolean> {
+        // Fetch first to allow invalidation
+        const item = await this.findById(id);
+
         const { error } = await this.db
             .from('generated_timetables' as any)
             .delete()
             .eq('id', id);
 
         if (error) throw error;
+
+        if (item) {
+            const keys = [
+                `global:timetable:dept:${item.departmentId}`,
+                `global:timetable:batch:${item.batchId}`,
+                `college:${item.collegeId}:timetable:all`
+            ];
+            await Promise.all(keys.map(k => redisCache.del(k)));
+        }
+
         return true;
     }
 
@@ -148,6 +194,16 @@ export class SupabaseTimetableRepository implements ITimetableRepository {
             .single();
 
         if (error) throw error;
+
+        if (data) {
+            const keys = [
+                `global:timetable:dept:${data.department_id}`,
+                `global:timetable:batch:${data.batch_id}`,
+                `college:${data.college_id}:timetable:all`
+            ];
+            await Promise.all(keys.map(k => redisCache.del(k)));
+        }
+
         return this.mapToEntity(data);
     }
 
@@ -160,6 +216,16 @@ export class SupabaseTimetableRepository implements ITimetableRepository {
             .single();
 
         if (error) throw error;
+
+        if (data) {
+            const keys = [
+                `global:timetable:dept:${data.department_id}`,
+                `global:timetable:batch:${data.batch_id}`,
+                `college:${data.college_id}:timetable:all`
+            ];
+            await Promise.all(keys.map(k => redisCache.del(k)));
+        }
+
         return this.mapToEntity(data);
     }
 

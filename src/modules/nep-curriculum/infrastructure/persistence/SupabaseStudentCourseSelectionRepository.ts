@@ -2,6 +2,8 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { IStudentCourseSelectionRepository } from '../../domain/repositories/IStudentCourseSelectionRepository';
 import { StudentCourseSelection } from '../../domain/entities/StudentCourseSelection';
 import { Database } from '@/shared/database';
+import { withCacheAside } from '@/shared/cache/cache-helper';
+import { redisCache } from '@/shared/cache/redis-cache';
 
 export class SupabaseStudentCourseSelectionRepository implements IStudentCourseSelectionRepository {
     constructor(private readonly db: SupabaseClient<Database>) { }
@@ -21,53 +23,56 @@ export class SupabaseStudentCourseSelectionRepository implements IStudentCourseS
     }
 
     async findByStudent(studentId: string, semester?: number, academicYear?: string): Promise<StudentCourseSelection[]> {
-        let query = this.db
-            .from('student_course_selections' as any)
-            .select('*')
-            .eq('student_id', studentId);
+        const cacheKey = `student_selections:${studentId}${semester ? `:sem:${semester}` : ''}${academicYear ? `:year:${academicYear}` : ''}`;
 
-        if (semester) query = query.eq('semester', semester);
-        if (academicYear) query = query.eq('academic_year', academicYear);
+        return withCacheAside({ key: cacheKey, ttl: 1800 }, async () => {
+            let query = this.db
+                .from('student_course_selections' as any)
+                .select('*')
+                .eq('student_id', studentId);
 
-        const { data, error } = await query.order('id', { ascending: false });
+            if (semester) query = query.eq('semester', semester);
+            if (academicYear) query = query.eq('academic_year', academicYear);
 
-        if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+            const { data, error } = await query.order('id', { ascending: false });
+
+            if (error) throw error;
+            return data.map(row => this.mapToEntity(row));
+        });
     }
 
     async findExistingSelection(studentId: string, subjectId: string, semester: number, academicYear: string): Promise<StudentCourseSelection | null> {
-        const { data, error } = await this.db
-            .from('student_course_selections' as any)
-            .select('*')
-            .eq('student_id', studentId)
-            .eq('subject_id', subjectId)
-            .eq('semester', semester)
-            .eq('academic_year', academicYear)
-            .single();
+        const cacheKey = `student_selection:${studentId}:${subjectId}:${semester}:${academicYear}`;
 
-        if (error) {
-            if (error.code === 'PGRST116') return null;
-            throw error;
-        }
-        return this.mapToEntity(data);
+        return withCacheAside({ key: cacheKey, ttl: 1800 }, async () => {
+            const { data, error } = await this.db
+                .from('student_course_selections' as any)
+                .select('*')
+                .eq('student_id', studentId)
+                .eq('subject_id', subjectId)
+                .eq('semester', semester)
+                .eq('academic_year', academicYear)
+                .single();
+
+            if (error) {
+                if (error.code === 'PGRST116') return null;
+                throw error;
+            }
+            return this.mapToEntity(data);
+        });
     }
 
     async findMajors(studentId: string): Promise<StudentCourseSelection[]> {
-        // This is needed for the Major Locking logic check
-        // We might need to join subjects to get domain info, but repo should ideally return entity.
-        // Logic service or Use Case will handle the domain check by fetching Subject details separately or using an enriched query?
-        // For now, let's just return the selections. Use Case can verify domains.
-        // Or we can add a method `findMajorsWithSubjects`?
-        // Let's stick to entity return for now.
+        return withCacheAside({ key: `student_majors:${studentId}`, ttl: 1800 }, async () => {
+            const { data, error } = await this.db
+                .from('student_course_selections' as any)
+                .select('*')
+                .eq('student_id', studentId)
+                .eq('selection_type', 'MAJOR');
 
-        const { data, error } = await this.db
-            .from('student_course_selections' as any)
-            .select('*')
-            .eq('student_id', studentId)
-            .eq('selection_type', 'MAJOR');
-
-        if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+            if (error) throw error;
+            return data.map(row => this.mapToEntity(row));
+        });
     }
 
     async create(selection: Omit<StudentCourseSelection, 'id' | 'createdAt' | 'isLocked' | 'lockedAt'>): Promise<StudentCourseSelection> {
@@ -84,6 +89,11 @@ export class SupabaseStudentCourseSelectionRepository implements IStudentCourseS
             .single();
 
         if (error) throw error;
+
+        // Invalidate student selections cache
+        await redisCache.invalidatePattern(`student_selections:${selection.studentId}*`);
+        await redisCache.del(`student_majors:${selection.studentId}`);
+
         return this.mapToEntity(data);
     }
 
@@ -95,6 +105,11 @@ export class SupabaseStudentCourseSelectionRepository implements IStudentCourseS
             .eq('subject_id', subjectId);
 
         if (error) throw error;
+
+        // Invalidate student selections cache
+        await redisCache.invalidatePattern(`student_selections:${studentId}*`);
+        await redisCache.del(`student_majors:${studentId}`);
+
         return true;
     }
 

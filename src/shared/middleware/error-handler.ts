@@ -109,6 +109,7 @@ export function handleError(error: unknown): NextResponse {
     // Handle custom application errors
     if (error instanceof AppError) {
         const response: any = {
+            success: false,
             error: error.message,
             code: error.code
         };
@@ -129,31 +130,31 @@ export function handleError(error: unknown): NextResponse {
         switch (dbError.code) {
             case '23505': // Unique violation
                 return NextResponse.json(
-                    { error: 'Resource already exists', code: 'DUPLICATE_ENTRY' },
+                    { success: false, error: 'Resource already exists', code: 'DUPLICATE_ENTRY' },
                     { status: 409 }
                 );
 
             case '23503': // Foreign key violation
                 return NextResponse.json(
-                    { error: 'Referenced resource not found', code: 'FOREIGN_KEY_VIOLATION' },
+                    { success: false, error: 'Referenced resource not found', code: 'FOREIGN_KEY_VIOLATION' },
                     { status: 400 }
                 );
 
             case '23502': // Not null violation
                 return NextResponse.json(
-                    { error: 'Required field missing', code: 'NOT_NULL_VIOLATION' },
+                    { success: false, error: 'Required field missing', code: 'NOT_NULL_VIOLATION' },
                     { status: 400 }
                 );
 
             case 'PGRST116': // Not found
                 return NextResponse.json(
-                    { error: 'Resource not found', code: 'NOT_FOUND' },
+                    { success: false, error: 'Resource not found', code: 'NOT_FOUND' },
                     { status: 404 }
                 );
 
             default:
                 return NextResponse.json(
-                    { error: 'Database error', code: 'DATABASE_ERROR', details: dbError.message },
+                    { success: false, error: 'Database error', code: 'DATABASE_ERROR', details: dbError.message },
                     { status: 500 }
                 );
         }
@@ -163,6 +164,7 @@ export function handleError(error: unknown): NextResponse {
     if (error instanceof Error) {
         return NextResponse.json(
             {
+                success: false,
                 error: 'Internal server error',
                 code: 'INTERNAL_ERROR',
                 message: process.env.NODE_ENV === 'development' ? error.message : undefined
@@ -173,7 +175,7 @@ export function handleError(error: unknown): NextResponse {
 
     // Handle unknown errors
     return NextResponse.json(
-        { error: 'An unexpected error occurred', code: 'UNKNOWN_ERROR' },
+        { success: false, error: 'An unexpected error occurred', code: 'UNKNOWN_ERROR' },
         { status: 500 }
     );
 }
