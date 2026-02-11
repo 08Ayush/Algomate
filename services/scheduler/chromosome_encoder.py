@@ -31,6 +31,7 @@ class Gene:
     time_slot_id: str
     batch_id: str
     is_lab: bool = False
+    session_number: int = 1
     
     def __hash__(self):
         return hash((
@@ -38,7 +39,8 @@ class Gene:
             self.faculty_id, 
             self.classroom_id, 
             self.time_slot_id, 
-            self.batch_id
+            self.batch_id,
+            self.session_number
         ))
     
     def __eq__(self, other):
@@ -49,7 +51,8 @@ class Gene:
             self.faculty_id == other.faculty_id and
             self.classroom_id == other.classroom_id and
             self.time_slot_id == other.time_slot_id and
-            self.batch_id == other.batch_id
+            self.batch_id == other.batch_id and
+            self.session_number == other.session_number
         )
 
 
@@ -86,7 +89,8 @@ class Chromosome:
                 classroom_id=g.classroom_id,
                 time_slot_id=g.time_slot_id,
                 batch_id=g.batch_id,
-                is_lab=g.is_lab
+                is_lab=g.is_lab,
+                session_number=g.session_number
             ) for g in self.genes],
             fitness=self.fitness,
             generation=self.generation
@@ -109,7 +113,8 @@ class ChromosomeEncoder:
         faculty: List[Dict],
         classrooms: List[Dict],
         time_slots: List[Dict],
-        batches: List[Dict]
+        batches: List[Dict],
+        assigned_lab_map: Dict[str, str] = None
     ):
         """
         Initialize encoder with domain data.
@@ -120,12 +125,14 @@ class ChromosomeEncoder:
             classrooms: List of classroom records
             time_slots: List of time slot records
             batches: List of batch records
+            assigned_lab_map: Map of subject_id -> classroom_id for locked labs
         """
         self.subjects = {s["id"]: s for s in subjects}
         self.faculty = {f["id"]: f for f in faculty}
         self.classrooms = {c["id"]: c for c in classrooms}
         self.time_slots = {t["id"]: t for t in time_slots}
         self.batches = {b["id"]: b for b in batches}
+        self.assigned_lab_map = assigned_lab_map or {}
         
         # Create index mappings for efficient lookup
         self._subject_idx = {s["id"]: i for i, s in enumerate(subjects)}
@@ -166,14 +173,15 @@ class ChromosomeEncoder:
         """
         genes = []
         
-        for assignment in cpsat_solution.get("assignments", []):
+        for assignment in cpsat_solution.get("scheduled_classes", []):
             gene = Gene(
                 subject_id=assignment["subject_id"],
                 faculty_id=assignment["faculty_id"],
                 classroom_id=assignment["classroom_id"],
                 time_slot_id=assignment["time_slot_id"],
                 batch_id=assignment["batch_id"],
-                is_lab=assignment.get("is_lab", False)
+                is_lab=assignment.get("is_lab", False),
+                session_number=assignment.get("session_number", 1)
             )
             genes.append(gene)
         
@@ -205,7 +213,8 @@ class ChromosomeEncoder:
                 classroom_id=record["classroom_id"],
                 time_slot_id=record["time_slot_id"],
                 batch_id=record["batch_id"],
-                is_lab=is_lab
+                is_lab=is_lab,
+                session_number=record.get("credit_hour_number", 1)
             )
             genes.append(gene)
         
@@ -236,7 +245,7 @@ class ChromosomeEncoder:
                 "time_slot_id": gene.time_slot_id,
                 "batch_id": gene.batch_id,
                 "class_type": class_type,
-                "credit_hour_number": i + 1,  # Required field
+                "credit_hour_number": gene.session_number,
             }
             records.append(record)
         
@@ -266,7 +275,13 @@ class ChromosomeEncoder:
             valid_faculty = list(self.faculty.keys())
         
         # Get appropriate classrooms
-        if gene.is_lab:
+        # Check if subject has a pre-assigned lab
+        assigned_lab = self.assigned_lab_map.get(gene.subject_id)
+        
+        if assigned_lab and assigned_lab in self.classrooms:
+            # Locked to specific lab
+            valid_rooms = [assigned_lab]
+        elif gene.is_lab:
             valid_rooms = [
                 c_id for c_id, c in self.classrooms.items()
                 if c.get("room_type") == "lab"
@@ -331,7 +346,8 @@ class ChromosomeEncoder:
                 classroom_id=self._idx_classroom.get(row[2], ""),
                 time_slot_id=self._idx_time_slot.get(row[3], ""),
                 batch_id=self._idx_batch.get(row[4], ""),
-                is_lab=reference.genes[i].is_lab if i < len(reference.genes) else False
+                is_lab=reference.genes[i].is_lab if i < len(reference.genes) else False,
+                session_number=reference.genes[i].session_number if i < len(reference.genes) else 1
             )
             genes.append(gene)
         

@@ -334,7 +334,10 @@ async def run_generation(
         # Run the pipeline
         update_task_progress(task_id, "RUNNING", 0.10, "Starting hybrid pipeline...")
         
-        result: PipelineResult = orchestrator.run(
+        # FIX: Run blocking orchestrator in a separate thread to ensure Main Loop stays active
+        # This prevents the API from freezing (timeouts) while GA runs
+        result: PipelineResult = await asyncio.to_thread(
+            orchestrator.run,
             batch_id=batch_id,
             college_id=college_id,
             created_by=user_id,
