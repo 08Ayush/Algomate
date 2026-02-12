@@ -1,0 +1,67 @@
+﻿Batches: 1
+  CSE Batch 2023 - Sem 6 (2025-26): subjects=['017283ad-0ade-4c9e-8e5c-57bd9a305d88', '02894159-272c-4779-bd11-f5c1e7e1f2aa', '14333f48-7b85-42d9-8d70-186f043e33fd', '18dbfa14-3ace-4fef-8343-1b3d5d9558c5', '322a3f8e-ef2d-481e-91ca-e19d5b34d489', '4790c4a8-4b77-4c55-909c-c40944c48ab1', '5cd765e0-e95c-486c-9030-81a0d792f94e', '6a02d14a-bfff-4812-b816-70aa12af60a8', '6ae8b720-ac7b-41af-a5ca-601a043e6d31', '6b222dac-2c2a-4701-99e3-559bbe9df7ca', '6bdef545-51f0-4161-83df-c59578404525', '70a0a479-9bda-407f-b652-8a3f7f249f43', 'ac43c496-7bad-4a9d-8089-287fea9521a4', 'aeb92403-802d-4d77-82e4-6229d81fbea5', 'ccddec1e-b152-4cb7-9885-e8eaf5242b16', 'cf46a7df-f905-40d5-94a6-20a7687b0c3a', 'e76b7f98-4ecf-492d-9cf1-965ab36389ad', 'ec953e14-c1f4-4ba7-932a-5e7302245649'], strength=60
+
+Subjects: 18
+  Project - 1 (25CE605P): hrs=2, lab=False, req_quals=['Project - 1', '25CE605P', '017283ad-0ade-4c9e-8e5c-57bd9a305d88']
+  Open Elective -II (25CE6610): hrs=3, lab=False, req_quals=['Open Elective -II', '25CE6610', '02894159-272c-4779-bd11-f5c1e7e1f2aa']
+  Data Modeling Lab (24DS603P): hrs=1, lab=False, req_quals=['Data Modeling Lab', '24DS603P', '14333f48-7b85-42d9-8d70-186f043e33fd']
+  Deep Learning Lab (24DS601P): hrs=1, lab=False, req_quals=['Deep Learning Lab', '24DS601P', '18dbfa14-3ace-4fef-8343-1b3d5d9558c5']
+  MDM û IV (24xx631M): hrs=3, lab=False, req_quals=['MDM û IV', '24xx631M', '322a3f8e-ef2d-481e-91ca-e19d5b34d489']
+  Data Science Workshop û VI (24DS604P): hrs=2, lab=False, req_quals=['Data Science Workshop û VI', '24DS604P', '4790c4a8-4b77-4c55-909c-c40944c48ab1']
+  Career Development û VI (24DS641P): hrs=1, lab=False, req_quals=['Career Development û VI', '24DS641P', '5cd765e0-e95c-486c-9030-81a0d792f94e']
+  Deep Learning (24DS601T): hrs=3, lab=False, req_quals=['Deep Learning', '24DS601T', '6a02d14a-bfff-4812-b816-70aa12af60a8']
+  Professional Elective -III (25CE602T): hrs=3, lab=False, req_quals=['Professional Elective -III', '25CE602T', '6ae8b720-ac7b-41af-a5ca-601a043e6d31']
+  Project û I (24DS605P): hrs=2, lab=False, req_quals=['Project û I', '24DS605P', '6b222dac-2c2a-4701-99e3-559bbe9df7ca']
+  Data Modeling (24DS603T): hrs=2, lab=False, req_quals=['Data Modeling', '24DS603T', '6bdef545-51f0-4161-83df-c59578404525']
+  Design and Analysis of Algorithms Lab (25CE601P): hrs=1, lab=False, req_quals=['Design and Analysis of Algorithms Lab', '25CE601P', '70a0a479-9bda-407f-b652-8a3f7f249f43']
+  Design and Analysis of Algorithms (25CE601T): hrs=3, lab=False, req_quals=['Design and Analysis of Algorithms', '25CE601T', 'ac43c496-7bad-4a9d-8089-287fea9521a4']
+  Open Elective û I (Data Analytics) (24DS561O): hrs=2, lab=False, req_quals=['Open Elective û I (Data Analytics)', '24DS561O', 'aeb92403-802d-4d77-82e4-6229d81fbea5']
+  Technical Skill Development - II (25CE604P): hrs=2, lab=False, req_quals=['Technical Skill Development - II', '25CE604P', 'ccddec1e-b152-4cb7-9885-e8eaf5242b16']
+  Theory of Computation (24DS602T): hrs=3, lab=False, req_quals=['Theory of Computation', '24DS602T', 'cf46a7df-f905-40d5-94a6-20a7687b0c3a']
+  MDM-IV (Financial Accounting and Analysis) (25CE631M): hrs=3, lab=False, req_quals=['MDM-IV (Financial Accounting and Analysis)', '25CE631M', 'e76b7f98-4ecf-492d-9cf1-965ab36389ad']
+  Professional Elective -IV (25CE603T): hrs=3, lab=False, req_quals=['Professional Elective -IV', '25CE603T', 'ec953e14-c1f4-4ba7-932a-5e7302245649']
+  TOTAL hours needed: 40
+
+Faculty: 15
+  Bhagyashree C. Hambarde: quals=['24DS603T', 'Data Modeling', 'Data Modeling Lab', '24DS561O'] (12 total)
+  Dr. Jayshri Harde: quals=['24DS603T', '24DS561O', 'Project û I', '24DS605P'] (30 total)
+  Dr. Tejal D. Irkhede: quals=['24DS603T', '24DS561O', 'Project û I', '24DS605P'] (30 total)
+  Dr. Nischal Puri: quals=['322a3f8e-ef2d-481e-91ca-e19d5b34d489', '24DS641P', 'Project û I', 'MDM û IV'] (18 total)
+  Aashish R. Dandekar: quals=['Data Modeling Lab', '14333f48-7b85-42d9-8d70-186f043e33fd', '24DS603P'] (3 total)
+  Abhinav Mule: quals=['MDM-IV (Financial Accounting and Analysis)', 'e76b7f98-4ecf-492d-9cf1-965ab36389ad', '25CE631M'] (3 total)
+  Dr. Reema Roychaudhary: quals=['25CE601T', 'Design and Analysis of Algorithms', 'ac43c496-7bad-4a9d-8089-287fea9521a4'] (3 total)
+  Amitabh Singh: quals=['Open Elective -II', '02894159-272c-4779-bd11-f5c1e7e1f2aa', '25CE6610'] (3 total)
+  Anjali Patel: quals=['25CE601P', 'Design and Analysis of Algorithms Lab', '70a0a479-9bda-407f-b652-8a3f7f249f43'] (3 total)
+  Dr. Manoj Bramhe: quals=['Technical Skill Development - II', '25CE604P', 'ccddec1e-b152-4cb7-9885-e8eaf5242b16'] (3 total)
+  Dr. Sunil Wanjari: quals=['25CE605P', '017283ad-0ade-4c9e-8e5c-57bd9a305d88', 'Project - 1'] (3 total)
+  Divya Sharma: quals=['MDM-IV (Financial Accounting and Analysis)', 'e76b7f98-4ecf-492d-9cf1-965ab36389ad', '25CE631M'] (3 total)
+  Anil Sharma: quals=['25CE602T', 'Professional Elective -III', '6ae8b720-ac7b-41af-a5ca-601a043e6d31'] (3 total)
+  Neha Chatterjee: quals=['25CE603T', 'ec953e14-c1f4-4ba7-932a-5e7302245649', 'Professional Elective -IV'] (3 total)
+  Pooja Nair: quals=['Technical Skill Development - II', '25CE604P', 'ccddec1e-b152-4cb7-9885-e8eaf5242b16'] (3 total)
+
+Slots: 60, Rooms: 12
+Lab rooms: 0 ù []
+
+Faculty coverage: 18/18
+
+=== BATCH-SUBJECT LINKAGE ===
+
+CSE Batch 2023 - Sem 6 (2025-26) (15b7a264-e228-4ef0-8234-26235c4416d8):
+  Project - 1: 2hrs, qualified=['Dr. Sunil Wanjari']
+  Open Elective -II: 3hrs, qualified=['Amitabh Singh']
+  Data Modeling Lab: 1hrs, qualified=['Bhagyashree C. Hambarde', 'Dr. Jayshri Harde', 'Dr. Tejal D. Irkhede', 'Aashish R. Dandekar']
+  Deep Learning Lab: 1hrs, qualified=['Dr. Jayshri Harde', 'Dr. Tejal D. Irkhede', 'Dr. Nischal Puri']
+  MDM û IV: 3hrs, qualified=['Dr. Jayshri Harde', 'Dr. Tejal D. Irkhede', 'Dr. Nischal Puri']
+  Data Science Workshop û VI: 2hrs, qualified=['Bhagyashree C. Hambarde', 'Dr. Jayshri Harde', 'Dr. Tejal D. Irkhede']
+  Career Development û VI: 1hrs, qualified=['Dr. Jayshri Harde', 'Dr. Tejal D. Irkhede', 'Dr. Nischal Puri']
+  Deep Learning: 3hrs, qualified=['Dr. Jayshri Harde', 'Dr. Tejal D. Irkhede', 'Dr. Nischal Puri']
+  Professional Elective -III: 3hrs, qualified=['Anil Sharma']
+  Project û I: 2hrs, qualified=['Dr. Jayshri Harde', 'Dr. Tejal D. Irkhede', 'Dr. Nischal Puri']
+  Data Modeling: 2hrs, qualified=['Bhagyashree C. Hambarde', 'Dr. Jayshri Harde', 'Dr. Tejal D. Irkhede']
+  Design and Analysis of Algorithms Lab: 1hrs, qualified=['Anjali Patel']
+  Design and Analysis of Algorithms: 3hrs, qualified=['Dr. Reema Roychaudhary']
+  Open Elective û I (Data Analytics): 2hrs, qualified=['Bhagyashree C. Hambarde', 'Dr. Jayshri Harde', 'Dr. Tejal D. Irkhede']
+  Technical Skill Development - II: 2hrs, qualified=['Dr. Manoj Bramhe', 'Pooja Nair']
+  Theory of Computation: 3hrs, qualified=['Dr. Jayshri Harde', 'Dr. Tejal D. Irkhede', 'Dr. Nischal Puri']
+  MDM-IV (Financial Accounting and Analysis): 3hrs, qualified=['Abhinav Mule', 'Divya Sharma']
+  Professional Elective -IV: 3hrs, qualified=['Neha Chatterjee']

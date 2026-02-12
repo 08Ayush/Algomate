@@ -33,6 +33,7 @@ from utils.runtime_logger import (
     PipelineStepTracker,
     timed,
 )
+from etl import ETLPipeline, DataQualityReport
 
 
 @dataclass
@@ -309,6 +310,163 @@ class OptimizedOrchestrator:
                 ),
             )
             return solver.solve(timeout=timeout)
+
+    # ------------------------------------------------------------------
+    # ETL-powered pipeline
+    # ------------------------------------------------------------------
+
+    def run_with_etl(
+        self,
+        batch_id: str,
+        college_id: str,
+        user_id: str,
+        solver_timeout: int = 300,
+        progress_callback: Optional[Callable[[str, float], None]] = None,
+    ) -> PipelineResult:
+        """
+        Execute the pipeline using the full ETL layer.
+
+        Same interface as run() but uses ETLPipeline for:
+          - Parallel data extraction with validation
+          - Data cleaning / Unicode fixes / quality scoring
+          - Transactional load with rollback on failure
+          - Faculty-coverage analysis before solving
+
+        The DataQualityReport is attached to the result's step_log.
+        """
+        task_id = str(uuid.uuid4())
+        tracker = PipelineStepTracker(task_id, self.logger)
+        start_time = time.perf_counter()
+        etl = ETLPipeline(supabase_client=self.db.client)
+
+        self.logger.info(
+            f"{'='*60}\n"
+            f"  OPTIMIZED ETL PIPELINE START\n"
+            f"  task_id   : {task_id}\n"
+            f"  batch_id  : {batch_id}\n"
+            f"  college_id: {college_id}\n"
+            f"  user_id   : {user_id}\n"
+            f"{'='*60}"
+        )
+
+        try:
+            # ── Step 1: Create task record ────────────────────────
+            with tracker.step("CREATE_TASK", "Creating task record"):
+                algo_config = {
+                    "solver": "optimized_ensemble",
+                    "cpsat_timeout": solver_timeout,
+                    "voting_strategy": self.config.voting_strategy,
+                    "parallel": self.config.parallel_execution,
+                    "etl_enabled": True,
+                }
+                self.db.create_task(task_id, batch_id, college_id, user_id, algo_config)
+                self.db.update_task_status(task_id, "running", "Initializing ETL pipeline")
+
+            if progress_callback:
+                progress_callback("init", 0.05)
+
+            # ── Step 2: ETL Extract + Transform ──────────────────
+            with tracker.step("ETL_EXTRACT_TRANSFORM", "Extract & transform data via ETL") as info:
+                domain_data, quality_report = etl.extract_and_transform(batch_id, college_id)
+                info["quality_score"] = quality_report.quality_score
+                info["viable"] = quality_report.is_viable
+                info["summary"] = quality_report.summary_dict()
+
+            if not quality_report.is_viable:
+                self.db.update_task_status(
+                    task_id, "failed",
+                    f"Data quality too low: {quality_report.quality_score:.2f}",
+                )
+                total = time.perf_counter() - start_time
+                return PipelineResult(
+                    task_id=task_id, batch_id=batch_id,
+                    status="failed", best_score=0.0, timetable_id=None,
+                    num_assignments=0, solver_name="",
+                    total_time_seconds=round(total, 3), is_valid=False,
+                    error_message=f"Data quality score {quality_report.quality_score:.2f} below threshold",
+                    step_log=tracker.steps,
+                )
+
+            if progress_callback:
+                progress_callback("etl_done", 0.25)
+
+            # ── Step 3: Build SchedulingContext ──────────────────
+            with tracker.step("BUILD_CONTEXT", "Building SchedulingContext"):
+                context = self._build_context(domain_data, college_id)
+                errors = context.validate()
+                if errors:
+                    self.logger.warning(f"Context validation warnings: {errors}")
+
+            self.db.update_task_status(task_id, "running", "Context built, starting solver")
+
+            if progress_callback:
+                progress_callback("context", 0.30)
+
+            # ── Step 4: Run solver ────────────────────────────────
+            with tracker.step("RUN_SOLVER", "Running optimized ensemble solver") as step_info:
+                self.db.update_task_status(task_id, "running", "Running solver")
+                solution = self._run_solver(context, solver_timeout)
+                step_info["solver_name"] = solution.solver_name
+                step_info["quality_score"] = solution.quality_score
+                step_info["is_valid"] = solution.is_valid
+                step_info["assignments"] = len(solution.assignments)
+
+            if progress_callback:
+                progress_callback("solver_done", 0.80)
+
+            # Enrich metadata
+            if not hasattr(solution, "metadata") or solution.metadata is None:
+                solution.metadata = {}
+            solution.metadata["user_id"] = user_id
+            solution.metadata["academic_year"] = domain_data.get("academic_year", "2025-26")
+            solution.metadata["semester"] = domain_data.get("semester", 1)
+
+            # ── Step 5: ETL Load ──────────────────────────────────
+            timetable_id = None
+            with tracker.step("ETL_LOAD", "Saving via ETL loader"):
+                elapsed = time.perf_counter() - start_time
+                timetable_id = etl.load(
+                    task_id, batch_id, college_id,
+                    solution, elapsed, quality_report,
+                )
+
+            # ── Step 6: Finalise ──────────────────────────────────
+            with tracker.step("FINALISE", "Updating task status to completed"):
+                self.db.update_task_status(task_id, "completed", "ETL pipeline completed")
+
+            if progress_callback:
+                progress_callback("done", 1.0)
+
+            total = time.perf_counter() - start_time
+            self.logger.info(
+                f"ETL Pipeline COMPLETED in {total:.2f}s | "
+                f"score={solution.quality_score:.3f} | "
+                f"quality_data={quality_report.quality_score:.2f} | "
+                f"assignments={len(solution.assignments)}"
+            )
+
+            return PipelineResult(
+                task_id=task_id, batch_id=batch_id,
+                status="success", best_score=solution.quality_score,
+                timetable_id=timetable_id,
+                num_assignments=len(solution.assignments),
+                solver_name=solution.solver_name,
+                total_time_seconds=round(total, 3),
+                is_valid=solution.is_valid,
+                step_log=tracker.steps,
+            )
+
+        except Exception as exc:
+            total = time.perf_counter() - start_time
+            self.logger.error(f"ETL Pipeline FAILED after {total:.2f}s: {exc}", exc_info=True)
+            self.db.update_task_status(task_id, "failed", str(exc))
+            return PipelineResult(
+                task_id=task_id, batch_id=batch_id,
+                status="failed", best_score=0.0, timetable_id=None,
+                num_assignments=0, solver_name="",
+                total_time_seconds=round(total, 3), is_valid=False,
+                error_message=str(exc), step_log=tracker.steps,
+            )
 
     # ------------------------------------------------------------------
     # Multi-batch convenience

@@ -99,8 +99,23 @@ class Faculty:
     rank_weight: float = 1.0  # For preference weighting
     
     def can_teach(self, subject: 'Subject') -> bool:
-        """Check if faculty is qualified to teach the subject."""
-        return any(qual in subject.required_qualifications for qual in self.qualifications)
+        """Check if faculty is qualified to teach the subject.
+
+        Matching rules (in priority order):
+        1. Faculty qualifications ∩ subject.required_qualifications is non-empty.
+        2. subject.id is in faculty's qualifications list (assigned-faculty
+           or faculty_qualified_subjects in DB).
+        3. subject.code is in faculty's qualifications list.
+        """
+        if subject.required_qualifications:
+            if any(q in subject.required_qualifications for q in self.qualifications):
+                return True
+        # Fallback: subject id or code directly in qualifications
+        if subject.id in self.qualifications:
+            return True
+        if subject.code and subject.code in self.qualifications:
+            return True
+        return False
 
 
 @dataclass

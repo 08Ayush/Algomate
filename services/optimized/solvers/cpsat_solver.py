@@ -178,6 +178,44 @@ class EnhancedCPSATSolver(BaseSolver):
                 ]
                 for var in relevant_vars:
                     self.model.Add(var == 0)
+
+        # 6. Lab sessions must be scheduled in consecutive 2-hour blocks
+        #    For each batch + lab subject, group variables by day and
+        #    enforce that selected slots form consecutive pairs.
+        slots_by_day: Dict[int, List[TimeSlot]] = {}
+        for s in self.context.time_slots:
+            slots_by_day.setdefault(s.day, []).append(s)
+        for day_slots in slots_by_day.values():
+            day_slots.sort(key=lambda s: s.start_hour * 60 + s.start_minute)
+
+        for batch in self.context.batches:
+            for subject_id in batch.subjects:
+                subject = self.context.get_subject(subject_id)
+                if not subject or not subject.is_lab:
+                    continue
+                # For each day, if a lab slot is used, the next consecutive slot must also be used
+                for day, day_slots_list in slots_by_day.items():
+                    for idx in range(len(day_slots_list) - 1):
+                        slot_a = day_slots_list[idx]
+                        slot_b = day_slots_list[idx + 1]
+                        a_end = slot_a.start_hour * 60 + slot_a.start_minute + slot_a.duration_minutes
+                        b_start = slot_b.start_hour * 60 + slot_b.start_minute
+                        if a_end != b_start:
+                            continue  # not actually consecutive
+
+                        # Get all vars for this batch+subject in slot_a and slot_b
+                        vars_a = [
+                            var for key, var in self.variables.items()
+                            if key[0] == batch.id and key[1] == subject.id and key[4] == slot_a.id
+                        ]
+                        vars_b = [
+                            var for key, var in self.variables.items()
+                            if key[0] == batch.id and key[1] == subject.id and key[4] == slot_b.id
+                        ]
+                        if vars_a and vars_b:
+                            # If any var in slot_a is 1, then sum of vars in slot_b must be 1
+                            # i.e. sum(vars_a) == sum(vars_b) for this pair
+                            self.model.Add(sum(vars_a) == sum(vars_b))
         
         self.logger.debug("Hard constraints added")
     

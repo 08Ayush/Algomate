@@ -1,0 +1,23 @@
+﻿Running GA solver on test data...
+GA solver finished in 8.03s ù 21 assignments, quality=0.9751
+Expected total hours: 21  |  Scheduled: 21
+Lab hours expected: 4  |  Lab hours assigned: 4
+
+Full results written to eval_ga_comparison.txt
+
+============================================================
+  KEY METRICS SUMMARY (GA-generated schedule)
+============================================================
+  Precision              1.0000
+  Recall                 1.0000
+  F1 Score               1.0000
+  Lab Precision          1.0000
+  Lab Recall             1.0000
+  Schedule Complete      100.0%
+  Faculty Utilisation    29.1%
+  Room Utilisation       14.0%
+  Overall KPI            78.89 / 100
+  Workload Gini          0.2976
+  Workload CV            0.5929
+  Fairness Score         78.19 / 100
+============================================================

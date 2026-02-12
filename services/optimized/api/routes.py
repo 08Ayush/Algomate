@@ -73,6 +73,8 @@ class GenerateRequest(BaseModel):
     ga_generations: Optional[int] = None
     population_size: Optional[int] = None
     strategy: Optional[str] = None
+    # ETL pipeline flag
+    use_etl: bool = True
 
     @property
     def effective_timeout(self) -> int:
@@ -270,6 +272,7 @@ async def generate_timetable(
         request.college_id,
         request.user_id,
         timeout,
+        request.use_etl,
     )
 
     return GenerateResponse(
@@ -476,6 +479,7 @@ async def _run_generation_background(
     college_id: str,
     user_id: str,
     solver_timeout: int,
+    use_etl: bool = True,
 ):
     """Run single-batch generation in background."""
     try:
@@ -487,6 +491,7 @@ async def _run_generation_background(
             phase_map = {
                 "init": "INITIALIZING",
                 "fetch": "FETCHING_DATA",
+                "etl_done": "ETL_COMPLETE",
                 "context": "BUILDING_CONTEXT",
                 "solver_done": "SOLVER_COMPLETE",
                 "done": "COMPLETED",
@@ -498,7 +503,9 @@ async def _run_generation_background(
                 message=f"Running {phase}...",
             )
 
-        result: PipelineResult = orchestrator.run(
+        # Use ETL pipeline if enabled, otherwise use legacy path
+        run_fn = orchestrator.run_with_etl if use_etl else orchestrator.run
+        result: PipelineResult = run_fn(
             batch_id=batch_id,
             college_id=college_id,
             user_id=user_id,
