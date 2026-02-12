@@ -178,20 +178,48 @@ class OptimizedOrchestrator:
 
             # ── Step 5: Save results ──────────────────────────────
             timetable_id = None
-            with tracker.step("SAVE_RESULTS", "Saving timetable to Supabase"):
+            with tracker.step("SAVE_RESULTS", "Saving timetable to Supabase") as save_info:
                 elapsed = time.perf_counter() - start_time
                 timetable_id = self.db.save_timetable(
                     task_id, batch_id, college_id, solution, elapsed,
                 )
+                save_info["timetable_id"] = timetable_id
+                if not timetable_id:
+                    save_info["error"] = "save_timetable returned None"
+                    self.logger.error("save_timetable returned None — DB insert failed")
 
             # ── Step 6: Finalise ──────────────────────────────────
             with tracker.step("FINALISE", "Updating task status to completed"):
-                self.db.update_task_status(task_id, "completed", "Pipeline completed successfully")
+                if timetable_id:
+                    self.db.update_task_status(task_id, "completed", "Pipeline completed successfully")
+                else:
+                    self.db.update_task_status(
+                        task_id, "failed",
+                        "Solver succeeded but timetable could not be saved to database",
+                    )
 
             if progress_callback:
                 progress_callback("done", 1.0)
 
             total = time.perf_counter() - start_time
+
+            if not timetable_id:
+                self.logger.error(
+                    f"Pipeline PARTIAL FAILURE in {total:.2f}s | "
+                    f"Solver OK (score={solution.quality_score:.3f}) but DB save FAILED"
+                )
+                return PipelineResult(
+                    task_id=task_id, batch_id=batch_id,
+                    status="failed", best_score=solution.quality_score,
+                    timetable_id=None,
+                    num_assignments=len(solution.assignments),
+                    solver_name=solution.solver_name,
+                    total_time_seconds=round(total, 3),
+                    is_valid=solution.is_valid,
+                    error_message="Timetable could not be saved to database",
+                    step_log=tracker.steps,
+                )
+
             self.logger.info(
                 f"Pipeline COMPLETED in {total:.2f}s | "
                 f"score={solution.quality_score:.3f} | "
@@ -423,21 +451,53 @@ class OptimizedOrchestrator:
 
             # ── Step 5: ETL Load ──────────────────────────────────
             timetable_id = None
-            with tracker.step("ETL_LOAD", "Saving via ETL loader"):
+            with tracker.step("ETL_LOAD", "Saving via ETL loader") as load_info:
                 elapsed = time.perf_counter() - start_time
                 timetable_id = etl.load(
                     task_id, batch_id, college_id,
                     solution, elapsed, quality_report,
                 )
+                load_info["timetable_id"] = timetable_id
+                if not timetable_id:
+                    load_info["error"] = "ETL load returned None — DB insert failed"
+                    self.logger.error(
+                        "ETL LOAD returned None — timetable was NOT saved to database! "
+                        "Check for FK constraint violations (virtual rooms, missing refs)."
+                    )
 
             # ── Step 6: Finalise ──────────────────────────────────
             with tracker.step("FINALISE", "Updating task status to completed"):
-                self.db.update_task_status(task_id, "completed", "ETL pipeline completed")
+                if timetable_id:
+                    self.db.update_task_status(task_id, "completed", "ETL pipeline completed")
+                else:
+                    self.db.update_task_status(
+                        task_id, "failed",
+                        "Solver succeeded but timetable could not be saved to database",
+                    )
 
             if progress_callback:
                 progress_callback("done", 1.0)
 
             total = time.perf_counter() - start_time
+
+            if not timetable_id:
+                self.logger.error(
+                    f"ETL Pipeline PARTIAL FAILURE in {total:.2f}s | "
+                    f"Solver OK (score={solution.quality_score:.3f}, assignments={len(solution.assignments)}) "
+                    f"but DB save FAILED"
+                )
+                return PipelineResult(
+                    task_id=task_id, batch_id=batch_id,
+                    status="failed", best_score=solution.quality_score,
+                    timetable_id=None,
+                    num_assignments=len(solution.assignments),
+                    solver_name=solution.solver_name,
+                    total_time_seconds=round(total, 3),
+                    is_valid=solution.is_valid,
+                    error_message="Timetable could not be saved to database",
+                    step_log=tracker.steps,
+                )
+
             self.logger.info(
                 f"ETL Pipeline COMPLETED in {total:.2f}s | "
                 f"score={solution.quality_score:.3f} | "

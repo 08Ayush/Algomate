@@ -344,8 +344,28 @@ class Transformer:
                 )
                 capacity = 30
 
-            room_type = (row.get("room_type") or "classroom").lower()
-            if room_type == "lab":
+            # Detect room type from DB columns:
+            # - is_lab (boolean) — primary lab indicator
+            # - type (string, e.g. "Lecture Hall", "Lab", "Computer Lab")
+            # - lab_type (string, e.g. "computer", "physics")
+            # Fallback: name heuristic
+            is_lab_room = bool(row.get("is_lab", False))
+            db_type = (row.get("type") or "").lower()
+            db_lab_type = (row.get("lab_type") or "").lower()
+            name_lower = cleaned_name.lower()
+
+            if not is_lab_room:
+                # Check type/lab_type/name for lab indicators
+                is_lab_room = (
+                    "lab" in db_type
+                    or bool(db_lab_type)
+                    or "lab" in name_lower
+                    or bool(row.get("has_lab_equipment", False))
+                    or bool(row.get("has_computers", False))
+                )
+
+            room_type = "lab" if is_lab_room else "classroom"
+            if is_lab_room:
                 has_lab_room = True
 
             room = Room(
@@ -354,7 +374,7 @@ class Transformer:
                 capacity=capacity,
                 room_type=room_type,
                 building=row.get("building", "Main"),
-                floor=int(row.get("floor", 1)),
+                floor=int(row.get("floor_number") or row.get("floor", 1)),
                 facilities=row.get("facilities") or [],
                 is_available=bool(row.get("is_available", True)),
             )
@@ -374,8 +394,12 @@ class Transformer:
                 (int(r.get("capacity", 60)) for r in classroom_rows),
                 default=60,
             )
+            # Use a deterministic UUID based on college context so it's
+            # consistent across runs.  Must be a valid UUID for DB FK constraints.
+            import uuid as _uuid
+            virtual_id = str(_uuid.uuid5(_uuid.NAMESPACE_DNS, f"virtual-lab-{report.college_id}"))
             virtual_lab = Room(
-                id="virtual-lab-001",
+                id=virtual_id,
                 name="Lab (Auto-generated)",
                 capacity=max_strength,
                 room_type="lab",
@@ -384,6 +408,8 @@ class Transformer:
                 facilities=["lab", "computer"],
                 is_available=True,
             )
+            # Persist the virtual lab to the DB so FK constraints pass on load
+            self._ensure_virtual_room_in_db(virtual_lab, report)
             rooms.append(virtual_lab)
             report.total_rooms = len(rooms)
 
@@ -516,3 +542,49 @@ class Transformer:
         # Collapse multiple spaces
         result = re.sub(r"  +", " ", result).strip()
         return result
+
+    def _ensure_virtual_room_in_db(self, room: Room, report: DataQualityReport):
+        """Persist a virtual lab room to the classrooms table if it doesn't already exist.
+
+        This ensures that scheduled_classes FK constraint on classroom_id passes
+        during the ETL Load phase.
+        """
+        try:
+            from storage.supabase_client import get_supabase_client
+            client = get_supabase_client()
+
+            # Check if it already exists
+            existing = (
+                client.table("classrooms")
+                .select("id")
+                .eq("id", room.id)
+                .limit(1)
+                .execute()
+            )
+            if existing.data:
+                logger.info(f"Virtual lab room {room.id} already exists in DB")
+                return
+
+            # Insert into classrooms table
+            client.table("classrooms").insert({
+                "id": room.id,
+                "name": room.name,
+                "capacity": room.capacity,
+                "is_lab": True,
+                "type": "Computer Lab",
+                "building": room.building,
+                "floor_number": room.floor,
+                "facilities": room.facilities,
+                "is_available": True,
+                "college_id": report.college_id,
+                "has_lab_equipment": True,
+                "has_computers": True,
+            }).execute()
+            logger.info(f"Created virtual lab room in DB: {room.id} ({room.name})")
+        except Exception as exc:
+            logger.error(f"Could not persist virtual lab room to DB: {exc}")
+            report.add_warning(
+                "virtual_room_persist_failed", "classroom",
+                entity_id=room.id,
+                message=f"Failed to save virtual lab room to DB: {exc}",
+            )
