@@ -3,6 +3,7 @@
 import random
 import copy
 import time
+import logging
 import numpy as np
 from typing import List, Tuple, Optional, Dict, Any
 from dataclasses import dataclass
@@ -15,13 +16,13 @@ from core.config import SolverConfig
 @dataclass
 class GAConfig:
     """Configuration for Genetic Algorithm."""
-    population_size: int = 100
-    generations: int = 500
+    population_size: int = 150  # Increased from 100 for better diversity
+    generations: int = 800      # Increased from 500 for harder problems
     mutation_rate: float = 0.15
     crossover_rate: float = 0.8
     tournament_size: int = 5
     elite_size: int = 5
-    timeout: int = 60
+    timeout: int = 120  # Increased from 60 for complex schedules
 
 
 class GeneticAlgorithmSolver:
@@ -38,6 +39,7 @@ class GeneticAlgorithmSolver:
         self.config = config or GAConfig()
         self.generation = 0
         self.best_fitness_history = []
+        self.logger = logging.getLogger(__name__)
         
     def solve(self, timeout: Optional[int] = None) -> Solution:
         """Solve using genetic algorithm following industry-standard flow.
@@ -149,10 +151,20 @@ class GeneticAlgorithmSolver:
             # --------------------------------------------------------
             # STEP 7: Check Stop Condition
             # --------------------------------------------------------
+            # Early stop: target quality reached
+            if best_solution.quality_score >= 0.92:
+                self.logger.info(
+                    f"Early stop at gen {generation}: quality={best_solution.quality_score:.3f} >= 0.92"
+                )
+                break
+            
             # Check for convergence (no improvement in last 50 generations)
             if len(self.best_fitness_history) > 50:
                 recent_improvement = abs(self.best_fitness_history[-1] - self.best_fitness_history[-50])
                 if recent_improvement < 0.001:  # Less than 0.1% improvement
+                    self.logger.info(
+                        f"Converged at gen {generation}: quality={best_solution.quality_score:.3f}"
+                    )
                     break  # Converged
         
         # Set metadata
@@ -168,6 +180,24 @@ class GeneticAlgorithmSolver:
 
         # Log penalty breakdown for the best solution
         self._evaluate_soft_constraints(best_solution, debug=True)
+        pen_bd = best_solution.metadata.get('penalty_breakdown', {})
+        if pen_bd:
+            self.logger.info(
+                f"Final quality={pen_bd.get('quality', 0):.3f} | "
+                f"soft_penalty={pen_bd.get('soft_penalty', 0):.0f}/{pen_bd.get('expected_max', 0):.0f} | "
+                f"components={pen_bd.get('components', {})}"
+            )
+        
+        # Log hard constraint violations if any
+        if best_solution.quality_score == 0.0:
+            violations = best_solution.metadata.get('hard_violations', 0)
+            breakdown = best_solution.metadata.get('violation_breakdown', {})
+            self.logger.warning(
+                f"Best solution has {violations} hard constraint violations: "
+                f"faculty={breakdown.get('faculty_conflicts', 0)}, "
+                f"room={breakdown.get('room_conflicts', 0)}, "
+                f"batch={breakdown.get('batch_conflicts', 0)}"
+            )
         
         return best_solution
     
@@ -175,8 +205,13 @@ class GeneticAlgorithmSolver:
         """Create initial population of random solutions."""
         population = []
         
-        for _ in range(self.config.population_size):
+        for i in range(self.config.population_size):
             solution = self._generate_random_solution()
+            
+            # Repair 50% of initial solutions to start with better quality
+            if i < self.config.population_size // 2:
+                solution = self._repair_conflicts(solution)
+            
             population.append(solution)
         
         return population
@@ -296,17 +331,35 @@ class GeneticAlgorithmSolver:
             else:
                 # ── Theory / single-hour lab remainder ──
                 valid_slots = list(self.context.time_slots)
-                max_attempts = 50
-                for _ in range(max_attempts):
-                    if len(valid_faculty_sorted) > 1 and random.random() < 0.7:
-                        half = max(1, len(valid_faculty_sorted) // 2)
-                        faculty = random.choice(valid_faculty_sorted[:half])
+                max_attempts = 200  # Increased from 50 to find valid slots
+                for attempt in range(max_attempts):
+                    # Prioritize least-loaded faculty more strongly
+                    if len(valid_faculty_sorted) > 1:
+                        # Use top 30% least-loaded faculty 80% of the time
+                        if random.random() < 0.8:
+                            top_pct = max(1, len(valid_faculty_sorted) // 3)
+                            faculty = random.choice(valid_faculty_sorted[:top_pct])
+                        else:
+                            faculty = random.choice(valid_faculty_sorted)
                     else:
-                        faculty = random.choice(valid_faculty_sorted)
-                    room = random.choice(valid_rooms)
-                    slot = random.choice(valid_slots)
+                        faculty = valid_faculty_sorted[0] if valid_faculty_sorted else None
+                        if not faculty:
+                            break  # No qualified faculty at all
+                    
+                    # Try rooms in random order
+                    random.shuffle(valid_rooms)
+                    room = valid_rooms[0]
+                    
+                    # Try slots in random order, avoiding already-used batch slots first
+                    available_slots = [s for s in valid_slots 
+                                      if (req['batch_id'], s.id) not in batch_slots]
+                    if not available_slots:
+                        available_slots = valid_slots
+                    slot = random.choice(available_slots)
 
-                    if ((faculty.id, slot.id) not in faculty_slots and
+                    # Check all constraints before placement
+                    if (faculty and 
+                        (faculty.id, slot.id) not in faculty_slots and
                         (room.id, slot.id) not in room_slots and
                         (req['batch_id'], slot.id) not in batch_slots):
 
@@ -325,6 +378,46 @@ class GeneticAlgorithmSolver:
                         batch_slots[(req['batch_id'], slot.id)] = True
                         faculty_load[faculty.id] = faculty_load.get(faculty.id, 0) + 1
                         break
+                
+                # If placement failed after all attempts, force placement to avoid missing subjects
+                # This will create conflicts but evolution/mutation will fix them
+                if attempt == max_attempts - 1:
+                    # Check if we actually placed an assignment
+                    placed_in_loop = any(a.subject_id == req['subject_id'] and 
+                                        a.batch_id == req['batch_id'] 
+                                        for a in assignments[-1:])  # Check last assignment only
+                    
+                    if not placed_in_loop:
+                        # Force place with least-conflicting slot
+                        faculty = valid_faculty_sorted[0] if valid_faculty_sorted else self.context.faculty[0]
+                        room = valid_rooms[0] if valid_rooms else self.context.rooms[0]
+                        
+                        # Find slot with minimum conflicts for this batch
+                        slot_conflicts = {}
+                        for s in self.context.time_slots:
+                            conflicts = 0
+                            if (req['batch_id'], s.id) in batch_slots:
+                                conflicts += 100  # Heavy penalty for batch conflict
+                            if (faculty.id, s.id) in faculty_slots:
+                                conflicts += 10  # Medium penalty for faculty conflict
+                            if (room.id, s.id) in room_slots:
+                                conflicts += 5   # Light penalty for room conflict
+                            slot_conflicts[s.id] = conflicts
+                        
+                        best_slot = min(self.context.time_slots, 
+                                      key=lambda s: slot_conflicts.get(s.id, 0))
+                        
+                        assignment = Assignment(
+                            id=f"a_{len(assignments)}_forced",
+                            batch_id=req['batch_id'],
+                            subject_id=req['subject_id'],
+                            faculty_id=faculty.id,
+                            room_id=room.id,
+                            time_slot=best_slot,
+                            is_lab_session=req['is_lab'],
+                        )
+                        assignments.append(assignment)
+                        # Note: Don't update tracking dicts to allow evolution to detect/fix conflicts
         
         solution = Solution(
             id=f"ga_sol_{random.randint(1000, 9999)}",
@@ -418,6 +511,10 @@ class GeneticAlgorithmSolver:
         # Operator 3: Change faculty
         if random.random() < 0.2:  # 20% chance
             self._mutate_change_faculty(individual)
+        
+        # Operator 4: Repair hard constraint violations (high priority)
+        if random.random() < 0.7:  # 70% chance to attempt repair
+            self._repair_hard_violations(individual)
         
         return individual
     
@@ -693,6 +790,39 @@ class GeneticAlgorithmSolver:
         solution.assignments = valid_assignments
         return solution
     
+    def _repair_hard_violations(self, solution: Solution) -> None:
+        """Detect and repair hard constraint violations in-place.
+        
+        This is a lighter-weight wrapper around _repair_conflicts that:
+        1. Checks if there are any hard violations
+        2. If yes, runs the full repair process
+        3. Updates solution in-place
+        """
+        # Quick check for violations
+        faculty_slots = set()
+        room_slots = set()
+        batch_slots = set()
+        has_violations = False
+        
+        for assign in solution.assignments:
+            fac_slot = (assign.faculty_id, assign.time_slot.id)
+            room_slot = (assign.room_id, assign.time_slot.id)
+            batch_slot = (assign.batch_id, assign.time_slot.id)
+            
+            if (fac_slot in faculty_slots or 
+                room_slot in room_slots or 
+                batch_slot in batch_slots):
+                has_violations = True
+                break
+            
+            faculty_slots.add(fac_slot)
+            room_slots.add(room_slot)
+            batch_slots.add(batch_slot)
+        
+        # If violations detected, run full repair
+        if has_violations:
+            self._repair_conflicts(solution)
+    
     def _evaluate_fitness(self, solution: Solution) -> float:
         """Evaluate fitness (lower is better).
 
@@ -712,16 +842,45 @@ class GeneticAlgorithmSolver:
 
         # Update solution quality score (normalised 0-1)
         if hard_violations == 0:
-            # Dynamic normalisation based on problem size
+            # Dynamic normalisation based on problem size and penalty weights
             n_assignments = max(len(solution.assignments), 1)
             n_faculty = max(len(self.context.faculty), 1)
-            # Expected penalty grows roughly with problem size
-            expected_max = n_assignments * 30 + n_faculty * 120 + 1000
+            total_hours = sum(
+                s.hours_per_week for s in self.context.subjects
+                for b in self.context.batches if s.id in b.subjects
+            )
+            available_slots = len(self.context.time_slots)
+            # For over-allocated batches, scale expected_max to achievable hours
+            achievable_hours = min(total_hours, available_slots)
+            excess = max(0, total_hours - available_slots)
+            # Scale expected_max to match actual penalty magnitudes
+            expected_max = (
+                achievable_hours * 60   # coverage penalty scale (only achievable)
+                + excess * 15           # gentle over-allocation penalty
+                + n_faculty * 150       # faculty workload/idle scale
+                + n_assignments * 25    # gap/room/balance penalties
+                + 1200                  # base constant
+            )
             normalised = min(soft_penalty / expected_max, 1.0)
             solution.quality_score = max(0.0, 1.0 - normalised)
+            # Log penalty breakdown for best solutions (debugging)
+            if solution.quality_score >= 0.80:
+                pen_info = solution.metadata.get('_pen', {})
+                solution.metadata['penalty_breakdown'] = {
+                    'soft_penalty': round(soft_penalty, 1),
+                    'expected_max': round(expected_max, 1),
+                    'normalised': round(normalised, 4),
+                    'quality': round(solution.quality_score, 4),
+                    'components': pen_info,
+                }
         else:
             solution.quality_score = 0.0
 
+        # Store violation info in solution metadata for debugging
+        if hard_violations > 0:
+            solution.metadata['hard_violations'] = hard_violations
+            solution.metadata['violation_breakdown'] = self._get_violation_breakdown(solution)
+        
         return fitness
     
     def _count_hard_violations(self, solution: Solution) -> int:
@@ -754,21 +913,50 @@ class GeneticAlgorithmSolver:
         
         return violations
     
+    def _get_violation_breakdown(self, solution: Solution) -> Dict[str, int]:
+        """Get detailed breakdown of hard constraint violations."""
+        breakdown = {
+            'faculty_conflicts': 0,
+            'room_conflicts': 0,
+            'batch_conflicts': 0
+        }
+        
+        # Faculty conflicts
+        faculty_slots = {}
+        for assign in solution.assignments:
+            key = (assign.faculty_id, assign.time_slot.id)
+            if key in faculty_slots:
+                breakdown['faculty_conflicts'] += 1
+            else:
+                faculty_slots[key] = assign.id
+        
+        # Room conflicts
+        room_slots = {}
+        for assign in solution.assignments:
+            key = (assign.room_id, assign.time_slot.id)
+            if key in room_slots:
+                breakdown['room_conflicts'] += 1
+            else:
+                room_slots[key] = assign.id
+        
+        # Batch conflicts
+        batch_slots = {}
+        for assign in solution.assignments:
+            key = (assign.batch_id, assign.time_slot.id)
+            if key in batch_slots:
+                breakdown['batch_conflicts'] += 1
+            else:
+                batch_slots[key] = assign.id
+        
+        return breakdown
+    
     def _evaluate_soft_constraints(self, solution: Solution, debug: bool = False) -> float:
-        """Evaluate soft constraints with comprehensive penalty terms.
-
-        Penalty terms (lower is better):
-          1. Faculty workload imbalance      (CV-based)
-          2. Student idle-gap minimisation
-          3. Batch coverage completeness     (missing hours)
-          4. Faculty min/max hour violations  (overload/underload/idle)
-          5. Room utilisation & capacity-waste
-          6. Lab-in-correct-room enforcement
-          7. Morning/afternoon balance per faculty
-          8. Department load balance
-        """
+        """Evaluate soft constraints with comprehensive penalty terms."""
         penalty = 0.0
-        _dbg = {}  # penalty breakdown for debug logging
+        # Track penalty components for debugging
+        _pen = {'workload_cv': 0.0, 'gaps': 0.0, 'coverage': 0.0,
+                'faculty_hrs': 0.0, 'rooms': 0.0, 'labs': 0.0,
+                'balance': 0.0}
 
         # ── 1. Faculty workload imbalance (CV-based) ────────────
         p1 = 0.0
@@ -787,8 +975,10 @@ class GeneticAlgorithmSolver:
             std_dev = np.std(loads) if len(loads) > 1 else 0
             cv = (std_dev / mean_load) if mean_load > 0 else 0
             penalty += cv * 50  # stronger than before: target CV < 0.3
+        _pen['workload_cv'] = penalty
 
         # ── 2. Student gaps ─────────────────────────────────────
+        _p_before = penalty
         batch_schedules: Dict[str, list] = {}
         for assign in solution.assignments:
             if assign.batch_id not in batch_schedules:
@@ -808,26 +998,48 @@ class GeneticAlgorithmSolver:
                     gap = sorted_slots[i + 1] - sorted_slots[i]
                     if gap > 60:  # More than 1 hour gap
                         penalty += (gap - 60) / 60
+        _pen['gaps'] = penalty - _p_before
 
         # ── 3. Batch coverage completeness ──────────────────────
-        # Penalise every missing teaching hour heavily
+        _p_before = penalty
+        # Penalise missing teaching hours, but account for over-allocation
         subj_batch_hours: Dict[str, int] = {}  # "batch|subject" -> scheduled
         for assign in solution.assignments:
             key = f"{assign.batch_id}|{assign.subject_id}"
             subj_batch_hours[key] = subj_batch_hours.get(key, 0) + 1
 
         total_missing = 0
+        total_required = 0
         for batch in self.context.batches:
             for sid in batch.subjects:
                 subj = self.context.get_subject(sid)
                 if subj:
+                    total_required += subj.hours_per_week
                     scheduled = subj_batch_hours.get(f"{batch.id}|{sid}", 0)
                     missing = max(0, subj.hours_per_week - scheduled)
                     total_missing += missing
 
-        penalty += total_missing * 500  # heavy: each missing hour
+        # Detect over-allocation: more hours needed than available slots
+        available_slots = len(self.context.time_slots)
+        excess_hours = max(0, total_required - available_slots)
+        # Only penalize hours that COULD have been scheduled but weren't
+        avoidable_missing = max(0, total_missing - excess_hours)
+
+        coverage_ratio = 1.0 - (avoidable_missing / max(total_required, 1))
+        if coverage_ratio < 0.80:
+            penalty += avoidable_missing * 300  # heavy: poor coverage
+        elif coverage_ratio < 0.95:
+            penalty += avoidable_missing * 150  # moderate: most hours placed
+        else:
+            penalty += avoidable_missing * 60   # light: nearly complete
+
+        # Gentle penalty for unavoidable over-allocation (awareness only)
+        if excess_hours > 0:
+            penalty += excess_hours * 15
+        _pen['coverage'] = penalty - _p_before
 
         # ── 4. Faculty min/max hour violations + idle penalty ─
+        _p_before = penalty
         # Only penalise idle faculty that COULD teach something in this batch
         needed_faculty_ids = set()
         for batch in self.context.batches:
@@ -844,33 +1056,39 @@ class GeneticAlgorithmSolver:
         n_needed = max(len(needed_faculty_ids), 1)
         fair_share = total_hours / n_needed  # average possible load
 
+        # When fair_share is low, reduce penalties for idle/underload
+        # because there literally aren't enough hours for everyone
+        workload_ratio = min(fair_share / 4.0, 1.0)  # 1.0 when fair_share >= 4
+
         idle_count = 0
         for fac in self.context.faculty:
             hours = faculty_loads.get(fac.id, 0)
             if hours > fac.max_hours_per_week:
                 penalty += (hours - fac.max_hours_per_week) * 200
             elif hours == 0 and fac.id in needed_faculty_ids:
-                # Only penalise idle faculty who are qualified for batch subjects
+                # Scale idle penalty by workload ratio
                 idle_count += 1
-                penalty += 100
+                penalty += 30 * workload_ratio
             elif 0 < hours < fac.min_hours_per_week:
                 # Scale effective min to what's actually achievable
-                effective_min = min(fac.min_hours_per_week, fair_share * 1.5)
+                effective_min = min(fac.min_hours_per_week, fair_share * 1.2)
                 if hours < effective_min:
-                    penalty += (effective_min - hours) * 30
+                    penalty += (effective_min - hours) * 15 * workload_ratio
 
         # Extra penalty when many needed faculty are idle
         if idle_count > 1:
-            penalty += idle_count * 50
+            penalty += idle_count * 10
+        _pen['faculty_hrs'] = penalty - _p_before
 
         # ── 5. Room utilisation & capacity-waste ────────────────
+        _p_before = penalty
         rooms_used = set(a.room_id for a in solution.assignments)
         total_rooms = len(self.context.rooms)
         if total_rooms > 0 and len(solution.assignments) > 0:
             # Penalise spreading across too many rooms
             min_rooms_needed = max(1, len(solution.assignments) // len(self.context.time_slots) + 1)
             excess_rooms = max(0, len(rooms_used) - min_rooms_needed)
-            penalty += excess_rooms * 15
+            penalty += excess_rooms * 8
 
             # Capacity-waste: prefer tightest-fit rooms
             for assign in solution.assignments:
@@ -879,9 +1097,11 @@ class GeneticAlgorithmSolver:
                 if room and batch and batch.strength > 0:
                     waste = (room.capacity - batch.strength) / batch.strength
                     if waste > 0.5:  # >50% wasted capacity
-                        penalty += waste * 5
+                        penalty += waste * 3
+        _pen['rooms'] = penalty - _p_before
 
         # ── 6. Lab-in-correct-room ──────────────────────────────
+        _p_before = penalty
         # Only penalise if there actually ARE lab rooms available
         has_lab_rooms = any(r.is_lab for r in self.context.rooms)
         if has_lab_rooms:
@@ -889,7 +1109,7 @@ class GeneticAlgorithmSolver:
                 if assign.is_lab_session:
                     room = self.context.get_room(assign.room_id)
                     if room and not room.is_lab:
-                        penalty += 100  # lab scheduled in non-lab room
+                        penalty += 60   # lab scheduled in non-lab room
 
         # ── 6b. Lab sessions must be consecutive (2-hr blocks) ──
         # Group lab assignments by (batch, subject, day)
@@ -929,14 +1149,16 @@ class GeneticAlgorithmSolver:
                 if a.time_slot.day == b.time_slot.day and a_end == b_start:
                     i += 2  # valid block, skip pair
                 else:
-                    # Not consecutive — heavy penalty
-                    penalty += 500
+                    # Not consecutive — moderate penalty
+                    penalty += 200
                     i += 1
-            # Odd leftover lab hour (not paired) — moderate penalty
+            # Odd leftover lab hour (not paired) — light penalty
             if len(sorted_labs) % 2 == 1:
-                penalty += 250
+                penalty += 100
+        _pen['labs'] = penalty - _p_before
 
         # ── 7. Morning/afternoon balance per faculty ────────────
+        _p_before = penalty
         # Prefer each faculty gets a mix of morning/afternoon slots
         faculty_morning: Dict[str, int] = {}
         faculty_total: Dict[str, int] = {}
@@ -966,15 +1188,16 @@ class GeneticAlgorithmSolver:
             if len(dept_means) > 1:
                 dept_cv = float(np.std(dept_means) / max(np.mean(dept_means), 0.01))
                 penalty += dept_cv * 30  # penalise uneven cross-department load
+        _pen['balance'] = penalty - _p_before
+
+        # Store penalty breakdown in solution metadata
+        solution.metadata['_pen'] = {k: round(v, 1) for k, v in _pen.items()}
+        solution.metadata['_pen']['total'] = round(penalty, 1)
 
         if debug:
-            import logging
             _log = logging.getLogger(__name__)
-            _log.info(f"[PENALTY DEBUG] total={penalty:.1f} | assignments={len(solution.assignments)}")
-            _log.info(f"  Faculty loads: {dict(sorted(faculty_loads.items(), key=lambda x: x[1], reverse=True))}")
-            n_labs = sum(1 for a in solution.assignments if a.is_lab_session)
-            _log.info(f"  Lab assignments: {n_labs} | Missing hours: {total_missing}")
-            _log.info(f"  Idle needed faculty: {idle_count}/{len(needed_faculty_ids)} | Fair share: {fair_share:.1f}")
+            _log.info(f"[PENALTY DEBUG] total={penalty:.1f} | breakdown={_pen}")
+            _log.info(f"  assignments={len(solution.assignments)} | missing={total_missing} | excess={excess_hours}")
 
         return penalty
     

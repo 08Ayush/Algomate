@@ -31,13 +31,13 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import logging
 
-# Ensure project root is importable
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
+# Ensure services/optimized is importable
+_OPTIMIZED_ROOT = Path(__file__).resolve().parents[1]  # services/optimized
+if str(_OPTIMIZED_ROOT) not in sys.path:
+    sys.path.insert(0, str(_OPTIMIZED_ROOT))
 
 # Optimized module imports
 from core.config import EnsembleConfig, get_config, SolverConfig
@@ -62,19 +62,19 @@ class GenerateRequest(BaseModel):
     Accepts both the proxy format (cpsat_time_limit, ga_generations, etc.)
     and direct format (solver_timeout, voting_strategy) for flexibility.
     """
-    batch_id: str
-    college_id: str
-    user_id: str
+    batch_id: str = Field(..., example="abbdd58e-f543-4e82-acbf-e813df03e23c", description="Batch UUID")
+    college_id: str = Field(..., example="c25be3d2-4b6d-4373-b6de-44a4e2a2508f", description="College UUID")
+    user_id: str = Field(..., example="550e8400-e29b-41d4-a716-446655440000", description="User UUID")
     # Direct format
-    solver_timeout: Optional[int] = None
-    voting_strategy: Optional[str] = "weighted"
+    solver_timeout: Optional[int] = Field(None, example=300, description="Solver timeout in seconds")
+    voting_strategy: Optional[str] = Field("weighted", example="weighted", description="Ensemble voting strategy")
     # Proxy format (from Next.js /api/scheduler/generate)
-    cpsat_time_limit: Optional[int] = None
-    ga_generations: Optional[int] = None
-    population_size: Optional[int] = None
-    strategy: Optional[str] = None
+    cpsat_time_limit: Optional[int] = Field(None, example=300)
+    ga_generations: Optional[int] = Field(None, example=100)
+    population_size: Optional[int] = Field(None, example=50)
+    strategy: Optional[str] = Field(None, example="weighted")
     # ETL pipeline flag
-    use_etl: bool = True
+    use_etl: bool = Field(True, example=True, description="Use ETL pipeline (recommended)")
 
     @property
     def effective_timeout(self) -> int:
@@ -84,10 +84,10 @@ class GenerateRequest(BaseModel):
 
 class MultiBatchRequest(BaseModel):
     """Request body for multi-batch timetable generation."""
-    batch_ids: List[str]
-    college_id: str
-    user_id: str
-    solver_timeout: Optional[int] = 300
+    batch_ids: List[str] = Field(..., example=["abbdd58e-f543-4e82-acbf-e813df03e23c"], description="List of batch UUIDs")
+    college_id: str = Field(..., example="c25be3d2-4b6d-4373-b6de-44a4e2a2508f", description="College UUID")
+    user_id: str = Field(..., example="550e8400-e29b-41d4-a716-446655440000", description="User UUID")
+    solver_timeout: Optional[int] = Field(300, example=300, description="Solver timeout in seconds")
 
 
 class GenerateResponse(BaseModel):

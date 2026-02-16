@@ -25,6 +25,11 @@ from typing import Optional, Callable, Dict, Any, List
 from core.models import Solution, Assignment
 from core.context import SchedulingContext, InstitutionConfig
 from core.config import EnsembleConfig, SolverConfig, get_config
+from config.adaptive_config import (
+    get_adaptive_solver_config,
+    validate_batch_schedulability,
+    calculate_batch_complexity,
+)
 from ensemble.coordinator import EnsembleCoordinator
 from solvers.hybrid_ga_cpsat import HybridGACPSATSolver
 from storage.supabase_client import SupabaseSchedulerClient
@@ -175,6 +180,10 @@ class OptimizedOrchestrator:
             solution.metadata["user_id"] = user_id
             solution.metadata["academic_year"] = domain_data.get("academic_year", "2025-26")
             solution.metadata["semester"] = domain_data.get("semester", 1)
+            # Pass subject credits for accurate credit_hour_number in DB
+            solution.metadata["subject_credits_map"] = {
+                s.id: s.credits for s in context.subjects
+            }
 
             # ── Step 5: Save results ──────────────────────────────
             timetable_id = None
@@ -294,50 +303,149 @@ class OptimizedOrchestrator:
 
     def _run_solver(self, context: SchedulingContext, timeout: int) -> Solution:
         """
-        Run the ensemble solver or fall back to HybridGACPSATSolver.
+        Run the solver with adaptive configuration for 0.9+ quality.
 
-        The EnsembleCoordinator orchestrates multiple solvers and picks
-        the best solution via weighted voting.
+        The system automatically:
+        1. Validates batch is schedulable
+        2. Calculates optimal GA parameters based on complexity
+        3. Creates solver with correct config (bypassing broken ensemble layer)
+        4. Runs solver with tuned timeout
+        5. Validates result quality
         """
-        self.logger.info("Initializing solver...")
+        self.logger.info("Initializing solver with adaptive configuration...")
+
+        # Step 1: Validate batch schedulability
+        is_schedulable, reason, estimated_quality = validate_batch_schedulability(
+            subjects=context.subjects,
+            faculty=context.faculty,
+            rooms=context.rooms,
+            time_slots=context.time_slots,
+            min_quality_required=0.90
+        )
+        
+        if not is_schedulable:
+            self.logger.warning(f"Batch validation warning: {reason}")
+            self.logger.warning(
+                f"Proceeding anyway, but quality may be < 0.90 (estimated: {estimated_quality:.2f})"
+            )
+        else:
+            self.logger.info(f"✓ Batch validation passed: {reason}")
+        
+        # Step 2: Calculate adaptive configuration
+        adaptive_config = get_adaptive_solver_config(
+            subjects=context.subjects,
+            faculty=context.faculty,
+            rooms=context.rooms,
+            time_slots=context.time_slots
+        )
+        
+        complexity_info = adaptive_config["batch_complexity"]
+        ga_params = adaptive_config["ga"]
+        
+        self.logger.info(
+            f"Batch complexity: score={complexity_info['score']:.1f}/100, "
+            f"difficulty={complexity_info['difficulty']}, "
+            f"utilization={complexity_info['slot_utilization']:.1%}"
+        )
+
+        # Step 3: Create GAConfig with adaptive parameters
+        from solvers.genetic_algorithm import GAConfig
+        
+        adaptive_ga_config = GAConfig(
+            population_size=ga_params['population_size'],
+            generations=ga_params['generations'],
+            mutation_rate=ga_params['mutation_rate'],
+            crossover_rate=ga_params['crossover_rate'],
+            tournament_size=ga_params['tournament_size'],
+            elite_size=ga_params['elitism_count'],
+            timeout=ga_params['timeout'],
+        )
+        
+        solver_timeout = ga_params['timeout']
+        
+        self.logger.info(
+            f"Adaptive GA config: pop={adaptive_ga_config.population_size}, "
+            f"gen={adaptive_ga_config.generations}, "
+            f"mutation={adaptive_ga_config.mutation_rate:.2f}, "
+            f"timeout={solver_timeout}s"
+        )
 
         try:
-            coordinator = EnsembleCoordinator(context, self.config)
-            self.logger.info(
-                f"Running EnsembleCoordinator (voting={self.config.voting_strategy})"
-            )
-            solution = coordinator.solve()
-
-            if solution is None:
-                raise RuntimeError("EnsembleCoordinator returned None")
-
-            # Normalise to Solution if SolverResult was returned
-            if not isinstance(solution, Solution):
-                solution = Solution(
-                    assignments=getattr(solution, "assignments", []),
-                    quality_score=getattr(solution, "quality_score", 0.0),
-                    solver_name=getattr(solution, "solver_name", "ensemble"),
-                    execution_time=getattr(solution, "execution_time", 0.0),
-                )
-
-            self.logger.info(
-                f"Solver finished: solver={solution.solver_name}, "
-                f"score={solution.quality_score:.3f}, "
-                f"assignments={len(solution.assignments)}"
-            )
-            return solution
-
-        except Exception as exc:
-            self.logger.warning(f"Ensemble failed ({exc}), falling back to HybridGACPSAT")
+            # Step 4: Create HybridGACPSATSolver with proper GAConfig
             solver = HybridGACPSATSolver(
                 context=context,
                 config=SolverConfig(
                     name="hybrid_ga_cpsat",
                     enabled=True,
-                    timeout_seconds=timeout,
+                    timeout_seconds=solver_timeout,
                 ),
+                ga_config=adaptive_ga_config,
             )
-            return solver.solve(timeout=timeout)
+            
+            self.logger.info(
+                f"Running HybridGACPSATSolver (timeout={solver_timeout}s)"
+            )
+            
+            solution = solver.solve(timeout=solver_timeout)
+
+            if solution is None:
+                raise RuntimeError("Solver returned None")
+
+            # Normalize to Solution if SolverResult was returned
+            if not isinstance(solution, Solution):
+                solution = Solution(
+                    assignments=getattr(solution, "assignments", []),
+                    quality_score=getattr(solution, "quality_score", 0.0),
+                    solver_name=getattr(solution, "solver_name", "hybrid_ga_cpsat"),
+                    execution_time=getattr(solution, "execution_time", 0.0),
+                )
+
+            # Step 5: Validate result quality
+            actual_quality = solution.quality_score
+            target_quality = complexity_info['expected_quality']
+            
+            if actual_quality >= 0.90:
+                self.logger.info(
+                    f"✓ SUCCESS: Achieved {actual_quality:.3f} quality (target: 0.90+)"
+                )
+            elif actual_quality >= 0.80:
+                self.logger.info(
+                    f"✓ ACCEPTABLE: Achieved {actual_quality:.3f} quality "
+                    f"(difficulty: {complexity_info['difficulty']}, "
+                    f"utilization: {complexity_info['slot_utilization']:.1%})"
+                )
+            else:
+                self.logger.warning(
+                    f"⚠ LOW QUALITY: Achieved {actual_quality:.3f} "
+                    f"(expected: {target_quality:.2f}, "
+                    f"difficulty: {complexity_info['difficulty']}, "
+                    f"utilization: {complexity_info['slot_utilization']:.1%}). "
+                    f"Check: faculty assignments, room availability, subject count."
+                )
+
+            self.logger.info(
+                f"Solver finished: score={solution.quality_score:.3f}, "
+                f"assignments={len(solution.assignments)}, "
+                f"solver={solution.solver_name}"
+            )
+            # Log penalty breakdown for debugging
+            pen_bd = solution.metadata.get('penalty_breakdown', {})
+            if pen_bd:
+                self.logger.info(
+                    f"Penalty breakdown: soft={pen_bd.get('soft_penalty', 0):.0f}/"
+                    f"{pen_bd.get('expected_max', 0):.0f} | "
+                    f"components={pen_bd.get('components', {})}"
+                )
+            return solution
+
+        except Exception as exc:
+            self.logger.warning(f"Primary solver failed ({exc}), falling back to direct GA")
+            from solvers.genetic_algorithm import GeneticAlgorithmSolver
+            fallback_solver = GeneticAlgorithmSolver(
+                context=context,
+                config=adaptive_ga_config,
+            )
+            return fallback_solver.solve(timeout=solver_timeout)
 
     # ------------------------------------------------------------------
     # ETL-powered pipeline
@@ -448,6 +556,10 @@ class OptimizedOrchestrator:
             solution.metadata["user_id"] = user_id
             solution.metadata["academic_year"] = domain_data.get("academic_year", "2025-26")
             solution.metadata["semester"] = domain_data.get("semester", 1)
+            # Pass subject credits for accurate credit_hour_number in DB
+            solution.metadata["subject_credits_map"] = {
+                s.id: s.credits for s in context.subjects
+            }
 
             # ── Step 5: ETL Load ──────────────────────────────────
             timetable_id = None

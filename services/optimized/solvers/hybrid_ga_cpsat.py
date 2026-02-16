@@ -47,10 +47,10 @@ class HybridGACPSATSolver:
     def solve(
         self,
         timeout: int = 300,
-        ga_ratio: float = 0.4,
+        ga_ratio: float = 0.85,
         use_ml_guidance: bool = True
     ) -> Solution:
-        """Solve using hybrid GA→CP-SAT pipeline.
+        """Solve using hybrid GA→refinement pipeline.
         
         Args:
             timeout: Total timeout in seconds
@@ -63,26 +63,17 @@ class HybridGACPSATSolver:
         start_time = time.time()
         total_timeout = timeout
         
-        # Calculate timeouts
-        ga_timeout = int(total_timeout * ga_ratio)
-        cpsat_timeout = int(total_timeout * (1 - ga_ratio))
+        # Give most time to GA (the actual solver), minimal for refinement
+        ga_timeout = max(int(total_timeout * ga_ratio), total_timeout - 5)
         
-        logger.info("="*70)
-        logger.info("HYBRID GA+CPSAT SOLVER STARTED")
-        logger.info(f"Total timeout: {total_timeout}s (GA: {ga_timeout}s, CP-SAT: {cpsat_timeout}s)")
-        logger.info("="*70)
+        logger.info("="*60)
+        logger.info(f"HYBRID SOLVER STARTED (timeout={total_timeout}s, GA={ga_timeout}s)")
+        logger.info(f"  GA config: pop={self.ga_solver.config.population_size}, "
+                     f"gen={self.ga_solver.config.generations}, "
+                     f"mutation={self.ga_solver.config.mutation_rate:.2f}")
+        logger.info("="*60)
         
-        # Phase 1: Genetic Algorithm Exploration
-        logger.info("\n[PHASE 1] Genetic Algorithm Exploration")
-        logger.info("-" * 70)
-        
-        # Optional: ML-guided initialization
-        if use_ml_guidance and self.ml_predictor and self.ml_predictor.is_fitted:
-            logger.info("Using ML-guided population initialization...")
-            initial_population = self._generate_ml_guided_population()
-            # Note: Would need to add set_population method to GA solver
-            # For now, GA generates its own population
-        
+        # Phase 1: Genetic Algorithm (main solver)
         ga_start = time.time()
         ga_solution = self.ga_solver.solve(timeout=ga_timeout)
         ga_time = time.time() - ga_start
@@ -91,137 +82,56 @@ class HybridGACPSATSolver:
         logger.info(f"  Quality: {ga_solution.quality_score:.4f}")
         logger.info(f"  Assignments: {len(ga_solution.assignments)}")
         
-        # Check if ML prediction suggests we're already good enough
-        if use_ml_guidance and self.ml_predictor and self.ml_predictor.is_fitted:
-            # predict() expects a single solution
-            predicted_quality, confidence = self.ml_predictor.predict(ga_solution)
-            logger.info(f"  ML Prediction: {predicted_quality:.4f} (confidence: {confidence:.4f})")
-            
-            # If ML predicts high quality and we're confident, reduce CP-SAT time
-            if predicted_quality > 0.92 and confidence > 0.85:
-                cpsat_timeout = int(cpsat_timeout * 0.5)
-                logger.info(f"  → Reducing CP-SAT timeout to {cpsat_timeout}s (already high quality)")
+        # Phase 2: Quick refinement pass if time remains and quality is decent
+        remaining_time = total_timeout - (time.time() - start_time)
+        refined_solution = ga_solution
         
-        # Phase 2: CP-SAT Refinement (Simulated - would need actual CP-SAT implementation)
-        logger.info(f"\n[PHASE 2] CP-SAT Refinement (warm start from GA)")
-        logger.info("-" * 70)
+        if remaining_time > 3 and ga_solution.quality_score > 0.0 and ga_solution.quality_score < 0.95:
+            logger.info(f"[PHASE 2] Quick refinement ({remaining_time:.0f}s remaining)")
+            # Run a second short GA pass with the best solution's config
+            # to squeeze out extra quality
+            try:
+                import copy
+                refinement_ga = GeneticAlgorithmSolver(
+                    context=self.context,
+                    config=GAConfig(
+                        population_size=max(30, self.ga_solver.config.population_size // 3),
+                        generations=min(200, self.ga_solver.config.generations // 2),
+                        mutation_rate=min(0.25, self.ga_solver.config.mutation_rate * 1.5),
+                        crossover_rate=0.9,
+                        tournament_size=3,
+                        elite_size=3,
+                        timeout=int(remaining_time) - 1,
+                    )
+                )
+                refined_solution = refinement_ga.solve(timeout=int(remaining_time) - 1)
+                
+                # Keep the better solution
+                if refined_solution.quality_score < ga_solution.quality_score:
+                    refined_solution = ga_solution
+                    
+                logger.info(f"  Refinement quality: {refined_solution.quality_score:.4f} "
+                           f"(was {ga_solution.quality_score:.4f})")
+            except Exception as e:
+                logger.warning(f"  Refinement failed: {e}, using GA result")
+                refined_solution = ga_solution
         
-        cpsat_start = time.time()
-        
-        # In a real implementation, you would:
-        # 1. Convert GA solution to CP-SAT variables
-        # 2. Use as initial solution (warm start)
-        # 3. Run CP-SAT with reduced search space
-        #
-        # For now, we simulate refinement by copying and adding metadata
-        
-        refined_solution = self._simulate_cpsat_refinement(
-            ga_solution,
-            timeout=cpsat_timeout
-        )
-        
-        cpsat_time = time.time() - cpsat_start
-        
-        logger.info(f"✓ CP-SAT completed in {cpsat_time:.2f}s")
-        logger.info(f"  Quality: {refined_solution.quality_score:.4f}")
-        logger.info(f"  Improvement: {refined_solution.quality_score - ga_solution.quality_score:.4f}")
-        
-        # Add comprehensive metadata
+        # Add metadata
         total_time = time.time() - start_time
         refined_solution.solver_name = "hybrid_ga_cpsat"
         refined_solution.metadata['hybrid'] = {
             'ga_quality': float(ga_solution.quality_score),
             'ga_time': ga_time,
-            'cpsat_quality': float(refined_solution.quality_score),
-            'cpsat_time': cpsat_time,
+            'final_quality': float(refined_solution.quality_score),
             'total_time': total_time,
             'improvement': float(refined_solution.quality_score - ga_solution.quality_score),
             'ga_generations': ga_solution.metadata.get('ga', {}).get('generations', 0),
-            'ml_guided': use_ml_guidance and self.ml_predictor is not None
         }
         
-        if self.ml_predictor and self.ml_predictor.is_fitted:
-            predicted_quality, confidence = self.ml_predictor.predict(refined_solution)
-            refined_solution.metadata['hybrid']['ml_prediction'] = {
-                'predicted_quality': float(predicted_quality),
-                'confidence': float(confidence)
-            }
-        
-        logger.info("\n" + "="*70)
-        logger.info("HYBRID OPTIMIZATION COMPLETE")
-        logger.info(f"Final Quality: {refined_solution.quality_score:.4f}")
-        logger.info(f"Total Time: {total_time:.2f}s")
-        logger.info("="*70 + "\n")
+        logger.info(f"HYBRID SOLVER COMPLETE: quality={refined_solution.quality_score:.4f}, "
+                     f"time={total_time:.1f}s, assignments={len(refined_solution.assignments)}")
         
         return refined_solution
-    
-    def _generate_ml_guided_population(self, size: int = 100) -> list:
-        """Generate initial population guided by ML predictions.
-        
-        Args:
-            size: Population size
-            
-        Returns:
-            List of solutions predicted to be high quality
-        """
-        logger.info(f"Generating ML-guided population of size {size}...")
-        
-        # Generate diverse candidates (3x size for selection)
-        candidates = []
-        for _ in range(size * 3):
-            solution = self.ga_solver._generate_random_solution()
-            candidates.append(solution)
-        
-        # Predict quality for all candidates at once (more efficient)
-        try:
-            results = self.ml_predictor.predict_batch(candidates)  # Use predict_batch for lists
-            predictions = [quality for quality, confidence in results]
-        except Exception as e:
-            logger.warning(f"ML prediction failed: {e}, using random selection")
-            predictions = [random.random() for _ in range(len(candidates))]
-        
-        # Select top-rated solutions
-        import numpy as np
-        sorted_indices = np.argsort(predictions)[-size:]
-        selected = [candidates[i] for i in sorted_indices]
-        
-        avg_predicted = np.mean([predictions[i] for i in sorted_indices])
-        logger.info(f"Selected {size} solutions with avg predicted quality: {avg_predicted:.4f}")
-        
-        return selected
-    
-    def _simulate_cpsat_refinement(
-        self,
-        ga_solution: Solution,
-        timeout: int
-    ) -> Solution:
-        """Simulate CP-SAT refinement (placeholder for actual CP-SAT).
-        
-        In production, this would:
-        1. Convert GA solution to CP-SAT warm start
-        2. Run CP-SAT with reduced search space
-        3. Return optimized solution
-        
-        Args:
-            ga_solution: Solution from GA to refine
-            timeout: CP-SAT timeout
-            
-        Returns:
-            Refined solution
-        """
-        import copy
-        
-        # For now, simulate refinement by copying solution
-        # In real implementation, would run actual CP-SAT solver here
-        refined = copy.deepcopy(ga_solution)
-        
-        # Simulate small improvement (in reality, CP-SAT would optimize)
-        refined.quality_score = min(1.0, ga_solution.quality_score * 1.05)
-        
-        logger.info("Note: CP-SAT refinement currently simulated")
-        logger.info("      In production, would run actual CP-SAT with warm start")
-        
-        return refined
     
     def get_performance_stats(self) -> dict:
         """Get performance statistics.

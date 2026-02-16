@@ -171,9 +171,62 @@ class Transformer:
                 )
                 report.unicode_fixes += 1
 
-            hours = (
-                bs.get("required_hours_per_week")
-                or sub_data.get("hours_per_week", 3)
+            # ── Step 1: Lab detection (must happen before hours calc) ──
+            # Check DB columns first: requires_lab, subject_type,
+            # is_lab (legacy). Then heuristic from name/code.
+            db_is_lab = bool(
+                sub_data.get("requires_lab", False)
+                or sub_data.get("is_lab", False)
+                or (sub_data.get("subject_type", "").upper() in ("LAB", "PRACTICAL"))
+                or (sub_data.get("lab_hours") and int(sub_data.get("lab_hours", 0)) > 0)
+            )
+            if not db_is_lab:
+                name_lower = cleaned_name.lower()
+                code_val = (sub_data.get("code") or "").strip()
+                db_is_lab = (
+                    " lab" in name_lower
+                    or name_lower.endswith(" lab")
+                    or "workshop" in name_lower
+                    or "practical" in name_lower
+                    or (len(code_val) >= 2 and code_val[-1].upper() == "P")
+                )
+
+            # ── Step 2: Resolve credits ──────────────────────────
+            # Priority: credits_per_week (actual intended hours) > credit_value (NEP computed)
+            raw_credits = (
+                sub_data.get("credits_per_week")  # Primary: user's intended credit hours
+                or sub_data.get("credit_value")    # Fallback: NEP 2020 computed value
+                or sub_data.get("credits")         # Legacy compat
+                or 0
+            )
+            credits = int(float(raw_credits))
+
+            # ── Step 3: Credit-based hours calculation ───────────
+            # Core rule: 1 credit = 1 class/hour per week for ALL subjects.
+            # Labs are still flagged (is_lab=True) for room assignment
+            # and consecutive-block scheduling, but do NOT get extra
+            # hours.  Total scheduled classes == total credits.
+            #
+            # If credits > 0, always apply the 1:1 rule.
+            # Fall back to required_hours_per_week / weekly_hours
+            # only when credits is missing or zero.
+            rhpw = bs.get("required_hours_per_week")
+            if credits > 0:
+                hours = credits  # 1 credit = 1 hour for ALL subjects
+            else:
+                hours = int(
+                    rhpw
+                    or sub_data.get("weekly_hours")
+                    or sub_data.get("hours_per_week")
+                    or 3
+                )
+
+            logger.debug(
+                f"Subject '{cleaned_name}' ({sid[:8]}): "
+                f"cpw={sub_data.get('credits_per_week')}, "
+                f"cv={sub_data.get('credit_value')}, "
+                f"resolved_credits={credits}, is_lab={db_is_lab}, "
+                f"hours_per_week={hours}, rhpw={rhpw}"
             )
 
             # Build required_qualifications — if the DB has none, derive
@@ -190,27 +243,11 @@ class Transformer:
                 derived.append(sid)
                 raw_req_quals = derived
 
-            # ── Heuristic lab detection ───────────────────────
-            # Many DBs don't carry an is_lab column; detect from
-            # subject name ("Lab", "Workshop", "Practical") or
-            # NEP code suffix 'P' (e.g. 24DS603P = practical).
-            db_is_lab = bool(sub_data.get("is_lab", False))
-            if not db_is_lab:
-                name_lower = cleaned_name.lower()
-                code_val = (sub_data.get("code") or "").strip()
-                db_is_lab = (
-                    " lab" in name_lower
-                    or name_lower.endswith(" lab")
-                    or "workshop" in name_lower
-                    or "practical" in name_lower
-                    or (len(code_val) >= 2 and code_val[-1].upper() == "P")
-                )
-
             subj = Subject(
                 id=sid,
                 name=cleaned_name,
                 code=sub_data.get("code", ""),
-                credits=int(sub_data.get("credits", 3)),
+                credits=credits,
                 hours_per_week=int(hours),
                 is_lab=db_is_lab,
                 is_elective=bool(sub_data.get("is_elective", False)),

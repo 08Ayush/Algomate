@@ -156,7 +156,10 @@ class SupabaseSchedulerClient:
 
         # 3. Faculty – assigned first, then qualified
         faculty_dict: Dict[str, dict] = {}
+        # Build qualification map: faculty_id -> [subject_ids they can teach]
+        faculty_qualifications_map: Dict[str, List[str]] = {}
 
+        # 3a. Add assigned faculty from batch_subjects.assigned_faculty_id
         if assigned_faculty_map:
             assigned_ids = list(set(assigned_faculty_map.values()))
             assigned_rows = (
@@ -167,7 +170,14 @@ class SupabaseSchedulerClient:
             ).data or []
             for u in assigned_rows:
                 faculty_dict[u["id"]] = u
+            
+            # Build qualifications from assigned_faculty_map
+            for subject_id, faculty_id in assigned_faculty_map.items():
+                if faculty_id not in faculty_qualifications_map:
+                    faculty_qualifications_map[faculty_id] = []
+                faculty_qualifications_map[faculty_id].append(subject_id)
 
+        # 3b. Add qualified faculty from faculty_qualified_subjects table
         if subject_ids:
             qual_rows = (
                 self.client.table("faculty_qualified_subjects")
@@ -178,9 +188,25 @@ class SupabaseSchedulerClient:
             for fq in qual_rows:
                 if fq.get("users") and fq["users"]["id"] not in faculty_dict:
                     faculty_dict[fq["users"]["id"]] = fq["users"]
+                
+                # Add to qualifications map
+                fac_id = fq.get("faculty_id")
+                sub_id = fq.get("subject_id")
+                if fac_id and sub_id:
+                    if fac_id not in faculty_qualifications_map:
+                        faculty_qualifications_map[fac_id] = []
+                    if sub_id not in faculty_qualifications_map[fac_id]:
+                        faculty_qualifications_map[fac_id].append(sub_id)
 
-        faculty = [self._map_faculty(u) for u in faculty_dict.values()]
+        # 3c. Map faculty and inject qualifications
+        faculty = [
+            self._map_faculty(u, faculty_qualifications_map.get(u["id"], []))
+            for u in faculty_dict.values()
+        ]
         self.logger.info(f"Faculty: {len(faculty)} available")
+        # Log qualification stats
+        qual_counts = {f.name: len(f.qualifications) for f in faculty}
+        self.logger.info(f"Faculty qualifications: {qual_counts}")
 
         # 4. Classrooms
         classrooms_rows = (
@@ -394,6 +420,8 @@ class SupabaseSchedulerClient:
             return timetable_id
 
         # 2. scheduled_classes
+        # Look up actual credits from solution metadata (populated by orchestrator)
+        credits_map = (solution.metadata or {}).get("subject_credits_map", {})
         records = []
         for asgn in solution.assignments:
             records.append({
@@ -404,7 +432,7 @@ class SupabaseSchedulerClient:
                 "faculty_id": asgn.faculty_id,
                 "classroom_id": asgn.room_id,
                 "time_slot_id": asgn.time_slot.id,
-                "credit_hour_number": 1,
+                "credit_hour_number": credits_map.get(asgn.subject_id, 1),
                 "class_type": "LAB" if asgn.is_lab_session else "THEORY",
             })
 
@@ -522,7 +550,7 @@ class SupabaseSchedulerClient:
         )
 
     @staticmethod
-    def _map_faculty(row: dict) -> Faculty:
+    def _map_faculty(row: dict, qualifications: List[str] = None) -> Faculty:
         return Faculty(
             id=row["id"],
             name=row.get("full_name", row.get("name", "")),
@@ -532,7 +560,7 @@ class SupabaseSchedulerClient:
             min_hours_per_week=row.get("min_hours_per_week", 12),
             preferred_time_slots=row.get("preferred_time_slots", []),
             unavailable_slots=row.get("unavailable_slots", []),
-            qualifications=row.get("qualifications", []),
+            qualifications=qualifications if qualifications is not None else row.get("qualifications", []),
             rank_weight=row.get("rank_weight", 1.0),
         )
 

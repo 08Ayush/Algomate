@@ -67,31 +67,59 @@ SCHEDULER_CONFIG_PATH=config.json
 ### Run API Server
 
 ```bash
-# Development
-uvicorn api.routes:app --reload --port 8000
+# Method 1: Using the server entry point (recommended)
+cd ../../  # Go to project root (academic_campass_2025)
+python services/optimized/api/server.py
+
+# Method 2: Using uvicorn directly
+cd services/optimized
+uvicorn api.routes:app --reload --port 8001
 
 # Production
-uvicorn api.routes:app --host 0.0.0.0 --port 8000 --workers 4
+cd services/optimized
+uvicorn api.routes:app --host 0.0.0.0 --port 8001 --workers 4
 ```
 
 ### API Usage
 
+**Important**: Get your actual IDs from the database first:
+```sql
+-- Get a valid user_id
+SELECT id FROM users LIMIT 1;
+
+-- Get your batch_id
+SELECT id, name FROM batches WHERE college_id = 'your-college-id';
+
+-- Get your college_id
+SELECT id, name FROM colleges LIMIT 1;
+```
+
+Then use these actual UUIDs in your API requests:
+
 ```bash
 # Health check
-curl http://localhost:8000/
+curl http://localhost:8001/health
 
-# Generate schedule
-curl -X POST http://localhost:8000/schedule \
+# Generate schedule (replace with YOUR actual UUIDs from database)
+curl -X POST http://localhost:8001/generate \
   -H "Content-Type: application/json" \
   -d '{
-    "institution_id": "inst_123",
-    "semester": 1,
-    "year": 2026
+    "batch_id": "abbdd58e-f543-4e82-acbf-e813df03e23c",
+    "college_id": "c25be3d2-4b6d-4373-b6de-44a4e2a2508f",
+    "user_id": "YOUR-ACTUAL-USER-ID-FROM-USERS-TABLE"
   }'
 
 # Get configuration
-curl http://localhost:8000/config
+curl http://localhost:8001/config
+
+# Check task status (use the task_id returned from /generate)
+curl http://localhost:8001/status/3a4bdc35-5eea-4f05-b8d8-57a65a9361bd
+
+# Get timetable result (use the timetable_id from status response)
+curl http://localhost:8001/result/16bd1b50-9eb6-4f0f-8ff0-a3d0040fefcb
 ```
+
+**Or use the interactive Swagger UI** at http://localhost:8001/docs for easier testing.
 
 ## 🔧 Configuration
 

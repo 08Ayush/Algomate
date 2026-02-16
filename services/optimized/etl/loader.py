@@ -136,7 +136,8 @@ class Loader:
             logger.info(f"Inserted generated_timetables: {timetable_id}")
             return True
         except Exception as exc:
-            logger.error(f"FAILED inserting timetable: {exc}")
+            logger.error(f"FAILED inserting timetable: {exc}", exc_info=True)
+            print(f"\n❌ TIMETABLE INSERT ERROR: {exc}\n")  # Force to stdout
             report.add_error("insert_failed", "timetable", timetable_id, str(exc))
             return False
 
@@ -146,6 +147,8 @@ class Loader:
         solution: Solution,
         report: DataQualityReport,
     ) -> bool:
+        # Look up actual credits from solution metadata (populated by orchestrator)
+        credits_map = (solution.metadata or {}).get("subject_credits_map", {})
         records = []
         for asgn in solution.assignments:
             records.append({
@@ -156,7 +159,7 @@ class Loader:
                 "faculty_id": asgn.faculty_id,
                 "classroom_id": asgn.room_id,
                 "time_slot_id": asgn.time_slot.id,
-                "credit_hour_number": 1,
+                "credit_hour_number": credits_map.get(asgn.subject_id, 1),
                 "class_type": "LAB" if asgn.is_lab_session else "THEORY",
             })
         if not records:
@@ -171,7 +174,9 @@ class Loader:
             logger.info(f"Inserted {len(records)} scheduled_classes")
             return True
         except Exception as exc:
-            logger.error(f"FAILED inserting scheduled_classes: {exc}")
+            logger.error(f"FAILED inserting scheduled_classes: {exc}", exc_info=True)
+            print(f"\n❌ DATABASE ERROR: {exc}\n")  # Force to stdout
+            print(f"Sample record: {records[0] if records else 'no records'}")
             report.add_error("insert_failed", "scheduled_classes", timetable_id, str(exc))
             return False
 
