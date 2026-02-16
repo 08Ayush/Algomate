@@ -24,7 +24,7 @@ async function getAuthenticatedUser(request: NextRequest) {
   try {
     const userString = Buffer.from(token, 'base64').toString();
     const user = JSON.parse(userString);
-    
+
     const { data: dbUser, error } = await supabaseAdmin
       .from('users')
       .select('id, college_id, role, is_active')
@@ -46,7 +46,7 @@ async function getAuthenticatedUser(request: NextRequest) {
 // PUT - Update subject
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getAuthenticatedUser(request);
@@ -57,7 +57,7 @@ export async function PUT(
       );
     }
 
-    const subjectId = params.id;
+    const { id: subjectId } = await params;
     const body = await request.json();
     const {
       code,
@@ -170,7 +170,7 @@ export async function PUT(
 // DELETE - Delete subject
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getAuthenticatedUser(request);
@@ -181,7 +181,7 @@ export async function DELETE(
       );
     }
 
-    const subjectId = params.id;
+    const { id: subjectId } = await params;
 
     // Verify subject belongs to user's college
     const { data: existingSubject, error: fetchError } = await supabaseAdmin

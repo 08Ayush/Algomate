@@ -218,7 +218,7 @@ class HybridOrchestrator:
             self._update_task_status(task_id, "running", "Saving results")
             
             timetable_id = self._save_solution(
-                task_id, batch_id, college_id, created_by, best_chromosome, ga_stats, semester
+                task_id, batch_id, college_id, created_by, best_chromosome, ga_stats, semester, start_time
             )
             
             # Step 8: Update task to completed
@@ -277,18 +277,12 @@ class HybridOrchestrator:
         assigned_faculty_map = {}  # subject_id -> assigned_faculty_id
         assigned_lab_map = {}      # subject_id -> assigned_lab_id
         
-        filtered_count = 0
         for bs in batch_subjects_data:
             if bs.get("subjects"):
                 subject = bs["subjects"]
                 
-                # FILTERING LOGIC:
-                # Include if subject.department_id match batch or is NULL (common)
-                subj_dept_id = subject.get("department_id")
-                if subj_dept_id and subj_dept_id != department_id:
-                    # Skip this subject as it belongs to another department
-                    filtered_count += 1
-                    continue
+                # NOTE: No department filtering - subjects in batch_subjects
+                # are explicitly assigned by the admin and should all be included.
                 
                 # Add required_hours from batch_subjects to subject data
                 subject["required_hours_per_week"] = bs.get("required_hours_per_week", 3)
@@ -301,7 +295,7 @@ class HybridOrchestrator:
                 if bs.get("assigned_lab_id"):
                     assigned_lab_map[subject["id"]] = bs["assigned_lab_id"]
         
-        self.logger.info(f"Found {len(subjects)} subjects assigned to batch {batch_id} (Filtered {filtered_count} from other depts)")
+        self.logger.info(f"Found {len(subjects)} subjects assigned to batch {batch_id}")
         
         # Step 3: Get faculty - prefer assigned, fallback to qualified
         faculty_dict = {}
@@ -468,7 +462,8 @@ class HybridOrchestrator:
         created_by: str,
         chromosome: Chromosome,
         ga_stats: EvolutionStats,
-        semester: int
+        semester: int,
+        start_time: datetime = None
     ) -> str:
         """Save the best solution to database."""
         
@@ -513,7 +508,8 @@ class HybridOrchestrator:
         
         # Save algorithm metrics
         try:
-            execution_time_ms = int(ga_stats.generations_run * 100)
+            elapsed_seconds = (datetime.now() - start_time).total_seconds() if start_time else ga_stats.generations_run * 0.1
+            execution_time_ms = int(elapsed_seconds * 1000)
             self.supabase.table("algorithm_execution_metrics").insert({
                 "id": str(uuid.uuid4()),  # Explicitly provide ID to fix DB error
                 "generation_task_id": task_id,

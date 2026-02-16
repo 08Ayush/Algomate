@@ -73,6 +73,7 @@ class TaskStatusResponse(BaseModel):
     message: Optional[str] = None
     timetable_id: Optional[str] = None
     fitness_score: Optional[float] = None
+    hard_constraint_violations: Optional[int] = 0
     metrics: Optional[Dict[str, Any]] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None

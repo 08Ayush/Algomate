@@ -722,7 +722,7 @@ CREATE TABLE notifications (
     type notification_type NOT NULL,
     title VARCHAR(255) NOT NULL,
     message TEXT NOT NULL,
-    timetable_id UUID REFERENCES generated_timetables(id) ON DELETE SET NULL,
+    timetable_id UUID REFERENCES generated_timetables(id) ON DELETE CASCADE,
     batch_id UUID REFERENCES batches(id) ON DELETE CASCADE,
     -- Extended fields for comprehensive notification system
     content_type VARCHAR(50) DEFAULT NULL, -- 'timetable', 'assignment', 'announcement', 'event'
@@ -837,7 +837,7 @@ CREATE TABLE subject_allotments_permanent (
 -- Master Accepted Timetables - Published and approved timetables
 CREATE TABLE master_accepted_timetables (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    original_timetable_id UUID NOT NULL REFERENCES generated_timetables(id),
+    original_timetable_id UUID NOT NULL REFERENCES generated_timetables(id) ON DELETE CASCADE,
     college_id UUID NOT NULL REFERENCES colleges(id),
     department_id UUID NOT NULL REFERENCES departments(id),
     batch_id UUID NOT NULL REFERENCES batches(id),
@@ -882,7 +882,7 @@ CREATE TABLE master_scheduled_classes (
     college_id UUID NOT NULL REFERENCES colleges(id),
     department_id UUID NOT NULL REFERENCES departments(id),
     batch_id UUID NOT NULL REFERENCES batches(id),
-    subject_id UUID NOT NULL REFERENCES subjects(id),
+    subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
     faculty_id UUID NOT NULL REFERENCES users(id),
     classroom_id UUID NOT NULL REFERENCES classrooms(id),
     time_slot_id UUID NOT NULL REFERENCES time_slots(id),
@@ -956,7 +956,7 @@ CREATE TABLE assignment_notifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title VARCHAR(255) NOT NULL,
     description TEXT,
-    subject_id UUID REFERENCES subjects(id),
+    subject_id UUID REFERENCES subjects(id) ON DELETE SET NULL,
     batch_id UUID REFERENCES batches(id),
     department_id UUID REFERENCES departments(id),
     college_id UUID REFERENCES colleges(id),
@@ -997,7 +997,7 @@ CREATE TABLE exam_notifications (
     title VARCHAR(255) NOT NULL,
     description TEXT,
     exam_type VARCHAR(50) DEFAULT 'regular',
-    subject_id UUID REFERENCES subjects(id),
+    subject_id UUID REFERENCES subjects(id) ON DELETE SET NULL,
     batch_id UUID REFERENCES batches(id),
     department_id UUID REFERENCES departments(id),
     college_id UUID REFERENCES colleges(id),

@@ -56,7 +56,7 @@ export const POST = asyncHandler(async (request: NextRequest) => {
   }
 
   const body = await request.json();
-  const { name, code, credits, department_id, semester } = body;
+  const { name, code, credits_per_week, department_id, semester } = body;
 
   if (!name || !code || !department_id) {
     return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
@@ -68,7 +68,7 @@ export const POST = asyncHandler(async (request: NextRequest) => {
     .insert({
       name,
       code,
-      credits: credits || 4,
+      credits_per_week: credits_per_week || 3,
       department_id,
       college_id: user.college_id,
       semester: semester || 1
@@ -77,6 +77,16 @@ export const POST = asyncHandler(async (request: NextRequest) => {
     .single();
 
   if (error) {
+    console.error('Subject creation error:', error);
+
+    // Provide user-friendly error messages
+    if (error.code === '23505') {
+      return NextResponse.json({
+        success: false,
+        error: `Subject code "${code}" already exists in this college. Please use a different code.`
+      }, { status: 409 });
+    }
+
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 

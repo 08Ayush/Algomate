@@ -171,7 +171,10 @@ class FitnessCalculator:
         violations = self._check_hard_violations(chromosome)
         
         # Combine scores (penalties are negative)
+        # Add baseline 2000 to keep score positive for fully loaded batches
+        base_score = 2000.0
         total = (
+            base_score
             - gap_penalty * self.weights.minimize_gaps
             + time_pref * self.weights.preferred_time_slots
             + workload * self.weights.workload_balance

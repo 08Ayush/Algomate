@@ -217,6 +217,26 @@ const SubjectsPage: React.FC = () => {
                                         </select>
                                     </div>
                                 </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Semester</label>
+                                        <select className="w-full px-4 py-2 border rounded-lg" value={form.semester} onChange={(e) => setForm({ ...form, semester: parseInt(e.target.value) })}>
+                                            <option value={1}>Semester 1</option>
+                                            <option value={2}>Semester 2</option>
+                                            <option value={3}>Semester 3</option>
+                                            <option value={4}>Semester 4</option>
+                                            <option value={5}>Semester 5</option>
+                                            <option value={6}>Semester 6</option>
+                                            <option value={7}>Semester 7</option>
+                                            <option value={8}>Semester 8</option>
+                                        </select>
+                                    </div>
+                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                                        <select className="w-full px-4 py-2 border rounded-lg" value={form.is_active ? 'active' : 'inactive'} onChange={(e) => setForm({ ...form, is_active: e.target.value === 'active' })}>
+                                            <option value="active">Active</option>
+                                            <option value="inactive">Inactive</option>
+                                        </select>
+                                    </div>
+                                </div>
                                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
                                     <select className="w-full px-4 py-2 border rounded-lg" value={form.department_id} onChange={(e) => setForm({ ...form, department_id: e.target.value })}>
                                         <option value="">Select</option>{departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
