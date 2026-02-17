@@ -1,285 +1,99 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import { randomUUID } from 'crypto';
+import { createClient } from '@/shared/database/server';
+import { asyncHandler } from '@/shared/middleware/error-handler';
+import { authenticate } from '@/shared/middleware/auth';
 
-// Create server-side supabase client with service role key
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-);
-
-// Helper function to get user from Authorization header
-async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
+export const GET = asyncHandler(async (request: NextRequest) => {
+  const user = await authenticate(request);
+  if (!user) {
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
   }
 
-  const token = authHeader.substring(7);
-  try {
-    // Decode and verify the user token
-    const userString = Buffer.from(token, 'base64').toString();
-    const user = JSON.parse(userString);
+  const { searchParams } = new URL(request.url);
+  const collegeId = searchParams.get('college_id') || user.college_id;
+  const departmentId = searchParams.get('department_id');
 
-    // Verify user exists and is active - include department_id
-    const { data: dbUser, error } = await supabaseAdmin
-      .from('users')
-      .select('id, college_id, department_id, role, faculty_type, is_active')
-      .eq('id', user.id)
-      .eq('is_active', true)
-      .single();
+  if (!collegeId) {
+    return NextResponse.json({ success: false, error: 'College ID is required' }, { status: 400 });
+  }
 
-    if (error || !dbUser) {
-      return null;
-    }
+  const { withCacheAside } = await import('@/shared/cache/cache-helper');
+  const { redisCache } = await import('@/shared/cache/redis-cache');
 
-    // For write operations, only allow admin/college_admin/super_admin
-    if (requireAdmin && !['admin', 'college_admin', 'super_admin'].includes(dbUser.role)) {
-      return null;
-    }
+  const cacheKeyParts = [collegeId, 'subjects', 'list'];
+  if (departmentId) cacheKeyParts.push(`dept:${departmentId}`);
+  const cacheKey = redisCache.buildKey(cacheKeyParts[0], cacheKeyParts[1], cacheKeyParts[2], cacheKeyParts.slice(3).join(':') || undefined);
 
-    // For read operations, allow admin, college_admin, super_admin, and faculty with creator/publisher types
-    if (!requireAdmin) {
-      const allowedRoles = ['admin', 'college_admin', 'super_admin'];
-      const allowedFacultyTypes = ['creator', 'publisher'];
+  const subjects = await withCacheAside(
+    { key: cacheKey, ttl: 1800 },
+    async () => {
+      const supabase = createClient();
+      let query = supabase
+        .from('subjects')
+        .select(`
+          *,
+          departments (id, name, code)
+        `)
+        .eq('college_id', collegeId);
 
-      if (!allowedRoles.includes(dbUser.role) &&
-        !(dbUser.role === 'faculty' && allowedFacultyTypes.includes(dbUser.faculty_type))) {
-        return null;
+      if (departmentId) {
+        query = query.eq('department_id', departmentId);
       }
-    }
 
-    return dbUser;
-  } catch {
-    return null;
+      const { data, error } = await query.order('name');
+      if (error) throw new Error(error.message);
+      return data || [];
+    }
+  );
+
+  return NextResponse.json({ success: true, subjects });
+});
+
+export const POST = asyncHandler(async (request: NextRequest) => {
+  const user = await authenticate(request);
+  if (!user || !['admin', 'college_admin', 'super_admin'].includes(user.role)) {
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 });
   }
-}
 
-import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
+  const body = await request.json();
+  const { name, code, credits_per_week, department_id, semester } = body;
 
-// GET - Fetch subjects for authenticated user's college (and department if creator)
-export async function GET(request: NextRequest) {
-  try {
-    // Get authenticated user - allow read access for creator/publisher
-    const user = await getAuthenticatedUser(request, false);
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized. Please log in as an admin.' },
-        { status: 401 }
-      );
-    }
-
-    // Get college_id from query parameter (for super_admin) or use user's college_id
-    const { searchParams } = new URL(request.url);
-    const queryCollegeId = searchParams.get('college_id');
-
-    // Pagination
-    const { page, limit, isPaginated } = getPaginationParams(request);
-
-    let targetCollegeId = user.college_id;
-
-    // Super admin can view any college's subjects
-    if (user.role === 'super_admin' && queryCollegeId) {
-      targetCollegeId = queryCollegeId;
-    }
-
-    // Build query based on user role
-    let query = supabaseAdmin
-      .from('subjects')
-      .select(`
-        *,
-        departments:department_id (
-          id,
-          name,
-          code
-        ),
-        courses:course_id (
-          id,
-          title,
-          code
-        )
-      `, { count: 'exact' })
-      .eq('college_id', targetCollegeId);
-
-    // Filter by department for non-admin users
-    if (!['super_admin', 'admin', 'college_admin'].includes(user.role) && user.department_id) {
-      query = query.eq('department_id', user.department_id);
-    }
-
-    // Apply pagination range only if requested
-    if (isPaginated && page && limit) {
-      const { from, to } = getPaginationRange(page, limit);
-      query = query.range(from, to);
-    }
-
-    const { data: subjects, count, error } = await query
-      .order('semester')
-      .order('code');
-
-    if (error) {
-      console.error('Subjects fetch error:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch subjects' },
-        { status: 500 }
-      );
-    }
-
-    if (isPaginated && page && limit) {
-      const paginatedResult = createPaginatedResponse(subjects || [], count || 0, page, limit);
-      return NextResponse.json({
-        subjects: paginatedResult.data,
-        meta: paginatedResult.meta
-      });
-    } else {
-      return NextResponse.json({
-        subjects: subjects || [],
-        meta: { total: subjects?.length || 0 }
-      });
-    }
-
-  } catch (error: any) {
-    console.error('Subjects API error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Internal server error' },
-      { status: 500 }
-    );
+  if (!name || !code || !department_id) {
+    return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
   }
-}
 
-// POST - Create new subject
-export async function POST(request: NextRequest) {
-  try {
-    // Get authenticated user - require admin role for write operations
-    const user = await getAuthenticatedUser(request, true);
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized. Only admins can create subjects.' },
-        { status: 403 }
-      );
-    }
-
-    const body = await request.json();
-    const {
-      code,
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('subjects')
+    .insert({
       name,
-      credits_per_week,
-      semester,
+      code,
+      credits_per_week: credits_per_week || 3,
       department_id,
-      course_id,
-      nep_category,
-      subject_type,
-      description,
-      requires_lab,
-      requires_projector,
-      is_active
-    } = body;
-
-    // Debug logging
-    console.log('Received body:', JSON.stringify(body, null, 2));
-    console.log('nep_category value:', nep_category, 'type:', typeof nep_category);
-    console.log('subject_type value:', subject_type, 'type:', typeof subject_type);
-
-    // Validate required fields
-    if (!code || !name || !credits_per_week || !department_id || !nep_category) {
-      return NextResponse.json(
-        { error: 'Missing required fields: code, name, credits_per_week, department_id, nep_category' },
-        { status: 400 }
-      );
-    }
-
-    // Verify department belongs to user's college
-    const { data: department, error: deptError } = await supabaseAdmin
-      .from('departments')
-      .select('id, college_id')
-      .eq('id', department_id)
-      .eq('college_id', user.college_id)
-      .single();
-
-    if (deptError || !department) {
-      return NextResponse.json(
-        { error: 'Invalid department or access denied' },
-        { status: 403 }
-      );
-    }
-
-    // Check if subject code already exists in the same department
-    const { data: existingSubject, error: checkError } = await supabaseAdmin
-      .from('subjects')
-      .select('id')
-      .eq('code', code)
-      .eq('department_id', department_id)
-      .eq('college_id', user.college_id)
-      .maybeSingle();
-
-    // Only throw error if we found a duplicate (not if there's a query error)
-    if (existingSubject && !checkError) {
-      return NextResponse.json(
-        { error: 'Subject code already exists in this department' },
-        { status: 409 }
-      );
-    }
-
-    // Create the subject - Generate UUID explicitly
-    const subjectId = randomUUID();
-
-    const insertData = {
-      id: subjectId,
-      code,
-      name,
-      credits_per_week,
-      semester: semester || 1,
       college_id: user.college_id,
-      department_id,
-      course_id: course_id && course_id.trim() !== '' ? course_id : null,
-      subject_type: subject_type || 'THEORY',  // Delivery type enum: THEORY, LAB, PRACTICAL, TUTORIAL
-      nep_category: nep_category || 'CORE',  // NEP classification enum: MAJOR, MINOR, CORE, etc.
-      description: description || null,
-      preferred_duration: 60,
-      max_continuous_hours: 2,
-      requires_lab: requires_lab || false,
-      requires_projector: requires_projector || false,
-      is_active: is_active !== false,
-    };
+      semester: semester || 1
+    })
+    .select()
+    .single();
 
-    console.log('Insert data (matching actual DB schema):', JSON.stringify(insertData, null, 2));
+  if (error) {
+    console.error('Subject creation error:', error);
 
-    // Try to refresh Supabase schema cache
-    try {
-      await supabaseAdmin.rpc('refresh_schema_cache');
-    } catch (e) {
-      console.log('Schema cache refresh not available, continuing...');
+    // Provide user-friendly error messages
+    if (error.code === '23505') {
+      return NextResponse.json({
+        success: false,
+        error: `Subject code "${code}" already exists in this college. Please use a different code.`
+      }, { status: 409 });
     }
 
-    const { data: newSubject, error: createError } = await supabaseAdmin
-      .from('subjects')
-      .insert(insertData)
-      .select()
-      .single();
-
-    if (createError) {
-      console.error('Subject creation error:', createError);
-      return NextResponse.json(
-        { error: 'Failed to create subject' },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({
-      subject: newSubject,
-      message: 'Subject created successfully'
-    }, { status: 201 });
-
-  } catch (error: any) {
-    console.error('Create subject error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
-}
+
+  // Invalidate cache
+  const { invalidateCachePattern } = await import('@/shared/cache/cache-helper');
+  const { redisCache } = await import('@/shared/cache/redis-cache');
+  await invalidateCachePattern(redisCache.buildKey(user.college_id!, 'subjects', 'list') + '*');
+
+  return NextResponse.json({ success: true, subject: data }, { status: 201 });
+});

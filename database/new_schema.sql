@@ -449,6 +449,7 @@ CREATE TABLE batch_subjects (
     subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
     required_hours_per_week INT NOT NULL CHECK (required_hours_per_week BETWEEN 1 AND 20),
     assigned_faculty_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    assigned_lab_id UUID REFERENCES classrooms(id) ON DELETE SET NULL,
     priority_level INT DEFAULT 5 CHECK (priority_level BETWEEN 1 AND 10),
     scheduling_flexibility INT DEFAULT 5 CHECK (scheduling_flexibility BETWEEN 1 AND 10),
     can_split_sessions BOOLEAN DEFAULT TRUE,
@@ -650,19 +651,7 @@ CREATE TABLE faculty_scheduling_preferences (
     UNIQUE(faculty_id)
 );
 
--- Faculty Subject Assignments
-CREATE TABLE faculty_subject_assignments (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    faculty_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
-    batch_id UUID REFERENCES batches(id) ON DELETE CASCADE,
-    section VARCHAR(10),
-    is_primary BOOLEAN DEFAULT TRUE,
-    academic_year VARCHAR(20),
-    semester INTEGER,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(faculty_id, subject_id, batch_id, section)
-);
+
 
 -- ============================================================================
 -- 5. SUPPORTING TABLES AND ACCESS CONTROL
@@ -733,7 +722,7 @@ CREATE TABLE notifications (
     type notification_type NOT NULL,
     title VARCHAR(255) NOT NULL,
     message TEXT NOT NULL,
-    timetable_id UUID REFERENCES generated_timetables(id) ON DELETE SET NULL,
+    timetable_id UUID REFERENCES generated_timetables(id) ON DELETE CASCADE,
     batch_id UUID REFERENCES batches(id) ON DELETE CASCADE,
     -- Extended fields for comprehensive notification system
     content_type VARCHAR(50) DEFAULT NULL, -- 'timetable', 'assignment', 'announcement', 'event'
@@ -848,7 +837,7 @@ CREATE TABLE subject_allotments_permanent (
 -- Master Accepted Timetables - Published and approved timetables
 CREATE TABLE master_accepted_timetables (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    original_timetable_id UUID NOT NULL REFERENCES generated_timetables(id),
+    original_timetable_id UUID NOT NULL REFERENCES generated_timetables(id) ON DELETE CASCADE,
     college_id UUID NOT NULL REFERENCES colleges(id),
     department_id UUID NOT NULL REFERENCES departments(id),
     batch_id UUID NOT NULL REFERENCES batches(id),
@@ -893,7 +882,7 @@ CREATE TABLE master_scheduled_classes (
     college_id UUID NOT NULL REFERENCES colleges(id),
     department_id UUID NOT NULL REFERENCES departments(id),
     batch_id UUID NOT NULL REFERENCES batches(id),
-    subject_id UUID NOT NULL REFERENCES subjects(id),
+    subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
     faculty_id UUID NOT NULL REFERENCES users(id),
     classroom_id UUID NOT NULL REFERENCES classrooms(id),
     time_slot_id UUID NOT NULL REFERENCES time_slots(id),
@@ -967,7 +956,7 @@ CREATE TABLE assignment_notifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title VARCHAR(255) NOT NULL,
     description TEXT,
-    subject_id UUID REFERENCES subjects(id),
+    subject_id UUID REFERENCES subjects(id) ON DELETE SET NULL,
     batch_id UUID REFERENCES batches(id),
     department_id UUID REFERENCES departments(id),
     college_id UUID REFERENCES colleges(id),
@@ -1008,7 +997,7 @@ CREATE TABLE exam_notifications (
     title VARCHAR(255) NOT NULL,
     description TEXT,
     exam_type VARCHAR(50) DEFAULT 'regular',
-    subject_id UUID REFERENCES subjects(id),
+    subject_id UUID REFERENCES subjects(id) ON DELETE SET NULL,
     batch_id UUID REFERENCES batches(id),
     department_id UUID REFERENCES departments(id),
     college_id UUID REFERENCES colleges(id),
@@ -1128,7 +1117,7 @@ CREATE INDEX IF NOT EXISTS idx_hybrid_classes_room_slot ON scheduled_classes(cla
 CREATE INDEX IF NOT EXISTS idx_hybrid_classes_batch_slot ON scheduled_classes(batch_id, time_slot_id);
 CREATE INDEX IF NOT EXISTS idx_hybrid_metrics_task ON algorithm_execution_metrics(generation_task_id);
 CREATE INDEX IF NOT EXISTS idx_hybrid_snapshots_task_gen ON ga_population_snapshots(task_id, generation_number);
-CREATE INDEX IF NOT EXISTS idx_faculty_assignments ON faculty_subject_assignments(faculty_id, subject_id);
+
 
 -- Additional Supporting Tables Indexes
 CREATE INDEX IF NOT EXISTS idx_bucket_subjects_bucket ON bucket_subjects(bucket_id);

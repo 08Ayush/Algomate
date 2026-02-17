@@ -33,6 +33,23 @@ except ImportError:
     print("ERROR: Supabase client not installed. Run: pip install supabase")
     sys.exit(1)
 
+# Debug log file for scheduler output
+_SCHEDULER_LOG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'scheduler_debug.log')
+def _log(msg):
+    """Print and write to debug log file."""
+    print(msg, flush=True)
+    try:
+        with open(_SCHEDULER_LOG_PATH, 'a', encoding='utf-8') as f:
+            f.write(msg + '\n')
+    except:
+        pass
+
+# Clear log on import
+try:
+    with open(_SCHEDULER_LOG_PATH, 'w') as f:
+        f.write(f"=== Scheduler module loaded at {datetime.now()} ===\n")
+except:
+    pass
 
 class NEPScheduler:
     """
@@ -62,6 +79,16 @@ class NEPScheduler:
         self.faculty_availability: Dict[str, List[str]] = {}
         self.subject_faculty_map: Dict[str, str] = {}
         
+        # Batch-level assignments from batch_subjects table
+        self.batch_faculty_assignments: Dict[str, str] = {}  # subject_id -> faculty_id
+        self.batch_classroom_assignments: Dict[str, str] = {}  # subject_id -> classroom_id
+        
+        # DB-driven configuration (loaded from database)
+        self.college_config: Dict[str, Any] = {}  # From colleges table
+        self.constraint_rules: Dict[str, Dict] = {}  # rule_name -> rule from constraint_rules
+        self.faculty_prefs: Dict[str, Dict] = {}  # faculty_id -> preferences
+        self.existing_commitments: Dict[str, Dict] = {}  # slot_id -> {faculty: set, rooms: set}
+        
         # CP-SAT Variables
         self.start_vars: Dict[str, cp_model.IntVar] = {}
         self.room_vars: Dict[str, cp_model.IntVar] = {}
@@ -81,32 +108,84 @@ class NEPScheduler:
             True if data fetched successfully, False otherwise
         """
         try:
-            print(f"📥 Fetching data for batch: {batch_id}")
+            # 1. Fetch Batch info FIRST to get department_id for filtering
+            batch_response = self.supabase.table('batches') \
+                .select('college_id, department_id') \
+                .eq('id', batch_id) \
+                .single() \
+                .execute()
             
-            # 1. Fetch Elective Buckets for this batch
-            buckets_response = self.supabase.table('elective_buckets') \
+            if not batch_response.data:
+                print(f"[ERROR] Batch {batch_id} not found")
+                return False
+                
+            college_id = batch_response.data['college_id']
+            batch_department_id = batch_response.data.get('department_id')
+            
+            # 1b. Fetch College Config (working days, breaks, class duration)
+            college_response = self.supabase.table('colleges') \
+                .select('*') \
+                .eq('id', college_id) \
+                .single() \
+                .execute()
+            
+            if college_response.data:
+                c = college_response.data
+                self.college_config = {
+                    'working_days': c.get('working_days', ['Monday','Tuesday','Wednesday','Thursday','Friday']),
+                    'start_time': c.get('college_start_time', '08:00'),
+                    'end_time': c.get('college_end_time', '18:00'),
+                    'class_duration': c.get('default_class_duration', 60),
+                    'break_duration': c.get('break_duration', 15),
+                    'lunch_duration': c.get('lunch_duration', 60),
+                }
+                print(f"[OK] College config: {len(self.college_config['working_days'])} working days, "
+                      f"{self.college_config['class_duration']}min classes, "
+                      f"{self.college_config['break_duration']}min breaks")
+            
+            start_pref = batch_response.data.get('preferred_start_time') or self.college_config.get('start_time', '08:00')
+            end_pref = batch_response.data.get('preferred_end_time') or self.college_config.get('end_time', '18:00')
+            
+            print(f"[INFO] Batch Department ID: {batch_department_id}")
+            print(f"[INFO] Batch Hours: {start_pref} - {end_pref}")
+
+            # 2. Fetch subjects assigned to this batch via batch_subjects
+            batch_subjects_response = self.supabase.table('batch_subjects') \
                 .select('*, subjects(*)') \
                 .eq('batch_id', batch_id) \
                 .execute()
             
-            if not buckets_response.data:
-                print("⚠️ No elective buckets found for this batch")
+            if not batch_subjects_response.data:
+                print("[ERROR] No subjects found in batch_subjects for this batch")
                 return False
-                
-            # Process buckets and their subjects
-            for bucket in buckets_response.data:
-                bucket_subjects = []
-                
-                # Fetch subjects linked to this bucket
-                subjects_response = self.supabase.table('subjects') \
-                    .select('*') \
-                    .eq('course_group_id', bucket['id']) \
-                    .eq('is_active', True) \
-                    .execute()
-                
-                for subject in subjects_response.data:
+            
+            # Track batch-level assignments (faculty and classrooms)
+            batch_faculty_assignments = {}  # subject_id -> faculty_id
+            batch_classroom_assignments = {}  # subject_id -> classroom_id
+            subject_required_hours = {}  # subject_id -> required_hours_per_week
+            
+            # Process batch_subjects to get all assigned subjects
+            # NOTE: We do NOT filter by department_id here because subjects in
+            # batch_subjects are explicitly assigned to this batch by the admin.
+            # Cross-department subjects (e.g., common courses) are intentional.
+            for bs in batch_subjects_response.data:
+                if bs.get('subjects'):
+                    subject = bs['subjects']
+                    subject_id = subject['id']
+                    subj_dept_id = subject.get('department_id')
+
+                    # Store batch-level assignments
+                    if bs.get('assigned_faculty_id'):
+                        batch_faculty_assignments[subject_id] = bs['assigned_faculty_id']
+                    
+                    # FIX: Use assigned_lab_id from schema (was assigned_classroom_id)
+                    if bs.get('assigned_lab_id'):
+                        batch_classroom_assignments[subject_id] = bs['assigned_lab_id']
+                        
+                    subject_required_hours[subject_id] = bs.get('required_hours_per_week', 3)
+                    
                     subject_data = {
-                        'id': subject['id'],
+                        'id': subject_id,
                         'name': subject['name'],
                         'code': subject['code'],
                         'nep_category': subject.get('nep_category', 'CORE'),
@@ -115,39 +194,67 @@ class NEPScheduler:
                         'practical_hours': subject.get('practical_hours', 0),
                         'subject_type': subject.get('subject_type', 'THEORY'),
                         'requires_lab': subject.get('requires_lab', False),
-                        'block_start_week': subject.get('block_start_week'),  # For internships
-                        'block_end_week': subject.get('block_end_week'),      # For internships
-                        'time_restriction': subject.get('time_restriction')   # 'MORNING', 'AFTERNOON', etc.
+                        'block_start_week': subject.get('block_start_week'),
+                        'block_end_week': subject.get('block_end_week'),
+                        'time_restriction': subject.get('time_restriction'),
+                        'credits_per_week': subject.get('credits_per_week', 3),
+                        'department_id': subj_dept_id,
+                        'assigned_lab_id': batch_classroom_assignments.get(subject_id)
                     }
                     
                     # Categorize as special event or regular subject
                     if subject_data['nep_category'] in ['INTERNSHIP', 'TEACHING_PRACTICE', 'DISSERTATION']:
                         self.special_events.append(subject_data)
                     else:
-                        bucket_subjects.append(subject_data)
                         self.regular_subjects.append(subject_data)
                     
                     self.subjects.append(subject_data)
-                
-                self.buckets.append({
-                    'id': bucket['id'],
-                    'name': bucket['bucket_name'],
-                    'is_common_slot': bucket['is_common_slot'],
-                    'min_selection': bucket.get('min_selection', 1),
-                    'max_selection': bucket.get('max_selection', 1),
-                    'subjects': bucket_subjects
-                })
             
-            print(f"✅ Loaded {len(self.buckets)} buckets with {len(self.subjects)} subjects")
+            print(f"[OK] Loaded {len(self.subjects)} subjects from batch_subjects table")
             
-            # 2. Fetch Batch info to get college_id
-            batch_response = self.supabase.table('batches') \
-                .select('college_id, department_id') \
-                .eq('id', batch_id) \
-                .single() \
+            # Store batch-level assignments for later use
+            self.batch_faculty_assignments = batch_faculty_assignments
+            self.batch_classroom_assignments = batch_classroom_assignments
+            
+            # 2. Optionally fetch elective buckets (for NEP 2020 institutions)
+            buckets_response = self.supabase.table('elective_buckets') \
+                .select('*, subjects(*)') \
+                .eq('batch_id', batch_id) \
                 .execute()
             
-            college_id = batch_response.data['college_id']
+            if buckets_response.data:
+                for bucket in buckets_response.data:
+                    bucket_subjects = []
+                    
+                    # Find subjects that belong to this bucket
+                    for subject in self.subjects:
+                        # Check if subject belongs to this bucket via course_group_id
+                        subject_full = self.supabase.table('subjects') \
+                            .select('course_group_id') \
+                            .eq('id', subject['id']) \
+                            .single() \
+                            .execute()
+                        
+                        if subject_full.data and subject_full.data.get('course_group_id') == bucket['id']:
+                            bucket_subjects.append(subject)
+                    
+                    if bucket_subjects:
+                        self.buckets.append({
+                            'id': bucket['id'],
+                            'name': bucket['bucket_name'],
+                            'is_common_slot': bucket['is_common_slot'],
+                            'min_selection': bucket.get('min_selection', 1),
+                            'max_selection': bucket.get('max_selection', 1),
+                            'subjects': bucket_subjects
+                        })
+                
+                print(f"[INFO] Loaded {len(self.buckets)} optional elective buckets")
+            else:
+                print(f"[INFO] No elective buckets found (not using NEP 2020 bucket system)")
+            
+            # 3. Fetch Batch info (Already fetched above, just needed college_id)
+            # college_id is already set
+
             
             # 3. Fetch Available Classrooms
             classrooms_response = self.supabase.table('classrooms') \
@@ -156,19 +263,47 @@ class NEPScheduler:
                 .eq('is_available', True) \
                 .execute()
             
-            self.classrooms = [
-                {
-                    'id': room['id'],
+            # Collect assigned lab IDs so we include them even if from another department
+            assigned_lab_ids = set()
+            for sid, lab_id in batch_classroom_assignments.items():
+                if lab_id:
+                    assigned_lab_ids.add(lab_id)
+            
+            self.classrooms = []
+            included_ids = set()
+            for room in classrooms_response.data:
+                room_id = room['id']
+                room_dept_id = room.get('department_id')
+                is_lab = room.get('is_lab', False)
+                
+                # Include if: same dept, shared (no dept), OR assigned to a subject in this batch
+                include = (
+                    room_dept_id is None or
+                    room_dept_id == batch_department_id or
+                    room_id in assigned_lab_ids
+                )
+                
+                if not include:
+                    continue
+                
+                if room_id in included_ids:
+                    continue
+                included_ids.add(room_id)
+                    
+                self.classrooms.append({
+                    'id': room_id,
                     'name': room['name'],
                     'capacity': room['capacity'],
-                    'room_type': room.get('room_type', 'LECTURE_HALL'),
+                    'room_type': 'LAB' if is_lab else 'LECTURE_HALL',
+                    'is_lab': is_lab,
                     'has_projector': room.get('has_projector', False),
-                    'has_lab_equipment': room.get('has_lab_equipment', False)
-                }
-                for room in classrooms_response.data
-            ]
+                    'has_lab_equipment': is_lab,
+                    'department_id': room_dept_id
+                })
             
-            print(f"✅ Loaded {len(self.classrooms)} classrooms")
+            _log(f"[OK] Loaded {len(self.classrooms)} classrooms ({len(assigned_lab_ids)} from assigned labs)")
+            for r in self.classrooms:
+                _log(f"  - Room: {r['name']} (ID: {r['id'][:8]}...) IsLab: {r['is_lab']} Dept: {r['department_id']}")
             
             # 4. Fetch Time Slots
             time_slots_response = self.supabase.table('time_slots') \
@@ -180,51 +315,121 @@ class NEPScheduler:
                 .execute()
             
             # Filter out break/lunch times
-            self.time_slots = [
-                {
-                    'id': slot['id'],
-                    'day': slot['day'],
-                    'start_time': slot['start_time'],
-                    'end_time': slot['end_time'],
-                    'slot_index': idx
-                }
-                for idx, slot in enumerate(time_slots_response.data)
-                if not slot.get('is_break_time', False) and not slot.get('is_lunch_time', False)
-            ]
+            # Filter out break/lunch times AND apply batch time preferences
+            self.time_slots = []
+            filtered_slots_count = 0
+            for idx, slot in enumerate(time_slots_response.data):
+                if slot.get('is_break_time', False) or slot.get('is_lunch_time', False):
+                    continue
+                
+                # Check range
+                # Ensure we are comparing compatible types (strings "HH:MM:SS")
+                slot_start = str(slot['start_time'])
+                slot_end = str(slot['end_time'])
+                
+                if slot_start >= str(start_pref) and slot_end <= str(end_pref):
+                    self.time_slots.append({
+                        'id': slot['id'],
+                        'day': slot['day'],
+                        'start_time': slot['start_time'],
+                        'end_time': slot['end_time'],
+                        'slot_index': idx
+                    })
+                else:
+                    filtered_slots_count += 1
             
-            print(f"✅ Loaded {len(self.time_slots)} time slots")
+            print(f"[INFO] Filtered {filtered_slots_count} slots outside batch hours")
+            
+            print(f"[OK] Loaded {len(self.time_slots)} time slots")
             
             # 5. Fetch Faculty Assignments & Availability
-            for subject in self.subjects:
-                # Get assigned faculty for each subject from batch_subjects
-                batch_subject_response = self.supabase.table('batch_subjects') \
-                    .select('assigned_faculty_id') \
-                    .eq('batch_id', batch_id) \
-                    .eq('subject_id', subject['id']) \
-                    .execute()
+            # Use batch-level assignments from batch_subjects table
+            for subject_id, faculty_id in self.batch_faculty_assignments.items():
+                self.subject_faculty_map[subject_id] = faculty_id
                 
-                if batch_subject_response.data and batch_subject_response.data[0]['assigned_faculty_id']:
-                    faculty_id = batch_subject_response.data[0]['assigned_faculty_id']
-                    self.subject_faculty_map[subject['id']] = faculty_id
+                # Fetch faculty availability for this faculty member
+                if faculty_id not in self.faculty_availability:
+                    availability_response = self.supabase.table('faculty_availability') \
+                        .select('time_slot_id, is_available') \
+                        .eq('faculty_id', faculty_id) \
+                        .eq('is_available', True) \
+                        .execute()
                     
-                    # Fetch faculty availability
-                    if faculty_id not in self.faculty_availability:
-                        availability_response = self.supabase.table('faculty_availability') \
-                            .select('time_slot_id, is_available') \
-                            .eq('faculty_id', faculty_id) \
-                            .eq('is_available', True) \
-                            .execute()
-                        
+                    if availability_response.data:
                         self.faculty_availability[faculty_id] = [
                             av['time_slot_id'] for av in availability_response.data
                         ]
+                    else:
+                        # If no availability constraints, faculty is available for all slots
+                        self.faculty_availability[faculty_id] = [slot['id'] for slot in self.time_slots]
             
-            print(f"✅ Loaded faculty assignments for {len(self.subject_faculty_map)} subjects")
+            print(f"[OK] Loaded faculty assignments for {len(self.subject_faculty_map)} subjects")
+
+            # 6. Fetch Constraint Rules from DB
+            try:
+                rules_response = self.supabase.table('constraint_rules') \
+                    .select('*') \
+                    .eq('is_active', True) \
+                    .execute()
+                
+                self.constraint_rules = {}
+                for rule in (rules_response.data or []):
+                    self.constraint_rules[rule['rule_name']] = rule
+                
+                hard_count = sum(1 for r in self.constraint_rules.values() if r['rule_type'] == 'HARD')
+                soft_count = sum(1 for r in self.constraint_rules.values() if r['rule_type'] != 'HARD')
+                print(f"[OK] Loaded {len(self.constraint_rules)} constraint rules ({hard_count} HARD, {soft_count} SOFT)")
+            except Exception as e:
+                print(f"[WARN] Could not load constraint rules: {e}")
+                self.constraint_rules = {}
+            
+            # 7. Fetch Faculty Scheduling Preferences
+            try:
+                faculty_ids = list(self.subject_faculty_map.values())
+                if faculty_ids:
+                    prefs_response = self.supabase.table('faculty_scheduling_preferences') \
+                        .select('*') \
+                        .in_('faculty_id', faculty_ids) \
+                        .execute()
+                    
+                    self.faculty_prefs = {}
+                    for fp in (prefs_response.data or []):
+                        self.faculty_prefs[fp['faculty_id']] = fp
+                    
+                    print(f"[OK] Loaded scheduling preferences for {len(self.faculty_prefs)} faculty")
+            except Exception as e:
+                print(f"[WARN] Could not load faculty preferences: {e}")
+                self.faculty_prefs = {}
+            
+            # 8. Fetch Existing Commitments (cross-batch conflict prevention)
+            try:
+                existing_response = self.supabase.table('master_scheduled_classes') \
+                    .select('faculty_id, classroom_id, time_slot_id') \
+                    .eq('college_id', college_id) \
+                    .eq('is_active', True) \
+                    .execute()
+                
+                self.existing_commitments = {}
+                for cls in (existing_response.data or []):
+                    slot = cls['time_slot_id']
+                    if slot not in self.existing_commitments:
+                        self.existing_commitments[slot] = {'faculty': set(), 'rooms': set()}
+                    self.existing_commitments[slot]['faculty'].add(cls['faculty_id'])
+                    self.existing_commitments[slot]['rooms'].add(cls['classroom_id'])
+                
+                committed_faculty = set()
+                for slot_data in self.existing_commitments.values():
+                    committed_faculty.update(slot_data['faculty'])
+                print(f"[OK] Loaded cross-batch commitments: {len(self.existing_commitments)} occupied slots, "
+                      f"{len(committed_faculty)} committed faculty")
+            except Exception as e:
+                print(f"[WARN] Could not load existing commitments: {e}")
+                self.existing_commitments = {}
             
             return True
             
         except Exception as e:
-            print(f"❌ Error fetching batch data: {str(e)}")
+            print(f"[ERROR] Error fetching batch data: {str(e)}")
             import traceback
             traceback.print_exc()
             return False
@@ -232,35 +437,258 @@ class NEPScheduler:
     def create_variables(self):
         """
         Create CP-SAT decision variables for time slots and rooms.
+        Creates MULTIPLE session variables per subject based on credits_per_week.
         Only creates variables for regular subjects (not internships/special events).
         """
-        print("\n🔧 Creating CP-SAT variables...")
+        _log("\n[BUILD] Creating CP-SAT variables...")
+        
+        # Track sessions for constraint building
+        self.sessions = []  # List of all session dicts
+        self.subject_sessions = {}  # subject_id -> list of session_ids
+        
+        # Build index of department classrooms for THEORY subjects
+        dept_room_indices = {}
+        for idx, room in enumerate(self.classrooms):
+            room_dept = room.get('department_id')
+            if room_dept not in dept_room_indices:
+                dept_room_indices[room_dept] = []
+            dept_room_indices[room_dept].append(idx)
+            # Also add to None key for shared rooms
+            if room_dept is None:
+                if None not in dept_room_indices:
+                    dept_room_indices[None] = []
+        
+        total_sessions = 0
+        
+        # Calculate dynamic session count to fill all available slots
+        total_available_slots = len(self.time_slots)
+        total_credits = sum(s.get('credits_per_week', 3) for s in self.regular_subjects)
+        
+        if total_credits > 0 and total_available_slots > 0:
+            # Calculate how many sessions each credit should produce
+            # e.g., 36 slots / 18 credits = 2 sessions per credit
+            session_multiplier = total_available_slots / total_credits
+            _log(f"[INFO] Session multiplier: {total_available_slots} slots / {total_credits} credits = {session_multiplier:.2f} sessions per credit")
+        else:
+            session_multiplier = 1.0
+            _log(f"[WARN] Using default multiplier 1.0 (slots={total_available_slots}, credits={total_credits})")
+        
+        # Pre-calculate sessions per subject to match total slots exactly
+        subject_session_counts = {}
+        assigned_total = 0
+        for subject in self.regular_subjects:
+            sid = subject['id']
+            credits = subject.get('credits_per_week', 3)
+            sessions_count = max(1, round(credits * session_multiplier))
+            subject_session_counts[sid] = sessions_count
+            assigned_total += sessions_count
+        
+        # Adjust to exactly match available slots (handle rounding differences)
+        diff = total_available_slots - assigned_total
+        if diff != 0:
+            # Sort subjects by credits (adjust largest first for better distribution)
+            sorted_subjects = sorted(self.regular_subjects, key=lambda s: s.get('credits_per_week', 3), reverse=True)
+            max_iterations = len(sorted_subjects) * 3  # Safety limit
+            i = 0
+            while diff != 0 and i < max_iterations:
+                sid = sorted_subjects[i % len(sorted_subjects)]['id']
+                if diff > 0:
+                    subject_session_counts[sid] += 1
+                    diff -= 1
+                elif diff < 0 and subject_session_counts[sid] > 1:
+                    subject_session_counts[sid] -= 1
+                    diff += 1
+                i += 1
+            
+            if diff != 0:
+                _log(f"[WARN] Could not perfectly balance sessions. Remaining diff: {diff}")
+        
+        _log(f"[OK] Session allocation: {sum(subject_session_counts.values())} sessions for {total_available_slots} slots")
+        for subject in self.regular_subjects:
+            sid = subject['id']
+            _log(f"  {subject.get('code', '?'):15s} credits={subject.get('credits_per_week', 3)} -> sessions={subject_session_counts[sid]}")
         
         for subject in self.regular_subjects:
             subject_id = subject['id']
+            credits = subject.get('credits_per_week', 3)
+            num_sessions = subject_session_counts[subject_id]
+            subject_type = subject.get('subject_type', 'THEORY')
+            assigned_lab_id = subject.get('assigned_lab_id')
+            subject_dept_id = subject.get('department_id')
             
-            # Time Slot Variable (0 to max_slots - 1)
-            self.start_vars[subject_id] = self.model.NewIntVar(
-                0, 
-                len(self.time_slots) - 1, 
-                f'start_{subject["code"]}'
-            )
+            session_ids = []
             
-            # Room Variable (0 to num_rooms - 1)
-            self.room_vars[subject_id] = self.model.NewIntVar(
-                0, 
-                len(self.classrooms) - 1, 
-                f'room_{subject["code"]}'
-            )
+            # Create N session variables where N = calculated sessions (credits × multiplier)
+            for session_num in range(1, num_sessions + 1):
+                session_id = f"{subject_id}_s{session_num}"
+                session_ids.append(session_id)
+                
+                # Time Slot Variable (0 to max_slots - 1)
+                self.start_vars[session_id] = self.model.NewIntVar(
+                    0, 
+                    len(self.time_slots) - 1, 
+                    f'start_{subject["code"]}_s{session_num}'
+                )
+                
+                # Room Variable handling
+                if subject_type in ['LAB', 'PRACTICAL'] and assigned_lab_id:
+                    # LAB: Lock to assigned lab
+                    lab_idx = next(
+                        (i for i, r in enumerate(self.classrooms) if r['id'] == assigned_lab_id),
+                        -1
+                    )
+                    
+                    if lab_idx == -1:
+                        _log(f"    [ERROR] Assigned Lab ID {assigned_lab_id} for {subject['code']} NOT FOUND in loaded classrooms! Falling back to 0.")
+                        lab_idx = 0
+                    else:
+                        _log(f"    [DEBUG] {subject['code']} locked to {self.classrooms[lab_idx]['name']} (idx={lab_idx})")
+                        
+                    self.room_vars[session_id] = self.model.NewIntVar(
+                        lab_idx, lab_idx, f'room_{subject["code"]}_s{session_num}'
+                    )
+                elif subject_type in ['LAB', 'PRACTICAL']:
+                    # LAB without assigned lab - use any lab-type room
+                    lab_room_indices = [
+                        i for i, r in enumerate(self.classrooms)
+                        if r.get('room_type', '').upper() in ['LAB', 'LABORATORY', 'COMPUTER_LAB']
+                    ]
+                    if lab_room_indices:
+                        room_var = self.model.NewIntVarFromDomain(
+                            cp_model.Domain.FromValues(lab_room_indices),
+                            f'room_{subject["code"]}_s{session_num}'
+                        )
+                    else:
+                        # No labs at all - fallback to any room
+                        room_var = self.model.NewIntVar(
+                            0, len(self.classrooms) - 1, f'room_{subject["code"]}_s{session_num}'
+                        )
+                    self.room_vars[session_id] = room_var
+                else:
+                    # THEORY: Only department rooms (or shared rooms)
+                    valid_rooms = dept_room_indices.get(subject_dept_id, [])
+                    # Add shared rooms (None dept)
+                    valid_rooms = valid_rooms + dept_room_indices.get(None, [])
+                    valid_rooms = list(set(valid_rooms))  # Remove duplicates
+                    
+                    # Filter out IS_LAB=True rooms for Theory subjects
+                    theory_rooms = []
+                    for idx in valid_rooms:
+                         # Ensure index is valid
+                         if idx < len(self.classrooms):
+                             if not self.classrooms[idx].get('is_lab', False):
+                                 theory_rooms.append(idx)
+                    
+                    if theory_rooms:
+                        room_var = self.model.NewIntVarFromDomain(
+                            cp_model.Domain.FromValues(theory_rooms),
+                            f'room_{subject["code"]}_s{session_num}'
+                        )
+                    elif valid_rooms:
+                        # Fallback: If no theory rooms found in department, allow Labs (better than nothing)
+                        _log(f"[WARN] No Theory rooms for {subject['code']} (Dept {subject_dept_id}). Using Labs.")
+                        room_var = self.model.NewIntVarFromDomain(
+                            cp_model.Domain.FromValues(valid_rooms),
+                            f'room_{subject["code"]}_s{session_num}'
+                        )
+                    else:
+                        # Fallback to any room if no dept match
+                        _log(f"[WARN] No Department rooms for {subject['code']} (Dept {subject_dept_id}). Using ANY room.")
+                        room_var = self.model.NewIntVar(
+                            0, len(self.classrooms) - 1, f'room_{subject["code"]}_s{session_num}'
+                        )
+                    self.room_vars[session_id] = room_var
+                
+                # Duration is always 1 hour per session
+                self.duration_vars[session_id] = 1
+                
+                # Store session info
+                self.sessions.append({
+                    'session_id': session_id,
+                    'subject_id': subject_id,
+                    'subject': subject,
+                    'session_num': session_num
+                })
+                
+                total_sessions += 1
             
-            # Calculate duration (lecture hours + tutorial hours)
-            # Practical hours typically scheduled separately
-            self.duration_vars[subject_id] = subject['lecture_hours'] + subject['tutorial_hours']
+            self.subject_sessions[subject_id] = session_ids
+            
+            # -------------------------------------------------------------
+            # CONSTRAINT: Grouping (Blocks) & Spreading Logic
+            # -------------------------------------------------------------
+            
+            # Detect if Lab (need 2-hour blocks)
+            subject_name_u = subject.get('name', '').upper()
+            is_lab = (subject.get('subject_type') in ['LAB', 'PRACTICAL'] 
+                     or subject.get('code', '').endswith('P') 
+                     or subject.get('assigned_lab_id') is not None
+                     or 'LAB' in subject_name_u or 'PROJECT' in subject_name_u)
+            
+            blocks = [] # List of [sid1, sid2, ...]
+            
+            if is_lab and len(session_ids) >= 2:
+                # Group into pairs: (0,1), (2,3), ...
+                # Use session_ids list which is ordered by session_num
+                for i in range(0, len(session_ids), 2):
+                    if i + 1 < len(session_ids):
+                        blocks.append([session_ids[i], session_ids[i+1]])
+                    else:
+                        blocks.append([session_ids[i]]) # Orphan single session
+            else:
+                # Theory: Treat each session as independent block
+                for sid in session_ids:
+                    blocks.append([sid])
+            
+            slots_per_day = len(self.time_slots) // 6 if len(self.time_slots) >= 6 else len(self.time_slots)
+
+            # Apply Consecutive Constraints for Multi-Session Blocks
+            if slots_per_day > 0:
+                for block in blocks:
+                    if len(block) > 1:
+                        s1, s2 = block[0], block[1]
+                        # Enforce strict adjacency: s2 starts immediately after s1
+                        self.model.Add(self.start_vars[s2] == self.start_vars[s1] + 1)
+                        # Ensure s2 uses the same room as s1 (for labs locked to specific rooms this is redundant but good for robustness)
+                        self.model.Add(self.room_vars[s2] == self.room_vars[s1])
+                        
+                        # Prevent block from wrapping around day boundary
+                        # (i.e., s1 cannot be the last slot of the day)
+                        for day_idx in range(6):
+                            end_of_day_slot = (day_idx + 1) * slots_per_day - 1
+                            self.model.Add(self.start_vars[s1] != end_of_day_slot)
+
+            # Apply Spread Constraints on BLOCKS (Logical Units)
+            # Only if we have multiple blocks to spread
+            if len(blocks) > 1 and slots_per_day > 0:
+                block_day_vars = []
+                for block in blocks:
+                    # Representative session for the block (first one)
+                    s_rep = block[0]
+                    day_var = self.model.NewIntVar(0, 5, f'day_blk_{s_rep}')
+                    self.model.AddDivisionEquality(day_var, self.start_vars[s_rep], slots_per_day)
+                    block_day_vars.append(day_var)
+                
+                if len(blocks) <= 6:
+                    # Ideal case: All blocks on different days
+                    self.model.AddAllDifferent(block_day_vars)
+                else:
+                    # More blocks than days - ensure even spread
+                    import math
+                    max_blocks_per_day = math.ceil(len(blocks) / 6)
+                    for day_idx in range(6):
+                        day_bools = []
+                        for dv in block_day_vars:
+                            is_day = self.model.NewBoolVar(f'is_day_{day_idx}_blk_{dv.Name()}')
+                            self.model.Add(dv == day_idx).OnlyEnforceIf(is_day)
+                            self.model.Add(dv != day_idx).OnlyEnforceIf(is_day.Not())
+                            day_bools.append(is_day)
+                        self.model.Add(sum(day_bools) <= max_blocks_per_day)
         
-        print(f"✅ Created variables for {len(self.regular_subjects)} regular subjects")
+        _log(f"[OK] Created {total_sessions} session variables from {len(self.regular_subjects)} subjects")
         
         if self.special_events:
-            print(f"ℹ️  {len(self.special_events)} special events (Internships/Teaching Practice) - handled separately")
+            _log(f"[INFO]  {len(self.special_events)} special events (Internships/Teaching Practice) - handled separately")
     
     def add_nep_bucket_constraints(self):
         """
@@ -269,7 +697,7 @@ class NEPScheduler:
         CRITICAL CONSTRAINT: All subjects in a bucket with is_common_slot=True
         MUST start at the exact same time (allows students to choose any one subject).
         """
-        print("\n🔒 Adding NEP Bucket Simultaneity Constraints...")
+        print("\n[LOCK] Adding NEP Bucket Simultaneity Constraints...")
         
         for bucket in self.buckets:
             if not bucket['is_common_slot']:
@@ -280,104 +708,210 @@ class NEPScheduler:
             if len(bucket_subjects) < 2:
                 continue  # No constraint needed for single-subject buckets
             
-            # All subjects in bucket must start at same time
+            # All subjects in bucket must start at same time (sync ALL sessions)
             base_subject_id = bucket_subjects[0]['id']
+            base_sessions = self.subject_sessions.get(base_subject_id, [])
+            if not base_sessions:
+                continue
             
             for i in range(1, len(bucket_subjects)):
                 subject_id = bucket_subjects[i]['id']
-                self.model.Add(
-                    self.start_vars[subject_id] == self.start_vars[base_subject_id]
-                )
+                session_ids = self.subject_sessions.get(subject_id, [])
+                
+                # Sync as many sessions as possible
+                min_sessions = min(len(base_sessions), len(session_ids))
+                for k in range(min_sessions):
+                    if session_ids[k] in self.start_vars and base_sessions[k] in self.start_vars:
+                        self.model.Add(
+                            self.start_vars[session_ids[k]] == self.start_vars[base_sessions[k]]
+                        )
             
-            # All subjects in bucket must use different rooms (no overlap)
-            room_vars_for_bucket = [
-                self.room_vars[subj['id']] for subj in bucket_subjects
-            ]
-            self.model.AddAllDifferent(room_vars_for_bucket)
+            # All subjects in bucket must use different rooms (for first session)
+            room_vars_for_bucket = []
+            for subj in bucket_subjects:
+                session_ids = self.subject_sessions.get(subj['id'], [])
+                if session_ids and session_ids[0] in self.room_vars:
+                    room_vars_for_bucket.append(self.room_vars[session_ids[0]])
+            if len(room_vars_for_bucket) > 1:
+                self.model.AddAllDifferent(room_vars_for_bucket)
             
-            print(f"  ✓ Bucket '{bucket['name']}': {len(bucket_subjects)} subjects constrained to same time")
+            print(f"  [v] Bucket '{bucket['name']}': {len(bucket_subjects)} subjects constrained to same time")
     
     def add_bucket_separation_constraints(self):
         """
         Ensure different buckets don't overlap in time.
         A student takes ONE subject from EACH bucket, so buckets must be at different times.
         """
-        print("\n🔒 Adding Bucket Separation Constraints...")
+        print("\n[LOCK] Adding Bucket Separation Constraints...")
         
         if len(self.buckets) < 2:
             return  # No separation needed for single bucket
         
-        # Get representative subject from each bucket (all subjects in bucket have same start time)
+        # Get representative session from each bucket (first session of first subject)
         bucket_representatives = []
         for bucket in self.buckets:
             if bucket['subjects']:
-                bucket_representatives.append(self.start_vars[bucket['subjects'][0]['id']])
+                first_subject_id = bucket['subjects'][0]['id']
+                session_ids = self.subject_sessions.get(first_subject_id, [])
+                if session_ids and session_ids[0] in self.start_vars:
+                    bucket_representatives.append(self.start_vars[session_ids[0]])
         
         # All buckets must be scheduled at different times
         if len(bucket_representatives) > 1:
             self.model.AddAllDifferent(bucket_representatives)
-            print(f"  ✓ {len(bucket_representatives)} buckets constrained to different time slots")
+            print(f"  [v] {len(bucket_representatives)} buckets constrained to different time slots")
+
+    def add_student_group_constraints(self):
+        """
+        Prevent batch-level conflicts.
+        A batch cannot attend two things at once.
+        - Core subjects must not overlap with anything.
+        - Buckets must not overlap with Core subjects (or other buckets).
+        """
+        print("\n[LOCK] Adding Student Group Constraints...")
+        
+        # Identify subjects that are in buckets
+        bucket_subject_ids = set()
+        for bucket in self.buckets:
+            for subj in bucket['subjects']:
+                bucket_subject_ids.add(subj['id'])
+        
+        # Collect all time slots that must be distinct for the batch
+        batch_usage_vars = []
+        
+        # 1. Add ALL sessions of Core subjects
+        core_count = 0
+        for subject in self.regular_subjects:
+            if subject['id'] not in bucket_subject_ids:
+                session_ids = self.subject_sessions.get(subject['id'], [])
+                for sid in session_ids:
+                    if sid in self.start_vars:
+                        batch_usage_vars.append(self.start_vars[sid])
+                core_count += 1
+        
+        # 2. Add representative sessions for Buckets (since they are synced)
+        bucket_count = 0
+        for bucket in self.buckets:
+            if bucket['subjects']:
+                # Use sessions of the first subject as representatives
+                base_subject_id = bucket['subjects'][0]['id']
+                base_sessions = self.subject_sessions.get(base_subject_id, [])
+                for sid in base_sessions:
+                    if sid in self.start_vars:
+                        batch_usage_vars.append(self.start_vars[sid])
+                bucket_count += 1
+        
+        # Enforce that ALL these slots for the batch must be different
+        if len(batch_usage_vars) > 1:
+            self.model.AddAllDifferent(batch_usage_vars)
+            
+        print(f"  [v] Constrained {len(batch_usage_vars)} total sessions for the batch (Core: {core_count}, Buckets: {bucket_count})")
     
     def add_faculty_conflict_constraints(self):
         """
-        Prevent faculty from teaching multiple subjects at the same time.
+        Prevent faculty from teaching multiple sessions at the same time.
         Critical for shared faculty teaching across departments/buckets.
+        Uses NoOverlap constraint to handle all sessions correctly.
         """
-        print("\n🔒 Adding Faculty Conflict Constraints...")
+        print("\n[LOCK] Adding Faculty Conflict Constraints...")
         
-        # Group subjects by faculty
-        faculty_subjects = defaultdict(list)
+        # Group ALL sessions by faculty (not just subjects)
+        faculty_sessions = defaultdict(list)
         for subject_id, faculty_id in self.subject_faculty_map.items():
-            faculty_subjects[faculty_id].append(subject_id)
+            # Get all session IDs for this subject
+            session_ids = self.subject_sessions.get(subject_id, [])
+            for session_id in session_ids:
+                if session_id in self.start_vars:
+                    faculty_sessions[faculty_id].append(session_id)
         
-        # Add constraints for faculty teaching multiple subjects
+        # Add constraints for faculty with multiple sessions
         conflict_count = 0
-        for faculty_id, subject_ids in faculty_subjects.items():
-            if len(subject_ids) > 1:
-                # All subjects taught by same faculty must have different start times
-                subject_times = [self.start_vars[sid] for sid in subject_ids]
-                self.model.AddAllDifferent(subject_times)
+        for faculty_id, session_ids in faculty_sessions.items():
+            if len(session_ids) > 1:
+                # All sessions for same faculty must have different start times
+                session_starts = [self.start_vars[sid] for sid in session_ids]
+                self.model.AddAllDifferent(session_starts)
                 conflict_count += 1
-                print(f"  ✓ Faculty teaching {len(subject_ids)} subjects - no time conflicts")
         
-        print(f"  ✓ Added constraints for {conflict_count} faculty members")
+        print(f"  [v] Added non-overlap constraints for {conflict_count} faculty members")
+    
+    def add_room_conflict_constraints(self):
+        """
+        Prevent two sessions from using the same room at the same time.
+        Critical constraint for any valid timetable.
+        """
+        print("\n[LOCK] Adding Room Conflict Constraints...")
+        
+        all_session_ids = list(self.start_vars.keys())
+        conflict_pairs = 0
+        
+        # For each pair of sessions, if they're at the same time, they must use different rooms
+        for i in range(len(all_session_ids)):
+            for j in range(i + 1, len(all_session_ids)):
+                sid1 = all_session_ids[i]
+                sid2 = all_session_ids[j]
+                
+                # If start times are equal, rooms must be different
+                # Equivalent to: (start1 != start2) OR (room1 != room2)
+                # CP-SAT encoding: NOT(start1 == start2 AND room1 == room2)
+                b_same_time = self.model.NewBoolVar(f'same_time_{i}_{j}')
+                b_same_room = self.model.NewBoolVar(f'same_room_{i}_{j}')
+                
+                self.model.Add(self.start_vars[sid1] == self.start_vars[sid2]).OnlyEnforceIf(b_same_time)
+                self.model.Add(self.start_vars[sid1] != self.start_vars[sid2]).OnlyEnforceIf(b_same_time.Not())
+                
+                self.model.Add(self.room_vars[sid1] == self.room_vars[sid2]).OnlyEnforceIf(b_same_room)
+                self.model.Add(self.room_vars[sid1] != self.room_vars[sid2]).OnlyEnforceIf(b_same_room.Not())
+                
+                # Cannot have both same time AND same room
+                self.model.AddBoolOr([b_same_time.Not(), b_same_room.Not()])
+                conflict_pairs += 1
+        
+        print(f"  [v] Added room conflict checks for {conflict_pairs} session pairs")
     
     def add_room_type_constraints(self):
         """
         Ensure subjects are assigned to appropriate room types.
-        - LAB subjects need lab-equipped rooms
-        - THEORY subjects can use lecture halls
+        NOTE: Room assignments are now handled in create_variables():
+        - LAB subjects are locked to assigned_lab_id
+        - THEORY subjects are constrained to department rooms only
+        This method is kept for logging purposes.
         """
-        print("\n🔒 Adding Room Type Constraints...")
+        print("\n[LOCK] Room Type Constraints (handled in variable creation)...")
         
-        for subject in self.subjects:
-            subject_id = subject['id']
-            
-            if subject['requires_lab'] or subject['subject_type'] == 'LAB':
-                # Subject needs a lab room
-                valid_room_indices = [
-                    idx for idx, room in enumerate(self.classrooms)
-                    if room['has_lab_equipment']
-                ]
-                
-                if valid_room_indices:
-                    # Constrain to only lab rooms
-                    self.model.AddAllowedAssignments(
-                        [self.room_vars[subject_id]],
-                        [(idx,) for idx in valid_room_indices]
-                    )
-                    print(f"  ✓ Subject '{subject['code']}' constrained to {len(valid_room_indices)} lab rooms")
+        lab_count = sum(1 for s in self.subjects if s.get('requires_lab') or s.get('subject_type') == 'LAB')
+        theory_count = len(self.subjects) - lab_count
+        print(f"  [v] {lab_count} LAB subjects (locked to assigned labs)")
+        print(f"  [v] {theory_count} THEORY subjects (constrained to dept rooms)")
+    
+    def add_assigned_classroom_constraints(self):
+        """
+        Enforce pre-assigned classrooms from batch_subjects table.
+        NOTE: This is now handled in create_variables() - LAB subjects
+        with assigned_lab_id are locked to that specific lab index.
+        This method is kept for logging purposes.
+        """
+        print("\n[LOCK] Pre-Assigned Classroom Constraints (handled in variable creation)...")
+        
+        assigned_count = len(self.batch_classroom_assignments)
+        if assigned_count > 0:
+            print(f"  [OK] {assigned_count} subjects have pre-assigned labs (locked in create_variables)")
+        else:
+            print(f"  [INFO] No pre-assigned classrooms found")
     
     def add_faculty_availability_constraints(self):
         """
         Respect faculty preferred/available time slots.
+        Applied to ALL sessions of subjects taught by the faculty.
         """
-        print("\n🔒 Adding Faculty Availability Constraints...")
+        print("\n[LOCK] Adding Faculty Availability Constraints...")
         
         constraints_added = 0
         for subject_id, faculty_id in self.subject_faculty_map.items():
-            if subject_id not in self.start_vars:
-                continue  # Skip special events
+            # Get all sessions for this subject
+            session_ids = self.subject_sessions.get(subject_id, [])
+            if not session_ids:
+                continue  # Skip if no sessions
                 
             if faculty_id in self.faculty_availability:
                 available_slot_ids = self.faculty_availability[faculty_id]
@@ -389,14 +923,16 @@ class NEPScheduler:
                 ]
                 
                 if available_indices:
-                    # Constrain subject to only available time slots
-                    self.model.AddAllowedAssignments(
-                        [self.start_vars[subject_id]],
-                        [(idx,) for idx in available_indices]
-                    )
-                    constraints_added += 1
+                    # Constrain ALL sessions to only available time slots
+                    for session_id in session_ids:
+                        if session_id in self.start_vars:
+                            self.model.AddAllowedAssignments(
+                                [self.start_vars[session_id]],
+                                [(idx,) for idx in available_indices]
+                            )
+                            constraints_added += 1
         
-        print(f"  ✓ Added availability constraints for {constraints_added} subjects")
+        print(f"  [v] Added availability constraints for {constraints_added} sessions")
     
     def add_teaching_practice_time_restrictions(self):
         """
@@ -404,7 +940,7 @@ class NEPScheduler:
         - Teaching Practice (Part-time): Morning slots only (9 AM - 12 PM)
         - Theory classes: Afternoon slots only when Teaching Practice is active (1 PM - 4 PM)
         """
-        print("\n🔒 Adding Teaching Practice Time Restrictions...")
+        print("\n[LOCK] Adding Teaching Practice Time Restrictions...")
         
         teaching_practice_subjects = [
             subj for subj in self.special_events 
@@ -412,7 +948,7 @@ class NEPScheduler:
         ]
         
         if not teaching_practice_subjects:
-            print("  ℹ️  No Teaching Practice subjects found")
+            print("  [INFO]  No Teaching Practice subjects found")
             return
         
         # Identify morning and afternoon slots
@@ -429,7 +965,7 @@ class NEPScheduler:
             elif 13 <= hour < 16:
                 afternoon_slots.append(slot['slot_index'])
         
-        print(f"  ℹ️  Found {len(morning_slots)} morning slots and {len(afternoon_slots)} afternoon slots")
+        print(f"  [INFO]  Found {len(morning_slots)} morning slots and {len(afternoon_slots)} afternoon slots")
         
         # For regular theory subjects, restrict to afternoon when Teaching Practice exists
         if morning_slots and afternoon_slots:
@@ -442,11 +978,11 @@ class NEPScheduler:
                         [(idx,) for idx in afternoon_slots]
                     )
             
-            print(f"  ✓ Teaching Practice mode: Theory classes restricted to afternoon ({len(afternoon_slots)} slots)")
+            print(f"  [v] Teaching Practice mode: Theory classes restricted to afternoon ({len(afternoon_slots)} slots)")
         
         # Store Teaching Practice info for solution formatting
         for tp_subject in teaching_practice_subjects:
-            print(f"  ✓ Teaching Practice '{tp_subject['code']}' scheduled for mornings (no room allocation)")
+            print(f"  [v] Teaching Practice '{tp_subject['code']}' scheduled for mornings (no room allocation)")
     
     def add_internship_block_constraints(self):
         """
@@ -455,7 +991,7 @@ class NEPScheduler:
         - Block out specified weeks for students/faculty
         - Ensure no theory subjects scheduled during internship weeks
         """
-        print("\n🔒 Adding Internship Block-Out Constraints...")
+        print("\n[LOCK] Adding Internship Block-Out Constraints...")
         
         internship_subjects = [
             subj for subj in self.special_events 
@@ -463,7 +999,7 @@ class NEPScheduler:
         ]
         
         if not internship_subjects:
-            print("  ℹ️  No Internship subjects found")
+            print("  [INFO]  No Internship subjects found")
             return
         
         for internship in internship_subjects:
@@ -471,10 +1007,10 @@ class NEPScheduler:
             end_week = internship.get('block_end_week')
             
             if start_week and end_week:
-                print(f"  ✓ Internship '{internship['code']}' blocks weeks {start_week}-{end_week}")
+                print(f"  [v] Internship '{internship['code']}' blocks weeks {start_week}-{end_week}")
                 print(f"    Students/Faculty unavailable during this period")
             else:
-                print(f"  ✓ Internship '{internship['code']}' scheduled (no room allocation)")
+                print(f"  [v] Internship '{internship['code']}' scheduled (no room allocation)")
         
         # Note: In production, you would:
         # 1. Fetch student enrollment data
@@ -488,7 +1024,7 @@ class NEPScheduler:
         - M.Ed/Research students need "Empty Slots" for library/research work
         - Don't schedule formal classes during these slots
         """
-        print("\n🔒 Adding Dissertation/Library Hour Constraints...")
+        print("\n[LOCK] Adding Dissertation/Library Hour Constraints...")
         
         dissertation_subjects = [
             subj for subj in self.special_events 
@@ -496,15 +1032,104 @@ class NEPScheduler:
         ]
         
         if not dissertation_subjects:
-            print("  ℹ️  No Dissertation subjects found")
+            print("  [INFO]  No Dissertation subjects found")
             return
         
         for diss_subject in dissertation_subjects:
-            print(f"  ✓ Dissertation '{diss_subject['code']}' - Library hours allocated")
+            print(f"  [v] Dissertation '{diss_subject['code']}' - Library hours allocated")
             print(f"    Students have flexible research time (no formal class)")
         
         # In production, you would reserve specific time slots as "Library Hours"
         # and ensure enrolled students don't have conflicting classes
+    
+    # ========================================================================
+    # CONSTRAINT REGISTRY SYSTEM (DB-Driven)
+    # ========================================================================
+    
+    def _build_constraint_registry(self):
+        """
+        Build the constraint registry: maps check_type -> handler function.
+        Each handler reads params from the DB rule and applies the constraint.
+        """
+        self.constraint_handlers = {
+            # Cross-batch conflict prevention
+            'cross_timetable':     self._apply_cross_batch_block,
+        }
+    
+    def apply_all_constraints(self):
+        """
+        Dynamically apply constraints based on what's in the DB.
+        This supplements the existing hardcoded constraints.
+        """
+        print("\n[REGISTRY] Applying DB-driven constraints...")
+        self._build_constraint_registry()
+        
+        applied_count = 0
+        skipped_count = 0
+        
+        for rule_name, rule in self.constraint_rules.items():
+            check_type = rule['rule_parameters'].get('check_type')
+            handler = self.constraint_handlers.get(check_type)
+            
+            if handler:
+                params = rule['rule_parameters']
+                weight = rule.get('weight', 1.0)
+                is_hard = (rule['rule_type'] == 'HARD')
+                
+                print(f"  [{rule['rule_type']}] {rule_name} (weight={weight})")
+                try:
+                    handler(params, weight, is_hard)
+                    applied_count += 1
+                except Exception as e:
+                    print(f"    [ERROR] Failed to apply: {e}")
+                    skipped_count += 1
+            else:
+                # Skip - these are handled by existing hardcoded methods
+                skipped_count += 1
+        
+        print(f"[OK] Applied {applied_count} registry constraints, {skipped_count} handled by existing methods")
+    
+    def _apply_cross_batch_block(self, params, weight, is_hard):
+        """
+        Block faculty+slot and room+slot combos already committed in other timetables.
+        This is the KEY cross-batch conflict prevention mechanism.
+        """
+        blocked_faculty_slots = 0
+        
+        for session in self.sessions:
+            session_id = session['session_id']
+            subject_id = session['subject_id']
+            faculty_id = self.subject_faculty_map.get(subject_id)
+            
+            for slot_idx, slot in enumerate(self.time_slots):
+                slot_id = slot['id']
+                committed = self.existing_commitments.get(slot_id, {})
+                
+                # Block if faculty is already teaching at this slot
+                if faculty_id and faculty_id in committed.get('faculty', set()):
+                    self.model.Add(self.start_vars[session_id] != slot_idx)
+                    blocked_faculty_slots += 1
+        
+        print(f"    [v] Blocked {blocked_faculty_slots} faculty-slot combinations from other timetables")
+    
+    def _validate_slot_coverage(self):
+        """
+        Warn admin if total sessions don't fill all available slots.
+        """
+        total_slots = len(self.time_slots)
+        total_sessions = len(self.sessions)
+        gap = total_slots - total_sessions
+        
+        print(f"\n[CHECK] Slot Coverage: {total_sessions} sessions vs {total_slots} slots")
+        
+        if gap > 0:
+            print(f"  [WARN] {gap} slots will be EMPTY!")
+            print(f"  [HINT] Add subjects/credits totaling {gap} more hours to fill all slots")
+        elif gap < 0:
+            print(f"  [ERROR] {-gap} MORE sessions than available slots!")
+            print(f"  [HINT] Reduce credits or add more time slots")
+        else:
+            print(f"  [OK] Perfect fit! All {total_slots} slots will be filled")
     
     def solve_for_batch(self, batch_id: str, time_limit_seconds: int = 30) -> Dict[str, Any]:
         """
@@ -518,7 +1143,7 @@ class NEPScheduler:
             Dictionary containing the solution or error information
         """
         print(f"\n{'='*80}")
-        print(f"🚀 NEP 2020 Timetable Scheduler - Batch {batch_id}")
+        print(f"[START] NEP 2020 Timetable Scheduler - Batch {batch_id}")
         print(f"{'='*80}\n")
         
         # Step 1: Fetch data from Supabase
@@ -535,8 +1160,11 @@ class NEPScheduler:
         # Step 3: Add all constraints
         self.add_nep_bucket_constraints()
         self.add_bucket_separation_constraints()
+        self.add_student_group_constraints()  # Prevent batch overlap
         self.add_faculty_conflict_constraints()
+        self.add_room_conflict_constraints()  # Prevent room double-booking
         self.add_room_type_constraints()
+        self.add_assigned_classroom_constraints()  # Lock pre-assigned labs
         self.add_faculty_availability_constraints()
         
         # Phase 3: Add special event constraints
@@ -544,12 +1172,18 @@ class NEPScheduler:
         self.add_internship_block_constraints()
         self.add_dissertation_library_hours()
         
+        # Phase 4: DB-driven constraints (cross-batch conflicts, etc.)
+        self.apply_all_constraints()
+        
+        # Phase 5: Validate slot coverage
+        self._validate_slot_coverage()
+        
         # Step 4: Configure solver
         self.solver.parameters.max_time_in_seconds = time_limit_seconds
         self.solver.parameters.log_search_progress = True
         
         # Step 5: Solve
-        print(f"\n⏳ Solving with CP-SAT (max {time_limit_seconds}s)...")
+        print(f"\n[WAIT] Solving with CP-SAT (max {time_limit_seconds}s)...")
         status = self.solver.Solve(self.model)
         
         # Step 6: Process results
@@ -561,9 +1195,10 @@ class NEPScheduler:
     def _format_solution(self, batch_id: str, status) -> Dict[str, Any]:
         """
         Format the CP-SAT solution into a structured JSON response.
+        Processes ALL sessions generated from subjects.
         """
         print("\n" + "="*80)
-        print("✅ SOLUTION FOUND!")
+        print("[OK] SOLUTION FOUND!")
         print("="*80 + "\n")
         
         scheduled_classes = []
@@ -582,50 +1217,63 @@ class NEPScheduler:
             }
             special_events_summary.append(event_entry)
             
-            print(f"🎓 {event['code']} ({event['nep_category']})")
+            print(f"[GRAD] {event['code']} ({event['nep_category']})")
             print(f"   {event_entry['notes']}")
             print()
         
-        # Process by bucket for cleaner output
+        # Process ALL sessions (multiple per subject based on credits)
+        for session in self.sessions:
+            session_id = session['session_id']
+            subject = session['subject']
+            session_num = session['session_num']
+            
+            # Get assigned values from solver
+            time_slot_idx = self.solver.Value(self.start_vars[session_id])
+            room_idx = self.solver.Value(self.room_vars[session_id])
+            
+            time_slot = self.time_slots[time_slot_idx]
+            room = self.classrooms[room_idx]
+            faculty_id = self.subject_faculty_map.get(subject['id'])
+            
+            class_entry = {
+                'subject_id': subject['id'],
+                'subject_code': subject['code'],
+                'subject_name': subject['name'],
+                'session_number': session_num,
+                'time_slot_id': time_slot['id'],
+                'day': time_slot['day'],
+                'start_time': time_slot['start_time'],
+                'end_time': time_slot['end_time'],
+                'classroom_id': room['id'],
+                'classroom_name': room['name'],
+                'faculty_id': faculty_id,
+                'batch_id': batch_id,  # Add batch_id
+                'nep_category': subject.get('nep_category', 'CORE'),
+                'subject_type': subject.get('subject_type', 'THEORY'),
+                'is_lab': subject.get('requires_lab', False) or subject.get('subject_type') in ['LAB', 'PRACTICAL']
+            }
+            
+            scheduled_classes.append(class_entry)
+            
+            print(f"[BOOK] {subject['code']} Session {session_num}")
+            print(f"   Time: {time_slot['day']} {time_slot['start_time']}-{time_slot['end_time']}")
+            print(f"   Room: {room['name']}")
+            print()
+        
+        # Process buckets for summary only
         for bucket in self.buckets:
             bucket_time_slot = None
             bucket_classes = []
             
             for subject in bucket['subjects']:
                 subject_id = subject['id']
-                
-                # Get assigned values
-                time_slot_idx = self.solver.Value(self.start_vars[subject_id])
-                room_idx = self.solver.Value(self.room_vars[subject_id])
-                
-                time_slot = self.time_slots[time_slot_idx]
-                room = self.classrooms[room_idx]
-                faculty_id = self.subject_faculty_map.get(subject_id)
-                
-                if bucket_time_slot is None:
-                    bucket_time_slot = time_slot
-                
-                class_entry = {
-                    'subject_id': subject_id,
-                    'subject_code': subject['code'],
-                    'subject_name': subject['name'],
-                    'time_slot_id': time_slot['id'],
-                    'day': time_slot['day'],
-                    'start_time': time_slot['start_time'],
-                    'end_time': time_slot['end_time'],
-                    'classroom_id': room['id'],
-                    'classroom_name': room['name'],
-                    'faculty_id': faculty_id,
-                    'nep_category': subject['nep_category']
-                }
-                
-                scheduled_classes.append(class_entry)
-                bucket_classes.append(class_entry)
-                
-                print(f"📚 {subject['code']} ({subject['nep_category']})")
-                print(f"   Time: {time_slot['day']} {time_slot['start_time']}-{time_slot['end_time']}")
-                print(f"   Room: {room['name']}")
-                print()
+                # Get first session for bucket display
+                session_ids = self.subject_sessions.get(subject_id, [])
+                if session_ids and session_ids[0] in self.start_vars:
+                    time_slot_idx = self.solver.Value(self.start_vars[session_ids[0]])
+                    time_slot = self.time_slots[time_slot_idx]
+                    if bucket_time_slot is None:
+                        bucket_time_slot = time_slot
             
             bucket_summary.append({
                 'bucket_id': bucket['id'],
@@ -635,7 +1283,7 @@ class NEPScheduler:
                     'start_time': bucket_time_slot['start_time'],
                     'end_time': bucket_time_slot['end_time']
                 } if bucket_time_slot else None,
-                'subjects': len(bucket_classes)
+                'subjects': len(bucket['subjects'])
             })
         
         # Calculate metrics
@@ -654,6 +1302,7 @@ class NEPScheduler:
             'metrics': {
                 'total_subjects': len(self.subjects),
                 'regular_subjects': len(self.regular_subjects),
+                'total_sessions': len(self.sessions),
                 'special_events': len(self.special_events),
                 'total_buckets': len(self.buckets),
                 'time_slots_used': len(set(sc['time_slot_id'] for sc in scheduled_classes)),
@@ -661,6 +1310,9 @@ class NEPScheduler:
             },
             'generated_at': datetime.now().isoformat()
         }
+        
+        self.solution = solution
+        return solution
     
     def _get_special_event_notes(self, event: Dict) -> str:
         """
@@ -675,9 +1327,6 @@ class NEPScheduler:
         elif event['nep_category'] == 'DISSERTATION':
             return "Library/Research hours (Flexible schedule, No formal class)"
         return "Special event (Handled separately)"
-        
-        self.solution = solution
-        return solution
     
     def _format_failure(self, batch_id: str, status) -> Dict[str, Any]:
         """
@@ -690,7 +1339,7 @@ class NEPScheduler:
         }
         
         print("\n" + "="*80)
-        print(f"❌ FAILED: {status_map.get(status, 'Unknown error')}")
+        print(f"[ERROR] FAILED: {status_map.get(status, 'Unknown error')}")
         print("="*80 + "\n")
         
         return {
@@ -722,11 +1371,11 @@ class NEPScheduler:
             True if saved successfully, False otherwise
         """
         if not self.solution or not self.solution['success']:
-            print("❌ No valid solution to save")
+            print("[ERROR] No valid solution to save")
             return False
         
         try:
-            print("\n💾 Saving solution to database...")
+            print("\n[SAVE] Saving solution to database...")
             
             # 1. Create timetable record
             timetable_data = {
@@ -744,7 +1393,7 @@ class NEPScheduler:
                 .execute()
             
             timetable_id = timetable_response.data[0]['id']
-            print(f"✅ Created timetable: {timetable_id}")
+            print(f"[OK] Created timetable: {timetable_id}")
             
             # 2. Insert scheduled classes
             scheduled_classes = []
@@ -762,12 +1411,12 @@ class NEPScheduler:
                     .insert(scheduled_classes) \
                     .execute()
                 
-                print(f"✅ Inserted {len(scheduled_classes)} scheduled classes")
+                print(f"[OK] Inserted {len(scheduled_classes)} scheduled classes")
             
             return True
             
         except Exception as e:
-            print(f"❌ Error saving solution: {str(e)}")
+            print(f"[ERROR] Error saving solution: {str(e)}")
             import traceback
             traceback.print_exc()
             return False
@@ -824,6 +1473,9 @@ class SolutionCollector(cp_model.CpSolverSolutionCallback):
                 }
             
             self._solutions.append(solution)
+        
+        if self._solution_count >= self._solution_limit:
+            self.StopSearch()
     
     def solution_count(self) -> int:
         """Return total number of solutions found."""
@@ -857,13 +1509,14 @@ def solve_for_multiple_seeds(
         List of solution dictionaries, each containing assignments
     """
     print(f"\n{'='*80}")
-    print(f"🌱 Generating {num_solutions} Seed Solutions for GA")
+    print(f"[SEED] Generating {num_solutions} Seed Solutions for GA")
+    print(f"[DEBUG] ANTIGRAVITY AGENT EDIT ACTIVE - TIMESTAMP {datetime.now()}")
     print(f"{'='*80}\n")
     
     # Ensure data is loaded
     if not scheduler.subjects:
         if not scheduler.fetch_batch_data(batch_id):
-            print("❌ Failed to fetch batch data")
+            print("[ERROR] Failed to fetch batch data")
             return []
     
     # Create fresh model for multi-solution search
@@ -874,15 +1527,22 @@ def solve_for_multiple_seeds(
     # Create variables
     scheduler.create_variables()
     
-    # Add all constraints
-    scheduler.add_nep_bucket_constraints()
-    scheduler.add_bucket_separation_constraints()
+    # Add all constraints (must match solve_for_batch to avoid invalid seeds)
+    # scheduler.add_nep_bucket_constraints()
+    # scheduler.add_bucket_separation_constraints()
+    scheduler.add_student_group_constraints()       # CRITICAL: Prevent batch time overlap
     scheduler.add_faculty_conflict_constraints()
+    scheduler.add_room_conflict_constraints()       # CRITICAL: Prevent room double-booking
     scheduler.add_room_type_constraints()
-    scheduler.add_faculty_availability_constraints()
-    scheduler.add_teaching_practice_time_restrictions()
-    scheduler.add_internship_block_constraints()
-    scheduler.add_dissertation_library_hours()
+    scheduler.add_assigned_classroom_constraints()  # Lock pre-assigned labs
+    print("[DEBUG] Skipping Faculty Availability Constraints (Explicit Disable)")
+    # scheduler.add_faculty_availability_constraints()
+    # scheduler.add_teaching_practice_time_restrictions()
+    # scheduler.add_internship_block_constraints()
+    # scheduler.add_dissertation_library_hours()
+    
+    # Phase 4: DB-driven constraints (cross-batch conflicts, etc.)
+    # scheduler.apply_all_constraints()
     
     # Create solver with solution callback
     solver = cp_model.CpSolver()
@@ -899,47 +1559,57 @@ def solve_for_multiple_seeds(
         limit=num_solutions
     )
     
-    print(f"⏳ Searching for up to {num_solutions} solutions (max {time_limit_seconds}s)...")
+    _log(f"[WAIT] Searching for up to {num_solutions} solutions (max {time_limit_seconds}s)...")
     status = solver.Solve(scheduler.model, collector)
     
-    print(f"✅ Found {collector.solution_count()} total solutions, collected {len(collector.get_solutions())}")
+    _log(f"[OK] Found {collector.solution_count()} total solutions, collected {len(collector.get_solutions())}")
     
     # Convert solutions to assignment format
     solutions = []
     for idx, raw_solution in enumerate(collector.get_solutions()):
-        assignments = []
+        scheduled_classes = []
         
-        for subject_id in raw_solution['time_slots'].keys():
-            time_data = raw_solution['time_slots'].get(subject_id, {})
-            room_data = raw_solution['rooms'].get(subject_id, {})
+        for session_id in raw_solution['time_slots'].keys():
+            time_data = raw_solution['time_slots'].get(session_id, {})
+            room_data = raw_solution['rooms'].get(session_id, {})
+            
+            # Extract subject ID and session number from session_id (e.g., "SUB123_s1")
+            if '_s' in session_id:
+                parts = session_id.rsplit('_s', 1)
+                real_subject_id = parts[0]
+                session_num = int(parts[1])
+            else:
+                real_subject_id = session_id
+                session_num = 1
             
             # Find subject info
             subject_info = next(
-                (s for s in scheduler.subjects if s['id'] == subject_id),
+                (s for s in scheduler.subjects if s['id'] == real_subject_id),
                 None
             )
             
             if time_data.get('data') and room_data.get('data'):
                 assignment = {
-                    'subject_id': subject_id,
+                    'subject_id': real_subject_id,
                     'subject_code': subject_info['code'] if subject_info else 'UNKNOWN',
-                    'faculty_id': scheduler.subject_faculty_map.get(subject_id),
+                    'faculty_id': scheduler.subject_faculty_map.get(real_subject_id),
                     'classroom_id': room_data['data']['id'],
                     'time_slot_id': time_data['data']['id'],
                     'batch_id': batch_id,
-                    'is_lab': subject_info.get('requires_lab', False) if subject_info else False
+                    'session_number': session_num,
+                    'is_lab': subject_info.get('requires_lab', False) or (subject_info and subject_info.get('subject_type') in ['LAB', 'PRACTICAL']) if subject_info else False
                 }
-                assignments.append(assignment)
+                scheduled_classes.append(assignment)
         
         solutions.append({
             'solution_index': idx,
             'batch_id': batch_id,
-            'assignments': assignments,
-            'num_assignments': len(assignments),
+            'scheduled_classes': scheduled_classes,
+            'num_assignments': len(scheduled_classes),
             'status': 'feasible'
         })
     
-    print(f"📦 Prepared {len(solutions)} seed solutions with assignments")
+    print(f"[PACK] Prepared {len(solutions)} seed solutions with scheduled_classes")
     
     return solutions
 
@@ -963,7 +1633,7 @@ def main():
     supabase_key = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
     
     if not supabase_url or not supabase_key:
-        print("❌ Error: Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables")
+        print("[ERROR] Error: Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables")
         sys.exit(1)
     
     # Create scheduler and solve
@@ -974,7 +1644,7 @@ def main():
     if args.output:
         with open(args.output, 'w') as f:
             json.dump(solution, f, indent=2)
-        print(f"\n💾 Solution saved to: {args.output}")
+        print(f"\n[SAVE] Solution saved to: {args.output}")
     else:
         print("\n📄 Solution JSON:")
         print(json.dumps(solution, indent=2))

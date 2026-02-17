@@ -37,11 +37,11 @@ class GAConfig:
     """Configuration for the Genetic Algorithm."""
     
     # Population parameters
-    population_size: int = 100
-    elite_size: int = 10
+    population_size: int = 50
+    elite_size: int = 5
     
     # Evolution parameters
-    generations: int = 200
+    generations: int = 50
     mutation_rate: float = 0.15
     crossover_rate: float = 0.8
     
@@ -49,7 +49,7 @@ class GAConfig:
     tournament_size: int = 5
     
     # Convergence detection
-    stagnation_limit: int = 30  # Stop if no improvement for N generations
+    stagnation_limit: int = 15  # Stop if no improvement for N generations
     
     # Parallel processing
     use_multiprocessing: bool = True

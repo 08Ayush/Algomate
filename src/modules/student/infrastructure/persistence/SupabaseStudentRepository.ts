@@ -2,6 +2,8 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { IStudentRepository, IBatchRepository } from '../../domain/repositories/IStudentRepository';
 import { Student, Batch } from '../../domain/entities/Student';
 import { BaseRepository, Database } from '@/shared/database';
+import { withCacheAside } from '@/shared/cache/cache-helper';
+import { redisCache } from '@/shared/cache/redis-cache';
 
 export class SupabaseStudentRepository extends BaseRepository<'users'> implements IStudentRepository {
     constructor(db: SupabaseClient<Database>) {
@@ -21,18 +23,20 @@ export class SupabaseStudentRepository extends BaseRepository<'users'> implement
     }
 
     async findById(id: string): Promise<Student | null> {
-        const { data, error } = await this.db
-            .from('users')
-            .select('*')
-            .eq('id', id)
-            .eq('role', 'student')
-            .single();
+        return withCacheAside({ key: `student:id:${id}`, ttl: 3600 }, async () => {
+            const { data, error } = await this.db
+                .from('users')
+                .select('*')
+                .eq('id', id)
+                .eq('role', 'student')
+                .single();
 
-        if (error) {
-            if (error.code === 'PGRST116') return null;
-            throw error;
-        }
-        return this.mapToEntity(data);
+            if (error) {
+                if (error.code === 'PGRST116') return null;
+                throw error;
+            }
+            return this.mapToEntity(data);
+        });
     }
 
     async findByUserId(userId: string): Promise<Student | null> {
@@ -40,13 +44,16 @@ export class SupabaseStudentRepository extends BaseRepository<'users'> implement
     }
 
     async findByBatch(batchId: string): Promise<Student[]> {
-        const { data, error } = await this.db
-            .from('users')
-            .select('*')
-            .eq('role', 'student');
+        return withCacheAside({ key: `students:batch:${batchId}`, ttl: 3600 }, async () => {
+            const { data, error } = await this.db
+                .from('users')
+                .select('*')
+                .eq('role', 'student')
+                .eq('batch_id', batchId); // Added the missing filter match
 
-        if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+            if (error) throw error;
+            return data.map(row => this.mapToEntity(row));
+        });
     }
 
     async create(student: Omit<Student, 'id' | 'createdAt' | 'updatedAt'>): Promise<Student> {
@@ -111,27 +118,31 @@ export class SupabaseBatchRepository implements IBatchRepository {
     }
 
     async findById(id: string): Promise<Batch | null> {
-        const { data, error } = await this.db
-            .from('batches' as any)
-            .select('*')
-            .eq('id', id)
-            .single();
+        return withCacheAside({ key: `batch:id:${id}`, ttl: 3600 }, async () => {
+            const { data, error } = await this.db
+                .from('batches' as any)
+                .select('*')
+                .eq('id', id)
+                .single();
 
-        if (error) {
-            if (error.code === 'PGRST116') return null;
-            throw error;
-        }
-        return this.mapToEntity(data);
+            if (error) {
+                if (error.code === 'PGRST116') return null;
+                throw error;
+            }
+            return this.mapToEntity(data);
+        });
     }
 
     async findByDepartment(departmentId: string): Promise<Batch[]> {
-        const { data, error } = await this.db
-            .from('batches' as any)
-            .select('*')
-            .eq('department_id', departmentId);
+        return withCacheAside({ key: `batches:dept:${departmentId}`, ttl: 3600 }, async () => {
+            const { data, error } = await this.db
+                .from('batches' as any)
+                .select('*')
+                .eq('department_id', departmentId);
 
-        if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+            if (error) throw error;
+            return data.map(row => this.mapToEntity(row));
+        });
     }
 
     async create(batch: Omit<Batch, 'id' | 'createdAt' | 'updatedAt'>): Promise<Batch> {

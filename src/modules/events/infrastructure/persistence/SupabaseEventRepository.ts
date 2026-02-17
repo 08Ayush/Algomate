@@ -2,6 +2,8 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { IEventRepository, IEventRegistrationRepository } from '../../domain/repositories/IEventRepository';
 import { Event, EventRegistration } from '../../domain/entities/Event';
 import { Database } from '@/shared/database';
+import { withCacheAside } from '@/shared/cache/cache-helper';
+import { redisCache } from '@/shared/cache/redis-cache';
 
 export class SupabaseEventRepository implements IEventRepository {
     constructor(private readonly db: SupabaseClient<Database>) { }
@@ -22,27 +24,31 @@ export class SupabaseEventRepository implements IEventRepository {
     }
 
     async findById(id: string): Promise<Event | null> {
-        const { data, error } = await this.db
-            .from('events' as any)
-            .select('*')
-            .eq('id', id)
-            .single();
+        return withCacheAside({ key: `event:id:${id}`, ttl: 3600 }, async () => {
+            const { data, error } = await this.db
+                .from('events' as any)
+                .select('*')
+                .eq('id', id)
+                .single();
 
-        if (error) {
-            if (error.code === 'PGRST116') return null;
-            throw error;
-        }
-        return this.mapToEntity(data);
+            if (error) {
+                if (error.code === 'PGRST116') return null;
+                throw error;
+            }
+            return this.mapToEntity(data);
+        });
     }
 
     async findByDepartment(departmentId: string): Promise<Event[]> {
-        const { data, error } = await this.db
-            .from('events' as any)
-            .select('*')
-            .eq('department_id', departmentId);
+        return withCacheAside({ key: `events:dept:${departmentId}`, ttl: 3600 }, async () => {
+            const { data, error } = await this.db
+                .from('events' as any)
+                .select('*')
+                .eq('department_id', departmentId);
 
-        if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+            if (error) throw error;
+            return data.map(row => this.mapToEntity(row));
+        });
     }
 
     async findAll(filters?: { status?: string; departmentId?: string }): Promise<Event[]> {
@@ -61,14 +67,16 @@ export class SupabaseEventRepository implements IEventRepository {
     }
 
     async findUpcoming(): Promise<Event[]> {
-        const { data, error } = await this.db
-            .from('events' as any)
-            .select('*')
-            .gte('event_date', new Date().toISOString())
-            .order('event_date', { ascending: true });
+        return withCacheAside({ key: `events:upcoming`, ttl: 1800 }, async () => {
+            const { data, error } = await this.db
+                .from('events' as any)
+                .select('*')
+                .gte('event_date', new Date().toISOString())
+                .order('event_date', { ascending: true });
 
-        if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+            if (error) throw error;
+            return data.map(row => this.mapToEntity(row));
+        });
     }
 
     async findConflictingEvents(start: Date, end: Date, location: string, excludeId?: string): Promise<Event[]> {

@@ -207,9 +207,11 @@ export default function HybridSchedulerPage() {
           message: data.progressMessage || 'Processing...',
           metrics: data.status === 'completed' ? {
             strategy: hybridConfig.strategy,
-            execution_time: ((Date.now() - pollCount * 5000) / 1000).toFixed(2),
-            quality_score: data.fitnessScore ? (data.fitnessScore * 100).toFixed(1) : '0',
-            violations: 0
+            execution_time: (pollCount * 5).toFixed(1),
+            quality_score: data.fitnessScore != null
+              ? Math.max(0, Math.min(100, (100 + Number(data.fitnessScore)))).toFixed(1)
+              : '0',
+            violations: data.hardConstraintViolations || 0
           } : undefined
         });
 

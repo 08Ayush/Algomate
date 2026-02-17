@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { logger } from '../Logger';
+import { logger } from '@/shared/logging/Logger';
 
 /**
  * Correlation ID for request tracking

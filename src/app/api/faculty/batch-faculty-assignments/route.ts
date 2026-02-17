@@ -57,10 +57,10 @@ export async function GET(request: NextRequest) {
 
         const supabase = getSupabaseAdmin();
 
-        // Get batch info
+        // Get batch info with department and course details
         const { data: batch, error: batchError } = await supabase
             .from('batches')
-            .select('id, name, department_id, semester, academic_year, college_id')
+            .select('id, name, department_id, semester, academic_year, college_id, course_id')
             .eq('id', batchId)
             .single();
 
@@ -71,8 +71,8 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // Get batch subjects with subject details, assigned faculty, and assigned lab
-        const { data: batchSubjects, error: bsError } = await supabase
+        // Get batch subjects with full subject details
+        const { data: batchSubjectsRaw, error: bsError } = await supabase
             .from('batch_subjects')
             .select(`
                 id,
@@ -80,11 +80,22 @@ export async function GET(request: NextRequest) {
                 required_hours_per_week,
                 assigned_faculty_id,
                 assigned_lab_id,
+                priority_level,
+                is_mandatory,
                 subjects (
                     id,
                     name,
                     code,
-                    subject_type
+                    subject_type,
+                    college_id,
+                    department_id,
+                    course_id,
+                    semester,
+                    credits_per_week,
+                    requires_lab,
+                    lecture_hours,
+                    practical_hours,
+                    tutorial_hours
                 )
             `)
             .eq('batch_id', batchId);
@@ -97,6 +108,38 @@ export async function GET(request: NextRequest) {
             );
         }
 
+        // Filter subjects to only include those that belong to the batch's department
+        // A subject belongs to the batch if:
+        // 1. Subject's department_id matches batch's department_id, OR
+        // 2. Subject's department_id is NULL (common/shared subjects across departments), OR
+        // 3. Subject's semester matches batch's semester AND college matches
+        const batchSubjects = (batchSubjectsRaw || []).filter(bs => {
+            const subject = bs.subjects as any;
+            if (!subject) return false;
+
+            // Must be from the same college
+            if (subject.college_id !== batch.college_id) return false;
+
+            // Check department match
+            const subjectDeptId = subject.department_id;
+            const batchDeptId = batch.department_id;
+
+            // Include if:
+            // - Subject's department matches batch's department
+            // - Subject has no department (shared/common subject)
+            // Note: We intentionally exclude course_id match to prevent subjects from other departments (e.g. DS) 
+            // that share the same course (e.g. B.Tech) from appearing in this department's view.
+            if (subjectDeptId === batchDeptId) return true;
+            if (subjectDeptId === null) return true;
+
+            // Log skipped subjects for debugging
+            // console.log(`Skipping subject ${subject.name} (${subject.code}) - Dept: ${subjectDeptId} vs Batch Dept: ${batchDeptId}`);
+
+            return false;
+        });
+
+        console.log(`Batch ${batch.name}: Found ${batchSubjectsRaw?.length || 0} total subjects, filtered to ${batchSubjects.length} for department ${batch.department_id}`);
+
         // Fetch available lab rooms for the college
         const { data: labRooms } = await supabase
             .from('classrooms')
@@ -106,63 +149,103 @@ export async function GET(request: NextRequest) {
             .or('type.eq.Lab,is_lab.eq.true')
             .order('name');
 
-        // For each subject, get qualified faculty
+        // Get all qualified faculty for subjects in this batch from the same college
+        const subjectIds = (batchSubjects || []).map(bs => bs.subject_id);
+
+        // Fetch all qualified faculty in one query for efficiency
+        const { data: allQualifiedFaculty } = await supabase
+            .from('faculty_qualified_subjects')
+            .select(`
+                faculty_id,
+                subject_id,
+                proficiency_level,
+                is_primary_teacher,
+                can_handle_lab,
+                can_handle_tutorial,
+                users!faculty_id (
+                    id,
+                    first_name,
+                    last_name,
+                    college_id,
+                    department_id,
+                    is_active,
+                    role
+                )
+            `)
+            .in('subject_id', subjectIds);
+
+        // Filter qualified faculty to only include those from the same college
+        const qualifiedFacultyBySubject = new Map<string, QualifiedFaculty[]>();
+
+        for (const qf of allQualifiedFaculty || []) {
+            const user = qf.users as any;
+
+            // Only include faculty from the same college who are active
+            if (user && user.college_id === batch.college_id && user.is_active && user.role === 'faculty') {
+                const subjectId = qf.subject_id;
+
+                if (!qualifiedFacultyBySubject.has(subjectId)) {
+                    qualifiedFacultyBySubject.set(subjectId, []);
+                }
+
+                qualifiedFacultyBySubject.get(subjectId)!.push({
+                    faculty_id: qf.faculty_id,
+                    faculty_name: `${user.first_name} ${user.last_name}`,
+                    proficiency_level: qf.proficiency_level,
+                    is_primary_teacher: qf.is_primary_teacher
+                });
+            }
+        }
+
+        // Sort each subject's faculty by proficiency (primary teachers first, then by level)
+        for (const [, facultyList] of qualifiedFacultyBySubject) {
+            facultyList.sort((a, b) => {
+                if (a.is_primary_teacher !== b.is_primary_teacher) {
+                    return a.is_primary_teacher ? -1 : 1;
+                }
+                return b.proficiency_level - a.proficiency_level;
+            });
+        }
+
+        // Get assigned faculty and lab names in bulk
+        const assignedFacultyIds = (batchSubjects || [])
+            .filter(bs => bs.assigned_faculty_id)
+            .map(bs => bs.assigned_faculty_id);
+
+        const assignedLabIds = (batchSubjects || [])
+            .filter(bs => bs.assigned_lab_id)
+            .map(bs => bs.assigned_lab_id);
+
+        const { data: assignedFacultyData } = assignedFacultyIds.length > 0
+            ? await supabase
+                .from('users')
+                .select('id, first_name, last_name')
+                .in('id', assignedFacultyIds)
+            : { data: [] };
+
+        const { data: assignedLabData } = assignedLabIds.length > 0
+            ? await supabase
+                .from('classrooms')
+                .select('id, name')
+                .in('id', assignedLabIds)
+            : { data: [] };
+
+        const facultyNameMap = new Map(
+            (assignedFacultyData || []).map(f => [f.id, `${f.first_name} ${f.last_name}`])
+        );
+        const labNameMap = new Map(
+            (assignedLabData || []).map(l => [l.id, l.name])
+        );
+
+        // Build the response
         const subjectsWithFaculty: BatchSubjectWithFaculty[] = [];
 
         for (const bs of batchSubjects || []) {
             const subject = bs.subjects as any;
             const subjectType = subject?.subject_type || 'THEORY';
-            const isLabSubject = ['LAB', 'PRACTICAL', 'LABORATORY'].includes(subjectType.toUpperCase());
-
-            // Get qualified faculty for this subject
-            const { data: qualifiedData } = await supabase
-                .from('faculty_qualified_subjects')
-                .select(`
-                    faculty_id,
-                    proficiency_level,
-                    is_primary_teacher,
-                    users!faculty_id (
-                        id,
-                        first_name,
-                        last_name
-                    )
-                `)
-                .eq('subject_id', bs.subject_id);
-
-            // Get assigned faculty name if exists
-            let assignedFacultyName: string | null = null;
-            if (bs.assigned_faculty_id) {
-                const { data: assignedUser } = await supabase
-                    .from('users')
-                    .select('first_name, last_name')
-                    .eq('id', bs.assigned_faculty_id)
-                    .single();
-
-                if (assignedUser) {
-                    assignedFacultyName = `${assignedUser.first_name} ${assignedUser.last_name}`;
-                }
-            }
-
-            // Get assigned lab name if exists
-            let assignedLabName: string | null = null;
-            if (bs.assigned_lab_id) {
-                const { data: assignedLab } = await supabase
-                    .from('classrooms')
-                    .select('name')
-                    .eq('id', bs.assigned_lab_id)
-                    .single();
-
-                if (assignedLab) {
-                    assignedLabName = assignedLab.name;
-                }
-            }
-
-            const qualifiedFaculty: QualifiedFaculty[] = (qualifiedData || []).map((q: any) => ({
-                faculty_id: q.faculty_id,
-                faculty_name: q.users ? `${q.users.first_name} ${q.users.last_name}` : 'Unknown',
-                proficiency_level: q.proficiency_level,
-                is_primary_teacher: q.is_primary_teacher
-            }));
+            const isLabSubject = ['LAB', 'PRACTICAL', 'LABORATORY'].includes(subjectType.toUpperCase())
+                || subject?.requires_lab === true
+                || (subject?.practical_hours && subject.practical_hours > 0);
 
             subjectsWithFaculty.push({
                 batch_subject_id: bs.id,
@@ -172,13 +255,27 @@ export async function GET(request: NextRequest) {
                 subject_type: subjectType,
                 required_hours: bs.required_hours_per_week,
                 assigned_faculty_id: bs.assigned_faculty_id,
-                assigned_faculty_name: assignedFacultyName,
+                assigned_faculty_name: bs.assigned_faculty_id
+                    ? facultyNameMap.get(bs.assigned_faculty_id) || null
+                    : null,
                 assigned_lab_id: bs.assigned_lab_id || null,
-                assigned_lab_name: assignedLabName,
-                qualified_faculty: qualifiedFaculty,
+                assigned_lab_name: bs.assigned_lab_id
+                    ? labNameMap.get(bs.assigned_lab_id) || null
+                    : null,
+                qualified_faculty: qualifiedFacultyBySubject.get(bs.subject_id) || [],
                 is_lab_subject: isLabSubject
             });
         }
+
+        // Sort subjects: unassigned first, then by name
+        subjectsWithFaculty.sort((a, b) => {
+            const aAssigned = !!a.assigned_faculty_id;
+            const bAssigned = !!b.assigned_faculty_id;
+            if (aAssigned !== bAssigned) {
+                return aAssigned ? 1 : -1; // Unassigned first
+            }
+            return a.subject_name.localeCompare(b.subject_name);
+        });
 
         // Format lab rooms for response
         const formattedLabRooms: LabRoom[] = (labRooms || []).map((room: any) => ({
@@ -196,6 +293,8 @@ export async function GET(request: NextRequest) {
             batch_name: batch.name,
             semester: batch.semester,
             academic_year: batch.academic_year,
+            department_id: batch.department_id,
+            college_id: batch.college_id,
             subjects: subjectsWithFaculty,
             lab_rooms: formattedLabRooms,
             total_subjects: subjectsWithFaculty.length,
