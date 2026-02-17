@@ -6,10 +6,8 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from core.models import (
-    TimeSlot, Room, Faculty, Batch, Subject, 
-    BatchSubjectRequirement, SchedulingContext
-)
+from core.models import TimeSlot, Room, Faculty, Batch, Subject
+from core.context import SchedulingContext, InstitutionConfig
 from core.config import SolverConfig
 from solvers.genetic_algorithm import GAConfig
 from solvers.hybrid_ga_cpsat import HybridGACPSATSolver
@@ -26,83 +24,103 @@ def create_sample_context() -> SchedulingContext:
     time_slots = []
     days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
     times = [
-        (540, 600, 'slot_9am'),    # 9-10 AM
-        (600, 660, 'slot_10am'),   # 10-11 AM
-        (660, 720, 'slot_11am'),   # 11-12 PM
-        (780, 840, 'slot_2pm'),    # 2-3 PM
-        (840, 900, 'slot_3pm'),    # 3-4 PM
-        (900, 960, 'slot_4pm'),    # 4-5 PM
+        (9, 0, 'slot_9am'),    # 9-10 AM
+        (10, 0, 'slot_10am'),  # 10-11 AM
+        (11, 0, 'slot_11am'),  # 11-12 PM
+        (14, 0, 'slot_2pm'),   # 2-3 PM
+        (15, 0, 'slot_3pm'),   # 3-4 PM
+        (16, 0, 'slot_4pm'),   # 4-5 PM
     ]
     
     for day_idx, day in enumerate(days):
-        for start, end, slot_id in times:
+        for hour, minute, slot_id in times:
             slot = TimeSlot(
                 id=f"{slot_id}_{day.lower()}",
                 day=day_idx,
-                start_minute=start,
-                duration_minutes=end - start
+                start_hour=hour,
+                start_minute=minute,
+                duration_minutes=60,
+                is_lab_slot=(hour >= 14)  # Afternoon slots can be labs
             )
             time_slots.append(slot)
     
     # Rooms
     rooms = [
-        Room(id="R101", name="Room 101", capacity=60, building="Main", is_lab=False),
-        Room(id="R102", name="Room 102", capacity=60, building="Main", is_lab=False),
-        Room(id="R103", name="Room 103", capacity=60, building="Main", is_lab=False),
-        Room(id="L201", name="Lab 201", capacity=30, building="Lab Block", is_lab=True),
-        Room(id="L202", name="Lab 202", capacity=30, building="Lab Block", is_lab=True),
+        Room(id="R101", name="Room 101", capacity=60, room_type="classroom",
+             building="Main", floor=1, facilities=["projector", "whiteboard"]),
+        Room(id="R102", name="Room 102", capacity=60, room_type="classroom",
+             building="Main", floor=1, facilities=["projector", "whiteboard"]),
+        Room(id="R103", name="Room 103", capacity=60, room_type="classroom",
+             building="Main", floor=1, facilities=["projector", "whiteboard"]),
+        Room(id="L201", name="Lab 201", capacity=30, room_type="lab",
+             building="Lab Block", floor=2, facilities=["computers", "projector"]),
+        Room(id="L202", name="Lab 202", capacity=30, room_type="lab",
+             building="Lab Block", floor=2, facilities=["computers", "projector"]),
     ]
     
     # Subjects
     subjects = [
-        Subject(id="DS", name="Data Structures", credits=4, is_lab=False, department_id="CSE"),
-        Subject(id="OS", name="Operating Systems", credits=4, is_lab=False, department_id="CSE"),
-        Subject(id="DBMS", name="Database Management", credits=3, is_lab=False, department_id="CSE"),
-        Subject(id="DS_LAB", name="DS Lab", credits=2, is_lab=True, department_id="CSE"),
-        Subject(id="OS_LAB", name="OS Lab", credits=2, is_lab=True, department_id="CSE"),
+        Subject(id="DS", name="Data Structures", code="CS301", credits=4, 
+                hours_per_week=4, is_lab=False, 
+                required_qualifications=["Data Structures"]),
+        Subject(id="OS", name="Operating Systems", code="CS302", credits=4,
+                hours_per_week=4, is_lab=False,
+                required_qualifications=["Operating Systems"]),
+        Subject(id="DBMS", name="Database Management", code="CS303", credits=3,
+                hours_per_week=3, is_lab=False,
+                required_qualifications=["Database Systems"]),
+        Subject(id="DS_LAB", name="DS Lab", code="CS301L", credits=2,
+                hours_per_week=2, is_lab=True,
+                required_qualifications=["Data Structures"]),
+        Subject(id="OS_LAB", name="OS Lab", code="CS302L", credits=2,
+                hours_per_week=2, is_lab=True,
+                required_qualifications=["Operating Systems"]),
     ]
     
     # Faculty
     faculty = [
-        Faculty(id="F1", name="Dr. Smith", department_id="CSE", 
-                qualified_subjects=["DS", "DS_LAB"]),
-        Faculty(id="F2", name="Dr. Johnson", department_id="CSE",
-                qualified_subjects=["OS", "OS_LAB"]),
-        Faculty(id="F3", name="Dr. Williams", department_id="CSE",
-                qualified_subjects=["DBMS", "DS"]),
+        Faculty(id="F1", name="Dr. Smith", department="CSE",
+                designation="Professor", max_hours_per_week=18,
+                min_hours_per_week=12,
+                qualifications=["Data Structures"]),
+        Faculty(id="F2", name="Dr. Johnson", department="CSE",
+                designation="Associate Professor", max_hours_per_week=18,
+                min_hours_per_week=12,
+                qualifications=["Operating Systems"]),
+        Faculty(id="F3", name="Dr. Williams", department="CSE",
+                designation="Assistant Professor", max_hours_per_week=16,
+                min_hours_per_week=10,
+                qualifications=["Database Systems", "Data Structures"]),
     ]
     
-    # Batches
+    # Batches (with subject assignments)
     batches = [
         Batch(id="CSE_A", name="CSE Section A", strength=50, semester=3, 
-              department_id="CSE", program="B.Tech"),
+              year=2, department="CSE", program="B.Tech",
+              subjects=["DS", "OS", "DBMS", "DS_LAB"]),
         Batch(id="CSE_B", name="CSE Section B", strength=50, semester=3,
-              department_id="CSE", program="B.Tech"),
+              year=2, department="CSE", program="B.Tech",
+              subjects=["DS", "OS", "DBMS", "OS_LAB"]),
     ]
     
-    # Requirements
-    requirements = [
-        BatchSubjectRequirement(batch_id="CSE_A", subject_id="DS", hours_per_week=4),
-        BatchSubjectRequirement(batch_id="CSE_A", subject_id="OS", hours_per_week=4),
-        BatchSubjectRequirement(batch_id="CSE_A", subject_id="DBMS", hours_per_week=3),
-        BatchSubjectRequirement(batch_id="CSE_A", subject_id="DS_LAB", hours_per_week=2),
-        
-        BatchSubjectRequirement(batch_id="CSE_B", subject_id="DS", hours_per_week=4),
-        BatchSubjectRequirement(batch_id="CSE_B", subject_id="OS", hours_per_week=4),
-        BatchSubjectRequirement(batch_id="CSE_B", subject_id="DBMS", hours_per_week=3),
-        BatchSubjectRequirement(batch_id="CSE_B", subject_id="OS_LAB", hours_per_week=2),
-    ]
+    # Institution configuration
+    institution_config = InstitutionConfig(
+        id="demo_college",
+        name="Demo College",
+        working_days=5,  # Monday to Friday
+        slots_per_day=6,
+        slot_duration=60,
+        lunch_break_start=12,
+        lunch_break_duration=60
+    )
     
     return SchedulingContext(
-        institution_id="demo_college",
-        semester=3,
-        academic_year="2025-26",
+        institution=institution_config,
         time_slots=time_slots,
         rooms=rooms,
         subjects=subjects,
         faculty=faculty,
-        batches=batches,
-        requirements=requirements
+        batches=batches
     )
 
 
@@ -122,7 +140,13 @@ def main():
     print(f"  ✓ {len(context.subjects)} subjects")
     print(f"  ✓ {len(context.faculty)} faculty")
     print(f"  ✓ {len(context.batches)} batches")
-    print(f"  ✓ {len(context.requirements)} requirements")
+    
+    # Count total requirements
+    total_hours = sum(len(batch.subjects) * 
+                     sum(context.get_subject(sid).hours_per_week 
+                         for sid in batch.subjects if context.get_subject(sid))
+                     for batch in context.batches)
+    print(f"  ✓ Total hours to schedule: {total_hours}")
     print()
     
     # Step 2: Configure and run Hybrid solver
@@ -231,12 +255,20 @@ def main():
     
     # Step 10: Mine patterns
     print("[STEP 10] Mining patterns from solutions...")
-    pattern_miner = PatternMiner(min_support=0.3)
-    patterns = pattern_miner.mine_patterns(solutions_for_training, context)
+    pattern_miner = PatternMiner(context)
+    pattern_miner.mine(solutions_for_training, min_frequency=2)
     
-    for pattern_type, pattern_list in patterns.items():
-        if pattern_list:
-            print(f"  ✓ {pattern_type}: {len(pattern_list)} patterns found")
+    print(f"  ✓ Total patterns found: {len(pattern_miner.patterns)}")
+    
+    # Group patterns by type
+    pattern_types = {}
+    for pattern in pattern_miner.patterns:
+        if pattern.pattern_type not in pattern_types:
+            pattern_types[pattern.pattern_type] = 0
+        pattern_types[pattern.pattern_type] += 1
+    
+    for pattern_type, count in pattern_types.items():
+        print(f"  ✓ {pattern_type}: {count} patterns")
     print()
     
     print("="*80)
