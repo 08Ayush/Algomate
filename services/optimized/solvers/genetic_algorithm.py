@@ -330,7 +330,18 @@ class GeneticAlgorithmSolver:
                         break
             else:
                 # ── Theory / single-hour lab remainder ──
-                valid_slots = list(self.context.time_slots)
+                # Filter slots based on subject type: labs need lab slots, theory needs regular slots
+                if req['is_lab']:
+                    # Labs should use 120-minute slots (marked as is_lab_slot=True)
+                    valid_slots = [s for s in self.context.time_slots if s.is_lab_slot or s.duration_minutes >= 120]
+                else:
+                    # Theory classes should use regular 60-minute slots
+                    valid_slots = [s for s in self.context.time_slots if not s.is_lab_slot and s.duration_minutes == 60]
+                
+                # Fallback if no appropriate slots found (shouldn't happen if DB is configured correctly)
+                if not valid_slots:
+                    valid_slots = list(self.context.time_slots)
+                
                 max_attempts = 200  # Increased from 50 to find valid slots
                 for attempt in range(max_attempts):
                     # Prioritize least-loaded faculty more strongly
@@ -392,9 +403,18 @@ class GeneticAlgorithmSolver:
                         faculty = valid_faculty_sorted[0] if valid_faculty_sorted else self.context.faculty[0]
                         room = valid_rooms[0] if valid_rooms else self.context.rooms[0]
                         
+                        # Filter slots by subject type even in force-placement
+                        if req['is_lab']:
+                            candidate_slots = [s for s in self.context.time_slots if s.is_lab_slot or s.duration_minutes >= 120]
+                        else:
+                            candidate_slots = [s for s in self.context.time_slots if not s.is_lab_slot and s.duration_minutes == 60]
+                        
+                        if not candidate_slots:  # Fallback if no appropriate slots
+                            candidate_slots = self.context.time_slots
+                        
                         # Find slot with minimum conflicts for this batch
                         slot_conflicts = {}
-                        for s in self.context.time_slots:
+                        for s in candidate_slots:
                             conflicts = 0
                             if (req['batch_id'], s.id) in batch_slots:
                                 conflicts += 100  # Heavy penalty for batch conflict
@@ -404,7 +424,7 @@ class GeneticAlgorithmSolver:
                                 conflicts += 5   # Light penalty for room conflict
                             slot_conflicts[s.id] = conflicts
                         
-                        best_slot = min(self.context.time_slots, 
+                        best_slot = min(candidate_slots, 
                                       key=lambda s: slot_conflicts.get(s.id, 0))
                         
                         assignment = Assignment(
@@ -746,8 +766,21 @@ class GeneticAlgorithmSolver:
         # Try to reschedule each dropped theory / fallback assignment
         for assign in theory_dropped:
             placed = False
-            random.shuffle(self.context.time_slots)
-            for slot in self.context.time_slots:
+            
+            # Get subject to check if it's a lab
+            subject = self.context.get_subject(assign.subject_id)
+            
+            # Filter time slots by subject type
+            if subject and subject.is_lab:
+                candidate_slots = [s for s in self.context.time_slots if s.is_lab_slot or s.duration_minutes >= 120]
+            else:
+                candidate_slots = [s for s in self.context.time_slots if not s.is_lab_slot and s.duration_minutes == 60]
+            
+            if not candidate_slots:  # Fallback
+                candidate_slots = self.context.time_slots
+            
+            random.shuffle(candidate_slots)
+            for slot in candidate_slots:
                 batch_slot = (assign.batch_id, slot.id)
                 if batch_slot in seen_batch_slots:
                     continue  # batch already busy

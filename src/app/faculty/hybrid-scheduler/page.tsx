@@ -207,7 +207,7 @@ export default function HybridSchedulerPage() {
           message: data.progressMessage || 'Processing...',
           metrics: data.status === 'completed' ? {
             strategy: hybridConfig.strategy,
-            execution_time: (pollCount * 5).toFixed(1),
+            execution_time: data.metrics?.total_time?.toFixed(1) || (pollCount * 5).toFixed(1),
             quality_score: data.fitnessScore != null
               ? Math.max(0, Math.min(100, (100 + Number(data.fitnessScore)))).toFixed(1)
               : '0',
@@ -224,14 +224,17 @@ export default function HybridSchedulerPage() {
             });
             if (timetableResponse.ok) {
               const timetableData = await timetableResponse.json();
+              // API returns { success, timetable, scheduledClasses }
+              const classes = timetableData.scheduledClasses || [];
               setGeneratedSchedule({
-                ...timetableData.data || timetableData,
+                ...timetableData.timetable,
+                scheduled_classes: classes,
                 timetable_id: data.timetableId,
                 id: data.timetableId,
                 statistics: {
-                  totalAssignments: timetableData.data?.scheduled_classes?.length || 0,
-                  theoryAssignments: timetableData.data?.scheduled_classes?.filter((s: any) => !s.is_lab_session).length || 0,
-                  labAssignments: timetableData.data?.scheduled_classes?.filter((s: any) => s.is_lab_session).length || 0
+                  totalAssignments: classes.length || 0,
+                  theoryAssignments: classes.filter((s: any) => !s.is_lab).length || 0,
+                  labAssignments: classes.filter((s: any) => s.is_lab).length || 0
                 }
               });
             } else {

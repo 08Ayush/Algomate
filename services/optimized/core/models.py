@@ -129,6 +129,7 @@ class Batch:
     strength: int
     department: str
     subjects: List[str] = field(default_factory=list)  # Subject IDs
+    academic_year: str = "2025-26"
 
 
 @dataclass

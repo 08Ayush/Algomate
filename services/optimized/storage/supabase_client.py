@@ -270,6 +270,17 @@ class SupabaseSchedulerClient:
         except Exception as e:
             self.logger.warning(f"Could not create task record: {e}")
 
+    def update_task_batch_info(self, task_id: str, semester: int, academic_year: str):
+        """Update task record with correct semester and academic_year from batch."""
+        try:
+            self.client.table("timetable_generation_tasks").update({
+                "semester": semester,
+                "academic_year": academic_year,
+            }).eq("id", task_id).execute()
+            self.logger.info(f"Updated task {task_id} with semester={semester}, academic_year={academic_year}")
+        except Exception as e:
+            self.logger.warning(f"Could not update task batch info: {e}")
+
     # Map internal status strings to DB enum values
     STATUS_MAP = {
         "pending": "PENDING",
@@ -531,17 +542,42 @@ class SupabaseSchedulerClient:
             strength=row.get("strength", 60),
             department=row.get("department_id", ""),
             subjects=[],
+            academic_year=row.get("academic_year", "2025-26"),
         )
 
     @staticmethod
     def _map_subject(row: dict) -> Subject:
+        is_lab = bool(
+            row.get("requires_lab", False)
+            or row.get("is_lab", False)
+            or (row.get("subject_type", "").upper() in ("LAB", "PRACTICAL"))
+            or (row.get("lab_hours") and int(row.get("lab_hours", 0)) > 0)
+        )
+
+        # Resolve hours_per_week:
+        # Priority 1: required_hours_per_week from batch_subjects (admin's explicit setting)
+        #   BUT for labs/practicals, double it: 1 credit = 2 consecutive slots
+        # Priority 2: Credits-based (lab/practical: credits * 2, theory: credits * 1)
+        # Priority 3: weekly_hours / hours_per_week fallback
+        rhpw = row.get("required_hours_per_week")
+        credits = row.get("credits", 3)
+        if rhpw and int(rhpw) > 0:
+            hours = int(rhpw)
+            # For labs, required_hours_per_week represents credits, but we need SLOTS
+            if is_lab:
+                hours = hours * 2
+        elif credits and int(credits) > 0:
+            hours = int(credits) * 2 if is_lab else int(credits)
+        else:
+            hours = int(row.get("weekly_hours", row.get("hours_per_week", 3)))
+
         return Subject(
             id=row["id"],
             name=row.get("name", ""),
             code=row.get("code", ""),
             credits=row.get("credits", 3),
-            hours_per_week=row.get("required_hours_per_week", row.get("hours_per_week", 3)),
-            is_lab=row.get("is_lab", False),
+            hours_per_week=hours,
+            is_lab=is_lab,
             is_elective=row.get("is_elective", False),
             max_students=row.get("max_students"),
             room_requirements=row.get("room_requirements", []),

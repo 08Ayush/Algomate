@@ -142,6 +142,7 @@ class Transformer:
             strength=max(1, int(row.get("strength", 60))),
             department=row.get("department_id", ""),
             subjects=[],
+            academic_year=row.get("academic_year", "2025-26"),
         )
 
     def _transform_subjects(
@@ -202,21 +203,32 @@ class Transformer:
             credits = int(float(raw_credits))
 
             # ── Step 3: Credit-based hours calculation ───────────
-            # Core rule: 1 credit = 1 class/hour per week for ALL subjects.
-            # Labs are still flagged (is_lab=True) for room assignment
-            # and consecutive-block scheduling, but do NOT get extra
-            # hours.  Total scheduled classes == total credits.
-            #
-            # If credits > 0, always apply the 1:1 rule.
-            # Fall back to required_hours_per_week / weekly_hours
-            # only when credits is missing or zero.
+            # Priority 1: required_hours_per_week from batch_subjects
+            #   This is the admin's explicit weekly slot count — most
+            #   authoritative source. BUT for labs/practicals, double it
+            #   because 1 credit = 2 consecutive slots.
+            # Priority 2: Credits-based with lab adjustment
+            #   Theory:        1 credit = 1 slot  (lecture hour)
+            #   Lab/Practical: 1 credit = 2 consecutive slots
+            #     (NEP credit_value = practical_hours / 2, so the
+            #      credit number is already halved; we double back
+            #      to real hours.)
+            # Priority 3: weekly_hours / hours_per_week fallback
             rhpw = bs.get("required_hours_per_week")
-            if credits > 0:
-                hours = credits  # 1 credit = 1 hour for ALL subjects
+            if rhpw and int(rhpw) > 0:
+                hours = int(rhpw)
+                # For labs/practicals, required_hours_per_week represents credits,
+                # but we need SLOTS. 1 lab credit = 2 time slots.
+                if db_is_lab:
+                    hours = hours * 2
+            elif credits > 0:
+                if db_is_lab:
+                    hours = credits * 2  # 1 lab/practical credit = 2 consecutive time slots
+                else:
+                    hours = credits      # 1 theory credit = 1 time slot
             else:
                 hours = int(
-                    rhpw
-                    or sub_data.get("weekly_hours")
+                    sub_data.get("weekly_hours")
                     or sub_data.get("hours_per_week")
                     or 3
                 )

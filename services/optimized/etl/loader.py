@@ -20,8 +20,13 @@ from typing import Any, Dict, List, Optional
 from core.models import ConstraintType, Solution
 from storage.supabase_client import get_supabase_client
 from .quality import DataQualityReport
+from utils.runtime_logger import get_runtime_logger
 
 logger = logging.getLogger("optimized.etl.load")
+runtime_logger = get_runtime_logger()
+
+# Day integer to string mapping for database queries
+DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 
 class Loader:
@@ -80,7 +85,7 @@ class Loader:
 
         # ── 4. Insert scheduled_classes ──────────────────────────────
         ok = self._insert_scheduled_classes(
-            timetable_id, solution, report,
+            timetable_id, college_id, solution, report,
         )
         if not ok:
             self._rollback_timetable(timetable_id)
@@ -144,34 +149,135 @@ class Loader:
     def _insert_scheduled_classes(
         self,
         timetable_id: str,
+        college_id: str,
         solution: Solution,
         report: DataQualityReport,
     ) -> bool:
-        # Look up actual credits from solution metadata (populated by orchestrator)
-        credits_map = (solution.metadata or {}).get("subject_credits_map", {})
+        # Track how many times each subject has been scheduled for sequential credit_hour_number
+        subject_hour_counters: Dict[str, int] = {}
+        
         records = []
         for asgn in solution.assignments:
-            records.append({
-                "id": str(uuid.uuid4()),
-                "timetable_id": timetable_id,
-                "batch_id": asgn.batch_id,
-                "subject_id": asgn.subject_id,
-                "faculty_id": asgn.faculty_id,
-                "classroom_id": asgn.room_id,
-                "time_slot_id": asgn.time_slot.id,
-                "credit_hour_number": credits_map.get(asgn.subject_id, 1),
-                "class_type": "LAB" if asgn.is_lab_session else "THEORY",
-            })
+            # Map class_type: LAB/PRACTICAL for labs, THEORY otherwise
+            if asgn.is_lab_session:
+                class_type = "LAB"
+            else:
+                class_type = "THEORY"
+            
+            # Check if this is a multi-hour session (e.g., 2-hour lab)
+            if asgn.time_slot.duration_minutes > 60:
+                # Split into multiple 1-hour records for UI compatibility
+                num_hours = asgn.time_slot.duration_minutes // 60
+                # Convert integer day (0-6) to string name for database query
+                day_name = DAY_NAMES[asgn.time_slot.day]
+                runtime_logger.info(f"🔄 Splitting {num_hours}hr lab: {day_name} {asgn.time_slot.start_hour:02d}:{asgn.time_slot.start_minute:02d}")
+                
+                # Query database for individual 1-hour time slots
+                try:
+                    start_hour = asgn.time_slot.start_hour
+                    start_minute = asgn.time_slot.start_minute
+                    
+                    for hour_offset in range(num_hours):
+                        # Calculate this hour's time range
+                        current_hour = start_hour + hour_offset
+                        hour_start_time = f"{current_hour:02d}:{start_minute:02d}:00"
+                        hour_end_time = f"{(current_hour + 1):02d}:{start_minute:02d}:00"
+                        
+                        # Find matching 1-hour time slot in database
+                        time_slot_result = (
+                            self.client.table("time_slots")
+                            .select("id")
+                            .eq("college_id", college_id)
+                            .eq("day", day_name)
+                            .eq("start_time", hour_start_time)
+                            .eq("end_time", hour_end_time)
+                            .limit(1)
+                            .execute()
+                        )
+                        
+                        if not time_slot_result.data:
+                            logger.warning(f"No time slot found for {day_name} {hour_start_time}-{hour_end_time}")
+                            hour_time_slot_id = asgn.time_slot.id
+                        else:
+                            hour_time_slot_id = time_slot_result.data[0]["id"]
+                        
+                        # Increment counter for this specific hour
+                        if asgn.subject_id not in subject_hour_counters:
+                            subject_hour_counters[asgn.subject_id] = 0
+                        subject_hour_counters[asgn.subject_id] += 1
+                        
+                        records.append({
+                            "id": str(uuid.uuid4()),
+                            "timetable_id": timetable_id,
+                            "batch_id": asgn.batch_id,
+                            "subject_id": asgn.subject_id,
+                            "faculty_id": asgn.faculty_id,
+                            "classroom_id": asgn.room_id,
+                            "time_slot_id": hour_time_slot_id,
+                            "is_lab": asgn.is_lab_session,
+                            "is_continuation": hour_offset > 0,
+                            "session_number": hour_offset + 1,
+                            "credit_hour_number": subject_hour_counters[asgn.subject_id],
+                            "class_type": class_type,
+                        })
+                    
+                    runtime_logger.info(f"✅ Split complete: {num_hours} records created")
+                    
+                except Exception as e:
+                    logger.error(f"Error splitting multi-hour session: {e}")
+                    # Fallback: insert as single record
+                    if asgn.subject_id not in subject_hour_counters:
+                        subject_hour_counters[asgn.subject_id] = 0
+                    subject_hour_counters[asgn.subject_id] += 1
+                    
+                    records.append({
+                        "id": str(uuid.uuid4()),
+                        "timetable_id": timetable_id,
+                        "batch_id": asgn.batch_id,
+                        "subject_id": asgn.subject_id,
+                        "faculty_id": asgn.faculty_id,
+                        "classroom_id": asgn.room_id,
+                        "time_slot_id": asgn.time_slot.id,
+                        "is_lab": asgn.is_lab_session,
+                        "credit_hour_number": subject_hour_counters[asgn.subject_id],
+                        "class_type": class_type,
+                    })
+            else:
+                # Single-hour session - insert as-is
+                if asgn.subject_id not in subject_hour_counters:
+                    subject_hour_counters[asgn.subject_id] = 0
+                subject_hour_counters[asgn.subject_id] += 1
+                
+                records.append({
+                    "id": str(uuid.uuid4()),
+                    "timetable_id": timetable_id,
+                    "batch_id": asgn.batch_id,
+                    "subject_id": asgn.subject_id,
+                    "faculty_id": asgn.faculty_id,
+                    "classroom_id": asgn.room_id,
+                    "time_slot_id": asgn.time_slot.id,
+                    "is_lab": asgn.is_lab_session,
+                    "credit_hour_number": subject_hour_counters[asgn.subject_id],
+                    "class_type": class_type,
+                })
+                
         if not records:
             report.add_warning("empty_result", "scheduled_classes", message="No assignments to save")
             return True  # not a fatal error
 
         try:
             batch_size = 50
+            total_inserted = 0
             for i in range(0, len(records), batch_size):
                 chunk = records[i: i + batch_size]
                 self.client.table("scheduled_classes").insert(chunk).execute()
-            logger.info(f"Inserted {len(records)} scheduled_classes")
+                total_inserted += len(chunk)
+            
+            # Log breakdown
+            lab_count = sum(1 for r in records if r.get("is_lab"))
+            continuation_count = sum(1 for r in records if r.get("is_continuation"))
+            runtime_logger.info(f"📊 Inserted {total_inserted} scheduled_classes ({lab_count} labs, {continuation_count} continuations)")
+            
             return True
         except Exception as exc:
             logger.error(f"FAILED inserting scheduled_classes: {exc}", exc_info=True)

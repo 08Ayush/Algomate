@@ -13,7 +13,7 @@ joblib>=1.3.0
 
 # Database
 supabase>=2.0.0
-postgrest-py>=0.12.0
+postgrest-py>=0.10.0
 psycopg2-binary>=2.9.0
 
 # Web framework
@@ -23,7 +23,7 @@ pydantic>=2.4.0
 pydantic-settings>=2.0.0
 
 # Async support
-httpx>=0.25.0
+httpx>=0.24.0,<0.29.0
 aiohttp>=3.9.0
 
 # Utilities

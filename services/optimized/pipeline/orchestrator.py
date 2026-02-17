@@ -147,6 +147,13 @@ class OptimizedOrchestrator:
             with tracker.step("FETCH_DATA", "Fetching batch domain data from Supabase"):
                 domain_data = self.db.fetch_batch_data(batch_id, college_id)
 
+            # Update task record with correct semester/academic_year from batch
+            self.db.update_task_batch_info(
+                task_id,
+                domain_data["batch"].semester,
+                domain_data["batch"].academic_year,
+            )
+
             if progress_callback:
                 progress_callback("fetch", 0.15)
 
@@ -178,8 +185,8 @@ class OptimizedOrchestrator:
             if not hasattr(solution, "metadata") or solution.metadata is None:
                 solution.metadata = {}
             solution.metadata["user_id"] = user_id
-            solution.metadata["academic_year"] = domain_data.get("academic_year", "2025-26")
-            solution.metadata["semester"] = domain_data.get("semester", 1)
+            solution.metadata["academic_year"] = domain_data["batch"].academic_year
+            solution.metadata["semester"] = domain_data["batch"].semester
             # Pass subject credits for accurate credit_hour_number in DB
             solution.metadata["subject_credits_map"] = {
                 s.id: s.credits for s in context.subjects
@@ -523,6 +530,13 @@ class OptimizedOrchestrator:
                     step_log=tracker.steps,
                 )
 
+            # Update task record with correct semester/academic_year from batch
+            self.db.update_task_batch_info(
+                task_id,
+                domain_data["batch"].semester,
+                domain_data["batch"].academic_year,
+            )
+
             if progress_callback:
                 progress_callback("etl_done", 0.25)
 
@@ -554,8 +568,8 @@ class OptimizedOrchestrator:
             if not hasattr(solution, "metadata") or solution.metadata is None:
                 solution.metadata = {}
             solution.metadata["user_id"] = user_id
-            solution.metadata["academic_year"] = domain_data.get("academic_year", "2025-26")
-            solution.metadata["semester"] = domain_data.get("semester", 1)
+            solution.metadata["academic_year"] = domain_data["batch"].academic_year
+            solution.metadata["semester"] = domain_data["batch"].semester
             # Pass subject credits for accurate credit_hour_number in DB
             solution.metadata["subject_credits_map"] = {
                 s.id: s.credits for s in context.subjects
