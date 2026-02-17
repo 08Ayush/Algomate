@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Users, Plus, Edit, Trash2, X, Search, RefreshCw, GraduationCap, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface Department { id: string; name: string; code: string; }
 interface Course { id: string; title: string; code: string; }
@@ -29,6 +30,7 @@ interface Student {
 }
 
 const StudentsPage: React.FC = () => {
+    const { showConfirm } = useConfirm();
     const router = useRouter();
     const [students, setStudents] = useState<Student[]>([]);
     const [departments, setDepartments] = useState<Department[]>([]);
@@ -132,14 +134,20 @@ const StudentsPage: React.FC = () => {
         setShowForm(true);
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Delete student?')) return;
-        try {
-            const headers = getAuthHeaders();
-            if (!headers) return;
-            const res = await fetch(`/api/admin/students/${id}`, { method: 'DELETE', headers });
-            if (res.ok) { toast.success('Deleted'); setStudents(prev => prev.filter(s => s.id !== id)); }
-        } catch { toast.error('Error'); }
+    const handleDelete = (student: Student) => {
+        showConfirm({
+            title: 'Delete Student',
+            message: `Are you sure you want to delete student "${student.first_name} ${student.last_name}"? This action cannot be undone.`,
+            confirmText: 'Delete',
+            onConfirm: async () => {
+                try {
+                    const headers = getAuthHeaders();
+                    if (!headers) return;
+                    const res = await fetch(`/api/admin/students/${student.id}`, { method: 'DELETE', headers });
+                    if (res.ok) { toast.success('Deleted'); setStudents(prev => prev.filter(s => s.id !== student.id)); }
+                } catch { toast.error('Error'); }
+            }
+        });
     };
 
     const filteredStudents = students.filter(s => {

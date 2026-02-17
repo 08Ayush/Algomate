@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { CheckSquare, RefreshCw, Search, Eye, EyeOff, Download, Play, AlertCircle, CheckCircle, Users, BookOpen, Undo2, FileText, FileSpreadsheet } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface BucketSubject { subject_id: string; subjects: { id: string; code: string; name: string; } | null; }
 
@@ -47,6 +48,7 @@ interface Allotment {
 
 const SubjectAllotmentPage: React.FC = () => {
   const router = useRouter();
+  const { showConfirm } = useConfirm();
   const [buckets, setBuckets] = useState<Bucket[]>([]);
   const [selectedBucket, setSelectedBucket] = useState<string>('');
   const [studentChoices, setStudentChoices] = useState<StudentChoice[]>([]);
@@ -154,45 +156,57 @@ const SubjectAllotmentPage: React.FC = () => {
     } catch { toast.error('Error running allotment'); } finally { setConverting(false); }
   };
 
-  const handleRevokeAllotment = async (allotmentId: string) => {
-    if (!confirm('Revoke this allotment?')) return;
-    try {
-      const headers = getAuthHeaders();
-      if (!headers) return;
-      const res = await fetch('/api/admin/subject-allotment/revoke', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ allotment_id: allotmentId })
-      });
-      if (res.ok) {
-        toast.success('Allotment revoked');
-        fetchAllotments();
-        fetchStudentChoices();
-      } else {
-        const err = await res.json();
-        toast.error(err.error || 'Failed to revoke');
+  const handleRevokeAllotment = (allotment: Allotment) => {
+    showConfirm({
+      title: 'Revoke Subject Allotment',
+      message: `Are you sure you want to revoke the allotment for student "${allotment.student_name}" (${allotment.college_uid})?`,
+      confirmText: 'Revoke',
+      onConfirm: async () => {
+        try {
+          const headers = getAuthHeaders();
+          if (!headers) return;
+          const res = await fetch('/api/admin/subject-allotment/revoke', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ allotment_id: allotment.id })
+          });
+          if (res.ok) {
+            toast.success('Allotment revoked');
+            fetchAllotments();
+            fetchStudentChoices();
+          } else {
+            const err = await res.json();
+            toast.error(err.error || 'Failed to revoke');
+          }
+        } catch { toast.error('Error revoking'); }
       }
-    } catch { toast.error('Error revoking'); }
+    });
   };
 
-  const handleRevokeAll = async () => {
-    if (!confirm(`Revoke all ${allotments.length} allotments? This cannot be undone.`)) return;
-    try {
-      const headers = getAuthHeaders();
-      if (!headers) return;
+  const handleRevokeAll = () => {
+    showConfirm({
+      title: 'Revoke All Allotments',
+      message: `Are you sure you want to revoke all ${allotments.length} allotments? This action cannot be undone.`,
+      confirmText: 'Revoke All',
+      onConfirm: async () => {
+        try {
+          const headers = getAuthHeaders();
+          if (!headers) return;
 
-      // Revoke all allotments one by one
-      for (const allotment of allotments) {
-        await fetch('/api/admin/subject-allotment/revoke', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ allotment_id: allotment.id })
-        });
+          // Revoke all allotments one by one
+          for (const allotment of allotments) {
+            await fetch('/api/admin/subject-allotment/revoke', {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({ allotment_id: allotment.id })
+            });
+          }
+          toast.success('All allotments revoked');
+          fetchAllotments();
+          fetchStudentChoices();
+        } catch { toast.error('Error revoking allotments'); }
       }
-      toast.success('All allotments revoked');
-      fetchAllotments();
-      fetchStudentChoices();
-    } catch { toast.error('Error revoking allotments'); }
+    });
   };
 
   // CSV Download function
@@ -529,7 +543,7 @@ const SubjectAllotmentPage: React.FC = () => {
                       <td className="px-6 py-4 text-gray-600 font-medium">{allotment.student_cgpa?.toFixed(2) || '-'}</td>
                       <td className="px-6 py-4 text-sm text-gray-500">{new Date(allotment.allotted_at).toLocaleString()}</td>
                       <td className="px-6 py-4">
-                        <button onClick={() => handleRevokeAllotment(allotment.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Revoke"><Undo2 size={16} /></button>
+                        <button onClick={() => handleRevokeAllotment(allotment)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Revoke"><Undo2 size={16} /></button>
                       </td>
                     </motion.tr>
                   ))}

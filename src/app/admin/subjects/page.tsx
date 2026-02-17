@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { BookOpen, Plus, Edit, Trash2, X, Search, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface Department { id: string; name: string; code: string; }
 interface Course { id: string; title: string; code: string; }
@@ -24,6 +25,7 @@ interface Subject {
 }
 
 const SubjectsPage: React.FC = () => {
+    const { showConfirm } = useConfirm();
     const router = useRouter();
     const [subjects, setSubjects] = useState<Subject[]>([]);
     const [departments, setDepartments] = useState<Department[]>([]);
@@ -95,14 +97,20 @@ const SubjectsPage: React.FC = () => {
         setShowForm(true);
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Delete subject?')) return;
-        try {
-            const headers = getAuthHeaders();
-            if (!headers) return;
-            const res = await fetch(`/api/admin/subjects/${id}`, { method: 'DELETE', headers });
-            if (res.ok) { toast.success('Deleted'); setSubjects(prev => prev.filter(s => s.id !== id)); }
-        } catch { toast.error('Error'); }
+    const handleDelete = (subject: Subject) => {
+        showConfirm({
+            title: 'Delete Subject',
+            message: `Are you sure you want to delete subject "${subject.name}"? This action cannot be undone.`,
+            confirmText: 'Delete',
+            onConfirm: async () => {
+                try {
+                    const headers = getAuthHeaders();
+                    if (!headers) return;
+                    const res = await fetch(`/api/admin/subjects/${subject.id}`, { method: 'DELETE', headers });
+                    if (res.ok) { toast.success('Deleted'); setSubjects(prev => prev.filter(s => s.id !== subject.id)); }
+                } catch { toast.error('Error'); }
+            }
+        });
     };
 
     // Get unique semesters from subjects

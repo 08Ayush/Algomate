@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { FileText, Plus, Search, RefreshCw, Eye, Edit, Trash2, Clock, Users, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface Assignment {
     id: string;
@@ -25,6 +26,7 @@ interface Assignment {
 
 const AssignmentsPage: React.FC = () => {
     const router = useRouter();
+    const { showConfirm } = useConfirm();
     const [assignments, setAssignments] = useState<Assignment[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -59,17 +61,23 @@ const AssignmentsPage: React.FC = () => {
         } catch { toast.error('Error loading assignments'); } finally { setLoading(false); }
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Delete this assignment?')) return;
-        try {
-            const headers = getAuthHeaders();
-            if (!headers) return;
-            const res = await fetch(`/api/assignments/${id}`, { method: 'DELETE', headers });
-            if (res.ok) {
-                toast.success('Assignment deleted');
-                setAssignments(prev => prev.filter(a => a.id !== id));
+    const handleDelete = (assignment: Assignment) => {
+        showConfirm({
+            title: 'Delete Assignment',
+            message: `Are you sure you want to delete the assignment "${assignment.title}"? This action cannot be undone.`,
+            confirmText: 'Delete',
+            onConfirm: async () => {
+                try {
+                    const headers = getAuthHeaders();
+                    if (!headers) return;
+                    const res = await fetch(`/api/assignments/${assignment.id}`, { method: 'DELETE', headers });
+                    if (res.ok) {
+                        toast.success('Assignment deleted');
+                        setAssignments(prev => prev.filter(a => a.id !== assignment.id));
+                    }
+                } catch { toast.error('Error deleting'); }
             }
-        } catch { toast.error('Error deleting'); }
+        });
     };
 
     const filteredAssignments = assignments.filter(a => {
@@ -220,7 +228,7 @@ const AssignmentsPage: React.FC = () => {
                                             <div className="flex gap-2">
                                                 <button onClick={() => router.push(`/faculty/assignments/${assignment.id}/report`)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg"><Eye size={16} /></button>
                                                 <button onClick={() => router.push(`/faculty/assignments/${assignment.id}/edit`)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={16} /></button>
-                                                <button onClick={() => handleDelete(assignment.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                                                <button onClick={() => handleDelete(assignment)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
                                             </div>
                                         </td>
                                     </motion.tr>

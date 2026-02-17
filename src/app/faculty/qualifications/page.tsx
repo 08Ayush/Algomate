@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Sparkles, Search, RefreshCw, BookOpen, Users, Award, Plus, X, Trash2, GraduationCap } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface Qualification {
   id: string;
@@ -51,6 +52,7 @@ interface Course {
 
 const QualificationsPage: React.FC = () => {
   const router = useRouter();
+  const { showConfirm } = useConfirm();
   const [qualifications, setQualifications] = useState<Qualification[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [facultyList, setFacultyList] = useState<Faculty[]>([]);
@@ -160,19 +162,28 @@ const QualificationsPage: React.FC = () => {
     });
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Remove this qualification?')) return;
-    try {
-      const headers = getAuthHeaders();
-      if (!headers) return;
-      const res = await fetch(`/api/faculty/qualifications?id=${id}`, { method: 'DELETE', headers });
-      if (res.ok) {
-        toast.success('Qualification removed');
-        setQualifications(prev => prev.filter(q => q.id !== id));
-      } else {
-        toast.error('Failed to remove');
+  const handleDelete = (qualification: Qualification) => {
+    const subjectName = qualification.subjects?.name || qualification.subject?.name || 'Unknown';
+    const facultyName = qualification.faculty ? `${qualification.faculty.first_name} ${qualification.faculty.last_name}` : 'Unknown';
+    
+    showConfirm({
+      title: 'Remove Qualification',
+      message: `Are you sure you want to remove the qualification "${subjectName}" for ${facultyName}?`,
+      confirmText: 'Remove',
+      onConfirm: async () => {
+        try {
+          const headers = getAuthHeaders();
+          if (!headers) return;
+          const res = await fetch(`/api/faculty/qualifications?id=${qualification.id}`, { method: 'DELETE', headers });
+          if (res.ok) {
+            toast.success('Qualification removed');
+            setQualifications(prev => prev.filter(q => q.id !== qualification.id));
+          } else {
+            toast.error('Failed to remove');
+          }
+        } catch { toast.error('Error'); }
       }
-    } catch { toast.error('Error'); }
+    });
   };
 
   const filteredQualifications = qualifications.filter(q =>
@@ -344,7 +355,7 @@ const QualificationsPage: React.FC = () => {
                           </td>
                           <td className="px-6 py-4 text-right">
                             <button
-                              onClick={() => handleDelete(q.id)}
+                              onClick={() => handleDelete(q)}
                               className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
                             >
                               <Trash2 size={16} />

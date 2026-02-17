@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { X, Clock, MapPin, Users, User, Calendar, AlertCircle, CheckCircle, XCircle, Edit, Trash2, UserPlus } from 'lucide-react';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface EventData {
   id: string;
@@ -80,6 +81,7 @@ export default function EventDetailModal({
   userRole,
   userFacultyType
 }: EventDetailModalProps) {
+  const { showConfirm } = useConfirm();
   const [isRegistered, setIsRegistered] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   const [showRejectForm, setShowRejectForm] = useState(false);
@@ -340,9 +342,14 @@ export default function EventDetailModal({
             {canPublish && event.status === 'draft' && onPublish && (
               <button
                 onClick={() => {
-                  if (confirm('Are you sure you want to publish this event? It will be visible to all students.')) {
-                    onPublish(event.id);
-                  }
+                  showConfirm({
+                    title: 'Publish Event',
+                    message: `Are you sure you want to publish "${event.title}"? It will be visible to all students.`,
+                    confirmText: 'Publish',
+                    onConfirm: () => {
+                      onPublish(event.id);
+                    }
+                  });
                 }}
                 className="flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all duration-300 transform hover:scale-105 shadow-md font-semibold"
               >
@@ -389,10 +396,15 @@ export default function EventDetailModal({
             {canDelete && onDelete && (
               <button
                 onClick={() => {
-                  if (confirm('Are you sure you want to delete this event?')) {
-                    onDelete(event.id);
-                    onClose();
-                  }
+                  showConfirm({
+                    title: 'Delete Event',
+                    message: `Are you sure you want to delete "${event.title}"? This action cannot be undone.`,
+                    confirmText: 'Delete',
+                    onConfirm: () => {
+                      onDelete(event.id);
+                      onClose();
+                    }
+                  });
                 }}
                 className="flex items-center gap-2 px-6 py-2.5 bg-gray-600 text-white rounded-xl hover:bg-gray-700 transition-all duration-300 transform hover:scale-105 shadow-md font-semibold"
               >

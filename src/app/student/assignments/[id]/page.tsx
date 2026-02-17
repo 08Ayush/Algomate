@@ -18,6 +18,7 @@ import {
   Minimize,
   Send
 } from "lucide-react";
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface Question {
   id: string;
@@ -53,6 +54,7 @@ export default function AssignmentPage() {
   const router = useRouter();
   const params = useParams();
   const assignmentId = params?.id as string;
+  const { showConfirm } = useConfirm();
 
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -220,13 +222,12 @@ export default function AssignmentPage() {
   const handleSubmit = async () => {
     if (isSubmitting) return;
 
-    const confirmSubmit = window.confirm(
-      'Are you sure you want to submit this assignment? You cannot change your answers after submission.'
-    );
-
-    if (!confirmSubmit) return;
-
-    setIsSubmitting(true);
+    showConfirm({
+      title: 'Submit Assignment',
+      message: 'Are you sure you want to submit this assignment? You cannot change your answers after submission.',
+      confirmText: 'Submit',
+      onConfirm: async () => {
+        setIsSubmitting(true);
 
     try {
       const userData = localStorage.getItem('user');
@@ -257,27 +258,28 @@ export default function AssignmentPage() {
         throw new Error(errorData.error || 'Failed to submit assignment');
       }
 
-      const data = await response.json();
+        const data = await response.json();
 
-      exitFullScreen();
+        exitFullScreen();
 
-      // Show modern submission dialog
-      setSubmissionResult({
-        score: data.submission.score,
-        totalMarks: assignment?.total_marks || 0,
-        percentage: data.submission.percentage,
-        status: data.submission.status || 'SUBMITTED',
-        autoGraded: data.submission.auto_graded,
-        timeTaken: (assignment?.duration_minutes || 0) * 60 - timeRemaining,
-        violations: violations
-      });
-      setShowResultDialog(true);
-    } catch (error) {
-      console.error('Error submitting assignment:', error);
-      alert('Failed to submit assignment. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
+        // Show modern submission dialog
+        setSubmissionResult({
+          score: data.submission.score,
+          totalMarks: assignment?.total_marks || 0,
+          percentage: data.submission.percentage,
+          status: data.submission.status || 'SUBMITTED',
+          autoGraded: data.submission.auto_graded,
+          timeTaken: (assignment?.duration_minutes || 0) * 60 - timeRemaining,
+          violations: violations
+        });
+        setShowResultDialog(true);
+      } catch (error) {
+        console.error('Error submitting assignment:', error);
+        alert('Failed to submit assignment. Please try again.');
+      } finally {
+        setIsSubmitting(false);
+      }
+    });
   };
 
   const isQuestionAnswered = (questionId: string) => {

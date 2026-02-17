@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface Department {
     id: string;
@@ -27,6 +28,7 @@ interface Department {
 }
 
 const DepartmentsPage: React.FC = () => {
+    const { showConfirm } = useConfirm();
     const router = useRouter();
     const [departments, setDepartments] = useState<Department[]>([]);
     const [loading, setLoading] = useState(true);
@@ -136,28 +138,33 @@ const DepartmentsPage: React.FC = () => {
         setShowForm(true);
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this department?')) return;
+    const handleDelete = (dept: Department) => {
+        showConfirm({
+            title: 'Delete Department',
+            message: `Are you sure you want to delete department "${dept.name}"? This action cannot be undone.`,
+            confirmText: 'Delete',
+            onConfirm: async () => {
+                try {
+                    const headers = getAuthHeaders();
+                    if (!headers) return;
 
-        try {
-            const headers = getAuthHeaders();
-            if (!headers) return;
+                    const res = await fetch(`/api/admin/departments/${dept.id}`, {
+                        method: 'DELETE',
+                        headers
+                    });
 
-            const res = await fetch(`/api/admin/departments/${id}`, {
-                method: 'DELETE',
-                headers
-            });
-
-            if (res.ok) {
-                toast.success('Department deleted successfully');
-                setDepartments(prev => prev.filter(d => d.id !== id));
-            } else {
-                const err = await res.json();
-                toast.error(err.error || 'Failed to delete department');
+                    if (res.ok) {
+                        toast.success('Department deleted successfully');
+                        setDepartments(prev => prev.filter(d => d.id !== dept.id));
+                    } else {
+                        const err = await res.json();
+                        toast.error(err.error || 'Failed to delete department');
+                    }
+                } catch (error) {
+                    toast.error('Error deleting department');
+                }
             }
-        } catch (error) {
-            toast.error('Error deleting department');
-        }
+        });
     };
 
     const filteredDepartments = departments.filter(d =>

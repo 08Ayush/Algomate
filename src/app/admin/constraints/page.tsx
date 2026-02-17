@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface ConstraintRule {
     id: string;
@@ -29,6 +30,7 @@ interface ConstraintRule {
 
 const ConstraintsPage: React.FC = () => {
     const router = useRouter();
+    const { showConfirm } = useConfirm();
     const [constraints, setConstraints] = useState<ConstraintRule[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -162,28 +164,33 @@ const ConstraintsPage: React.FC = () => {
         setShowForm(true);
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this constraint?')) return;
+    const handleDelete = (constraint: ConstraintRule) => {
+        showConfirm({
+            title: 'Delete Constraint',
+            message: `Are you sure you want to delete the constraint "${constraint.rule_name}"? This action cannot be undone.`,
+            confirmText: 'Delete',
+            onConfirm: async () => {
+                try {
+                    const headers = getAuthHeaders();
+                    if (!headers) return;
 
-        try {
-            const headers = getAuthHeaders();
-            if (!headers) return;
+                    const res = await fetch(`/api/admin/constraints?id=${constraint.id}`, {
+                        method: 'DELETE',
+                        headers
+                    });
 
-            const res = await fetch(`/api/admin/constraints?id=${id}`, {
-                method: 'DELETE',
-                headers
-            });
-
-            if (res.ok) {
-                toast.success('Constraint deleted successfully');
-                setConstraints(prev => prev.filter(c => c.id !== id));
-            } else {
-                const err = await res.json();
-                toast.error(err.error || 'Failed to delete constraint');
+                    if (res.ok) {
+                        toast.success('Constraint deleted successfully');
+                        setConstraints(prev => prev.filter(c => c.id !== constraint.id));
+                    } else {
+                        const err = await res.json();
+                        toast.error(err.error || 'Failed to delete constraint');
+                    }
+                } catch (error) {
+                    toast.error('Error deleting constraint');
+                }
             }
-        } catch (error) {
-            toast.error('Error deleting constraint');
-        }
+        });
     };
 
     const filteredConstraints = constraints.filter(c =>
@@ -318,7 +325,7 @@ const ConstraintsPage: React.FC = () => {
                                                         <Edit size={16} />
                                                     </button>
                                                     <button
-                                                        onClick={() => handleDelete(rule.id)}
+                                                        onClick={() => handleDelete(rule)}
                                                         className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                                     >
                                                         <Trash2 size={16} />

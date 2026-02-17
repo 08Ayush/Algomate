@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
 import { motion } from 'framer-motion';
 import { Eye, CheckCircle, XCircle, Clock, AlertCircle, Mail, RefreshCw, Calendar, Users } from 'lucide-react';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface PendingTimetable {
   id: string;
@@ -22,6 +23,7 @@ interface PendingTimetable {
 
 export default function ReviewQueuePage() {
   const router = useRouter();
+  const { showConfirm } = useConfirm();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [pendingTimetables, setPendingTimetables] = useState<PendingTimetable[]>([]);
@@ -89,38 +91,41 @@ export default function ReviewQueuePage() {
     }
   };
 
-  const handleApprove = async (timetableId: string, title: string) => {
-    if (!confirm(`Approve and publish "${title}"? This will make it visible to students.`)) {
-      return;
-    }
+  const handleApprove = (timetable: PendingTimetable) => {
+    showConfirm({
+      title: 'Approve and Publish',
+      message: `Approve and publish "${timetable.title}"? This will make it visible to students.`,
+      confirmText: 'Approve & Publish',
+      onConfirm: async () => {
+        setIsProcessing(timetable.id);
 
-    setIsProcessing(timetableId);
+        try {
+          const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
 
-    try {
-      const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
+          const response = await fetch(`/api/timetables/${timetable.id}/approve`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
 
-      const response = await fetch(`/api/timetables/${timetableId}/approve`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
+          const result = await response.json();
+
+          if (!response.ok || !result.success) {
+            alert(`Failed to approve: ${result.error || 'Unknown error'}`);
+            setIsProcessing(null);
+            return;
+          }
+
+          alert('✅ Timetable approved and published successfully!');
+          fetchPendingTimetables();
+        } catch (error: any) {
+          alert(`Error: ${error.message}`);
+        } finally {
+          setIsProcessing(null);
         }
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        alert(`Failed to approve: ${result.error || 'Unknown error'}`);
-        setIsProcessing(null);
-        return;
       }
-
-      alert('✅ Timetable approved and published successfully!');
-      fetchPendingTimetables();
-    } catch (error: any) {
-      alert(`Error: ${error.message}`);
-    } finally {
-      setIsProcessing(null);
-    }
+    });
   };
 
   const handleReject = async (timetableId: string, title: string) => {
@@ -160,24 +165,29 @@ export default function ReviewQueuePage() {
     }
   };
 
-  const handleSendEmailNotification = async (timetableId: string, title: string) => {
-    if (!confirm(`Send email notifications for "${title}" to all students and faculty?`)) {
-      return;
-    }
+  const handleSendEmailNotification = (timetable: PendingTimetable) => {
+    showConfirm({
+      title: 'Send Email Notifications',
+      message: `Send email notifications for "${timetable.title}" to all students and faculty?`,
+      confirmText: 'Send Notifications',
+      onConfirm: async () => {
+        setIsSendingEmail(timetable.id);
 
-    setIsSendingEmail(timetableId);
-
-    try {
-      alert(
-        '📧 Email Notification Feature\n\n' +
-        'This feature is under development and will send notifications to:\n' +
-        '• All students enrolled in the batch\n' +
-        '• Faculty members assigned to courses\n' +
-        '• Department administrators\n\n' +
-        'Coming soon!'
-      );
-    } finally {
-      setIsSendingEmail(null);
+        try {
+          alert(
+            '📧 Email Notification Feature\n\n' +
+            'This feature is under development and will send notifications to:\n' +
+            '• All students enrolled in the batch\n' +
+            '• Faculty members assigned to courses\n' +
+            '• Department administrators\n\n' +
+            'Coming soon!'
+          );
+        } finally {
+          setIsSendingEmail(null);
+        }
+      }
+    });
+  };
     }
   };
 
@@ -348,7 +358,7 @@ export default function ReviewQueuePage() {
                       <Eye size={16} /> Review
                     </button>
                     <button
-                      onClick={() => handleApprove(timetable.id, timetable.title)}
+                      onClick={() => handleApprove(timetable)}
                       disabled={isProcessing === timetable.id}
                       className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 disabled:opacity-50 transition-all"
                     >
@@ -367,7 +377,7 @@ export default function ReviewQueuePage() {
                       <XCircle size={16} /> Reject
                     </button>
                     <button
-                      onClick={() => handleSendEmailNotification(timetable.id, timetable.title)}
+                      onClick={() => handleSendEmailNotification(timetable)}
                       disabled={isSendingEmail === timetable.id}
                       className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-xl font-medium hover:bg-purple-700 disabled:opacity-50 transition-all"
                     >

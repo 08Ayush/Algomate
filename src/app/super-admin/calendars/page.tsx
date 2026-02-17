@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import SuperAdminLayout from '@/components/super-admin/SuperAdminLayout';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface CalendarType {
     id: string;
@@ -28,6 +29,7 @@ interface CalendarType {
 }
 
 const CalendarsPage: React.FC = () => {
+    const { showConfirm } = useConfirm();
     const [calendars, setCalendars] = useState<CalendarType[]>([]);
     const [loading, setLoading] = useState(true);
     const [showAddModal, setShowAddModal] = useState(false);
@@ -128,30 +130,36 @@ const CalendarsPage: React.FC = () => {
             toast.error('Error updating calendar');
         }
     };
-
-    const handleDeleteCalendar = async (id: string) => {
+    
+    const handleDeleteCalendar = (id: string) => {
         const calendar = calendars.find(c => c.id === id);
         if (calendar && calendar.used_by > 0) {
             toast.error('Cannot delete calendar in use by colleges');
             return;
         }
-        if (!confirm('Are you sure you want to delete this calendar?')) return;
+        
+        showConfirm({
+            title: 'Delete Calendar',
+            message: 'Are you sure you want to delete this calendar? This action cannot be undone.',
+            confirmText: 'Delete',
+            onConfirm: async () => {
+                try {
+                    const res = await fetch(`/api/super-admin/calendars/${id}`, {
+                        method: 'DELETE'
+                    });
 
-        try {
-            const res = await fetch(`/api/super-admin/calendars/${id}`, {
-                method: 'DELETE'
-            });
-
-            if (res.ok) {
-                toast.success('Calendar deleted successfully');
-                fetchCalendars();
-            } else {
-                const err = await res.json();
-                toast.error(err.error || 'Failed to delete calendar');
+                    if (res.ok) {
+                        toast.success('Calendar deleted successfully');
+                        fetchCalendars();
+                    } else {
+                        const err = await res.json();
+                        toast.error(err.error || 'Failed to delete calendar');
+                    }
+                } catch (error) {
+                    toast.error('Error deleting calendar');
+                }
             }
-        } catch (error) {
-            toast.error('Error deleting calendar');
-        }
+        });
     };
 
     const resetForm = () => {

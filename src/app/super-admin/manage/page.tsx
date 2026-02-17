@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import SuperAdminLayout from '@/components/super-admin/SuperAdminLayout';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface College {
   id: string;
@@ -116,6 +117,7 @@ interface Student {
 type TabType = 'departments' | 'faculty' | 'classrooms' | 'batches' | 'subjects' | 'courses' | 'students';
 
 const ManagePage: React.FC = () => {
+  const { showConfirm } = useConfirm();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('departments');
   const [colleges, setColleges] = useState<College[]>([]);
@@ -233,31 +235,36 @@ const ManagePage: React.FC = () => {
     }
   };
 
-  const handleDeleteItem = async (type: string, id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
+  const handleDeleteItem = (type: string, id: string, name: string) => {
+    showConfirm({
+      title: 'Delete Item',
+      message: `Are you sure you want to delete "${name}"? This action cannot be undone.`,
+      confirmText: 'Delete',
+      onConfirm: async () => {
+        try {
+          const userData = localStorage.getItem('user');
+          if (!userData) return;
 
-    try {
-      const userData = localStorage.getItem('user');
-      if (!userData) return;
+          const authToken = Buffer.from(userData).toString('base64');
+          const endpoint = type === 'batches' ? `/api/admin/${type}?id=${id}` : `/api/admin/${type}/${id}`;
 
-      const authToken = Buffer.from(userData).toString('base64');
-      const endpoint = type === 'batches' ? `/api/admin/${type}?id=${id}` : `/api/admin/${type}/${id}`;
+          const res = await fetch(endpoint, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${authToken}` }
+          });
 
-      const res = await fetch(endpoint, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${authToken}` }
-      });
-
-      if (res.ok) {
-        toast.success(`${type.slice(0, -1)} deleted successfully`);
-        if (selectedCollege) fetchData(selectedCollege.id);
-      } else {
-        const err = await res.json();
-        toast.error(err.error || 'Failed to delete');
+          if (res.ok) {
+            toast.success(`${type.slice(0, -1)} deleted successfully`);
+            if (selectedCollege) fetchData(selectedCollege.id);
+          } else {
+            const err = await res.json();
+            toast.error(err.error || 'Failed to delete');
+          }
+        } catch (e) {
+          toast.error('Error deleting item');
+        }
       }
-    } catch (e) {
-      toast.error('Error deleting item');
-    }
+    });
   };
 
   const handleDeptSubmit = async () => {

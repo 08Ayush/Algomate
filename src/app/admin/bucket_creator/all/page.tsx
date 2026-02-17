@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
 import { ArrowLeft, Search, Filter, BookOpen, Users, Calendar, Trash2, Edit2, ChevronDown, ChevronUp } from 'lucide-react';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface Subject {
   id: string;
@@ -59,6 +60,7 @@ interface User {
 
 export default function AllBucketsPage() {
   const router = useRouter();
+  const { showConfirm } = useConfirm();
   const [user, setUser] = useState<User | null>(null);
   const [buckets, setBuckets] = useState<Bucket[]>([]);
   const [filteredBuckets, setFilteredBuckets] = useState<Bucket[]>([]);
@@ -184,35 +186,38 @@ export default function AllBucketsPage() {
   };
 
   async function handleDeleteBucket(bucketId: string, bucketName: string) {
-    if (!confirm(`Are you sure you want to delete the bucket "${bucketName}"?\n\nThis action cannot be undone.`)) {
-      return;
-    }
+    showConfirm({
+      title: 'Delete Elective Bucket',
+      message: `Are you sure you want to delete the bucket "${bucketName}"? This action cannot be undone.`,
+      confirmText: 'Delete',
+      onConfirm: async () => {
+        try {
+          const userData = localStorage.getItem('user');
+          if (!userData) return;
 
-    try {
-      const userData = localStorage.getItem('user');
-      if (!userData) return;
+          const authToken = Buffer.from(userData).toString('base64');
+          const response = await fetch(`/api/nep/buckets/${bucketId}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${authToken}`,
+              'Content-Type': 'application/json'
+            }
+          });
 
-      const authToken = Buffer.from(userData).toString('base64');
-      const response = await fetch(`/api/nep/buckets/${bucketId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json'
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to delete bucket');
+          }
+
+          // Remove from local state
+          setBuckets(prev => prev.filter(b => b.id !== bucketId));
+          alert('Bucket deleted successfully!');
+        } catch (error) {
+          console.error('Error deleting bucket:', error);
+          alert(`Failed to delete bucket: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to delete bucket');
       }
-
-      // Remove from local state
-      setBuckets(prev => prev.filter(b => b.id !== bucketId));
-      alert('Bucket deleted successfully!');
-    } catch (error) {
-      console.error('Error deleting bucket:', error);
-      alert(`Failed to delete bucket: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   if (loading) {

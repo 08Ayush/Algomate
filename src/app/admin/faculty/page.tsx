@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface Department {
     id: string;
@@ -39,6 +40,7 @@ interface Faculty {
 }
 
 const FacultyPage: React.FC = () => {
+    const { showConfirm } = useConfirm();
     const router = useRouter();
     const [faculty, setFaculty] = useState<Faculty[]>([]);
     const [departments, setDepartments] = useState<Department[]>([]);
@@ -179,28 +181,33 @@ const FacultyPage: React.FC = () => {
         setShowForm(true);
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this faculty member?')) return;
+    const handleDelete = (fac: Faculty) => {
+        showConfirm({
+            title: 'Delete Faculty',
+            message: `Are you sure you want to delete faculty member "${fac.first_name} ${fac.last_name}"? This action cannot be undone.`,
+            confirmText: 'Delete',
+            onConfirm: async () => {
+                try {
+                    const headers = getAuthHeaders();
+                    if (!headers) return;
 
-        try {
-            const headers = getAuthHeaders();
-            if (!headers) return;
+                    const res = await fetch(`/api/admin/faculty/${fac.id}`, {
+                        method: 'DELETE',
+                        headers
+                    });
 
-            const res = await fetch(`/api/admin/faculty/${id}`, {
-                method: 'DELETE',
-                headers
-            });
-
-            if (res.ok) {
-                toast.success('Faculty deleted successfully');
-                setFaculty(prev => prev.filter(f => f.id !== id));
-            } else {
-                const err = await res.json();
-                toast.error(err.error || 'Failed to delete faculty');
+                    if (res.ok) {
+                        toast.success('Faculty deleted successfully');
+                        setFaculty(prev => prev.filter(f => f.id !== fac.id));
+                    } else {
+                        const err = await res.json();
+                        toast.error(err.error || 'Failed to delete faculty');
+                    }
+                } catch (error) {
+                    toast.error('Error deleting faculty');
+                }
             }
-        } catch (error) {
-            toast.error('Error deleting faculty');
-        }
+        });
     };
 
     const filteredFaculty = faculty.filter(f => {

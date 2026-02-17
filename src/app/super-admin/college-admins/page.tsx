@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import SuperAdminLayout from '@/components/super-admin/SuperAdminLayout';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface CollegeAdmin {
     id: string;
@@ -42,6 +43,7 @@ interface NewAdmin {
 }
 
 const CollegeAdminsPage: React.FC = () => {
+    const { showConfirm } = useConfirm();
     const [admins, setAdmins] = useState<CollegeAdmin[]>([]);
     const [colleges, setColleges] = useState<College[]>([]);
     const [loading, setLoading] = useState(true);
@@ -202,19 +204,25 @@ const CollegeAdminsPage: React.FC = () => {
         }
     };
 
-    const handleDeleteAdmin = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this admin?')) return;
-        try {
-            const res = await fetch(`/api/super-admin/college-admins/${id}`, { method: 'DELETE' });
-            if (res.ok) {
-                toast.success('Admin deleted successfully');
-                fetchData();
-            } else {
-                toast.error('Failed to delete admin');
+    const handleDeleteAdmin = (admin: any) => {
+        showConfirm({
+            title: 'Delete Admin',
+            message: `Are you sure you want to delete this admin? This action cannot be undone.`,
+            confirmText: 'Delete',
+            onConfirm: async () => {
+                try {
+                    const res = await fetch(`/api/super-admin/college-admins/${admin.id}`, { method: 'DELETE' });
+                    if (res.ok) {
+                        toast.success('Admin deleted successfully');
+                        fetchData();
+                    } else {
+                        toast.error('Failed to delete admin');
+                    }
+                } catch (e) {
+                    toast.error('Error deleting admin');
+                }
             }
-        } catch (e) {
-            toast.error('Error deleting admin');
-        }
+        });
     };
 
     const resetForm = () => {

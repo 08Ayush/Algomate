@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { GraduationCap, Plus, Edit, Trash2, X, Search, RefreshCw, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface Course {
     id: string;
@@ -18,6 +19,7 @@ interface Course {
 }
 
 const CoursesPage: React.FC = () => {
+    const { showConfirm } = useConfirm();
     const router = useRouter();
     const [courses, setCourses] = useState<Course[]>([]);
     const [loading, setLoading] = useState(true);
@@ -85,14 +87,20 @@ const CoursesPage: React.FC = () => {
         setShowForm(true);
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Delete course?')) return;
-        try {
-            const headers = getAuthHeaders();
-            if (!headers) return;
-            const res = await fetch(`/api/admin/courses/${id}`, { method: 'DELETE', headers });
-            if (res.ok) { toast.success('Deleted'); setCourses(prev => prev.filter(c => c.id !== id)); }
-        } catch { toast.error('Error'); }
+    const handleDelete = (course: Course) => {
+        showConfirm({
+            title: 'Delete Course',
+            message: `Are you sure you want to delete course "${course.title}"? This action cannot be undone.`,
+            confirmText: 'Delete',
+            onConfirm: async () => {
+                try {
+                    const headers = getAuthHeaders();
+                    if (!headers) return;
+                    const res = await fetch(`/api/admin/courses/${course.id}`, { method: 'DELETE', headers });
+                    if (res.ok) { toast.success('Deleted'); setCourses(prev => prev.filter(c => c.id !== course.id)); }
+                } catch { toast.error('Error'); }
+            }
+        });
     };
 
     const filteredCourses = courses.filter(c => c.title.toLowerCase().includes(searchQuery.toLowerCase()) || c.code.toLowerCase().includes(searchQuery.toLowerCase()));

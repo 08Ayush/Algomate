@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface Event {
   id: string;
@@ -31,6 +32,7 @@ interface Event {
 
 const EventsPage: React.FC = () => {
   const router = useRouter();
+  const { showConfirm } = useConfirm();
   const [user, setUser] = useState<any>(null);
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,25 +83,31 @@ const EventsPage: React.FC = () => {
     } catch { toast.error('Error loading events'); } finally { setLoading(false); }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this event?')) return;
-    try {
-      const headers = getAuthHeaders();
-      if (!headers) return;
-      const res = await fetch(`/api/events?id=${id}`, { method: 'DELETE', headers });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success('Event deleted');
-        setEvents(prev => prev.filter(e => e.id !== id));
-        setSelectedEvent(null);
-      } else {
-        toast.error(data.error || 'Failed to delete event');
-        console.error('Delete error:', data);
+  const handleDelete = (event: Event) => {
+    showConfirm({
+      title: 'Delete Event',
+      message: `Are you sure you want to delete the event "${event.title}"? This action cannot be undone.`,
+      confirmText: 'Delete',
+      onConfirm: async () => {
+        try {
+          const headers = getAuthHeaders();
+          if (!headers) return;
+          const res = await fetch(`/api/events?id=${event.id}`, { method: 'DELETE', headers });
+          const data = await res.json();
+          if (res.ok) {
+            toast.success('Event deleted');
+            setEvents(prev => prev.filter(e => e.id !== event.id));
+            setSelectedEvent(null);
+          } else {
+            toast.error(data.error || 'Failed to delete event');
+            console.error('Delete error:', data);
+          }
+        } catch (error) {
+          console.error('Delete exception:', error);
+          toast.error('Error deleting event');
+        }
       }
-    } catch (error) {
-      console.error('Delete exception:', error);
-      toast.error('Error deleting event');
-    }
+    });
   };
 
   // Stats
@@ -428,7 +436,7 @@ const EventsPage: React.FC = () => {
                           <Edit size={16} />
                         </button>
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleDelete(event.id); }}
+                          onClick={(e) => { e.stopPropagation(); handleDelete(event); }}
                           className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
                         >
                           <Trash2 size={16} />
@@ -531,7 +539,7 @@ const EventsPage: React.FC = () => {
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            handleDelete(selectedEvent.id);
+                            handleDelete(selectedEvent);
                           }}
                           className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-xl font-medium"
                         >

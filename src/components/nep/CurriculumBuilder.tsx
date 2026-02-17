@@ -1,21 +1,22 @@
-// 'use client';
+'use client';
 
-// import React, { useState, useEffect } from 'react';
-// import {
-//   DndContext,
-//   DragEndEvent,
-//   DragOverlay,
-//   DragStartEvent,
-//   PointerSensor,
-//   useSensor,
-//   useSensors,
-//   closestCenter,
-//   useDroppable,
-// } from '@dnd-kit/core';
-// import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-// import { useSortable } from '@dnd-kit/sortable';
-// import { CSS } from '@dnd-kit/utilities';
-// import { Trash2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  useDroppable,
+} from '@dnd-kit/core';
+import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { Trash2 } from 'lucide-react';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 
 // // Types
@@ -1122,6 +1123,7 @@ export default function CurriculumBuilder({
   department,
   semester,
 }: CurriculumBuilderProps) {
+  const { showConfirm } = useConfirm();
   const [availableSubjects, setAvailableSubjects] = useState<Subject[]>([]);
   const [filteredSubjects, setFilteredSubjects] = useState<Subject[]>([]);
   const [selectedCredits, setSelectedCredits] = useState<number | null>(null);
@@ -1515,54 +1517,53 @@ export default function CurriculumBuilder({
     if (!bucket) return;
 
     // Show confirmation dialog
-    const confirmDelete = window.confirm(
-      `Are you sure you want to delete the bucket "${bucket.bucket_name}"?\n\n` +
-      `This will remove ${bucket.subjects.length} subject(s) from this bucket and return them to the available subjects list.\n\n` +
-      `This action will be immediately saved to the database.`
-    );
-
-    if (!confirmDelete) return;
-
-    // If it's a temporary bucket (not saved yet), just remove from state
-    if (bucketId.startsWith('temp-')) {
-      setAvailableSubjects((prev) => [...prev, ...bucket.subjects]);
-      setBuckets((prev) => prev.filter((b) => b.id !== bucketId));
-      setHasUnsavedChanges(true);
-      return;
-    }
-
-    // For saved buckets, delete from database
-    try {
-      const userData = localStorage.getItem('user');
-      if (!userData) {
-        throw new Error('No user data found');
-      }
-
-      const authToken = Buffer.from(userData).toString('base64');
-      const response = await fetch(`/api/nep/buckets/${bucketId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json'
+    showConfirm({
+      title: 'Delete Elective Bucket',
+      message: `Are you sure you want to delete the bucket "${bucket.bucket_name}"? This will remove ${bucket.subjects.length} subject(s) from this bucket and return them to the available subjects list. This action will be immediately saved to the database.`,
+      confirmText: 'Delete',
+      onConfirm: async () => {
+        // If it's a temporary bucket (not saved yet), just remove from state
+        if (bucketId.startsWith('temp-')) {
+          setAvailableSubjects((prev) => [...prev, ...bucket.subjects]);
+          setBuckets((prev) => prev.filter((b) => b.id !== bucketId));
+          setHasUnsavedChanges(true);
+          return;
         }
-      });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to delete bucket');
+        // For saved buckets, delete from database
+        try {
+          const userData = localStorage.getItem('user');
+          if (!userData) {
+            throw new Error('No user data found');
+          }
+
+          const authToken = Buffer.from(userData).toString('base64');
+          const response = await fetch(`/api/nep/buckets/${bucketId}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${authToken}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to delete bucket');
+          }
+
+          const result = await response.json();
+          
+          // Update local state - return subjects to available list and remove bucket
+          setAvailableSubjects((prev) => [...prev, ...bucket.subjects]);
+          setBuckets((prev) => prev.filter((b) => b.id !== bucketId));
+          
+          alert(`Bucket deleted successfully! ${result.subjectsReset || 0} subject(s) returned to available pool.`);
+        } catch (error) {
+          console.error('Error deleting bucket:', error);
+          alert(`Failed to delete bucket: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
       }
-
-      const result = await response.json();
-      
-      // Update local state - return subjects to available list and remove bucket
-      setAvailableSubjects((prev) => [...prev, ...bucket.subjects]);
-      setBuckets((prev) => prev.filter((b) => b.id !== bucketId));
-      
-      alert(`Bucket deleted successfully! ${result.subjectsReset || 0} subject(s) returned to available pool.`);
-    } catch (error) {
-      console.error('Error deleting bucket:', error);
-      alert(`Failed to delete bucket: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+    });
   }
 
   async function handleCreateBucket() {

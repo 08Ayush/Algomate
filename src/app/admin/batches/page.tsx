@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Layers, Plus, Edit, Trash2, X, Search, RefreshCw, GraduationCap } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface Department { id: string; name: string; code: string; }
 interface Course { id: string; title: string; code: string; }
@@ -98,14 +99,27 @@ const BatchesPage: React.FC = () => {
         setShowForm(true);
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Delete batch?')) return;
-        try {
-            const headers = getAuthHeaders();
-            if (!headers) return;
-            const res = await fetch(`/api/admin/batches/${id}`, { method: 'DELETE', headers });
-            if (res.ok) { toast.success('Deleted'); setBatches(prev => prev.filter(b => b.id !== id)); }
-        } catch { toast.error('Error'); }
+    const { showConfirm } = useConfirm();
+
+    const handleDeleteBatch = (batch: Batch) => {
+        showConfirm({
+            title: 'Delete Batch',
+            message: `Are you sure you want to delete batch "${batch.name}"? This action cannot be undone.`,
+            confirmText: 'Delete',
+            onConfirm: async () => {
+                try {
+                    const headers = getAuthHeaders();
+                    if (!headers) return;
+                    const res = await fetch(`/api/admin/batches?id=${batch.id}`, { method: 'DELETE', headers });
+                    if (res.ok) { 
+                        toast.success('Deleted'); 
+                        setBatches(prev => prev.filter(b => b.id !== batch.id)); 
+                    }
+                } catch { 
+                    toast.error('Error'); 
+                }
+            }
+        });
     };
 
     const uniqueSemesters = [...new Set(batches.map(b => b.semester))].sort((a, b) => a - b);
@@ -179,7 +193,7 @@ const BatchesPage: React.FC = () => {
                                         <td className="px-6 py-4"><span className={`px-3 py-1 rounded-full text-xs font-bold ${batch.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{batch.is_active ? 'Active' : 'Inactive'}</span></td>
                                         <td className="px-6 py-4"><div className="flex gap-2">
                                             <button onClick={() => handleEdit(batch)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={16} /></button>
-                                            <button onClick={() => handleDelete(batch.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                                            <button onClick={() => handleDeleteBatch(batch)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
                                         </div></td>
                                     </motion.tr>
                                 ))}

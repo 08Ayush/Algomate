@@ -6,6 +6,7 @@ import {
   deleteMockStudents,
   getStudentSelectionStats,
 } from '@/lib/nep/mockStudentGenerator';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface MockStudentGeneratorProps {
   batchId: string;
@@ -13,6 +14,7 @@ interface MockStudentGeneratorProps {
 }
 
 export default function MockStudentGenerator({ batchId, bucketIds }: MockStudentGeneratorProps) {
+  const { showConfirm } = useConfirm();
   const [count, setCount] = useState(50);
   const [generating, setGenerating] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -49,25 +51,28 @@ export default function MockStudentGenerator({ batchId, bucketIds }: MockStudent
   }
 
   async function handleDelete() {
-    if (!confirm('Are you sure you want to delete all mock students? This cannot be undone.')) {
-      return;
-    }
+    showConfirm({
+      title: 'Delete All Mock Students',
+      message: 'Are you sure you want to delete all mock students? This action cannot be undone.',
+      confirmText: 'Delete All',
+      onConfirm: async () => {
+        setDeleting(true);
+        setMessage('');
 
-    setDeleting(true);
-    setMessage('');
-
-    try {
-      const result = await deleteMockStudents(batchId);
-      setMessage(result.success ? `✅ ${result.message}` : `❌ ${result.message}`);
-      
-      if (result.success) {
-        setStats(null);
+        try {
+          const result = await deleteMockStudents(batchId);
+          setMessage(result.success ? `✅ ${result.message}` : `❌ ${result.message}`);
+          
+          if (result.success) {
+            setStats(null);
+          }
+        } catch (error) {
+          setMessage(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        } finally {
+          setDeleting(false);
+        }
       }
-    } catch (error) {
-      setMessage(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setDeleting(false);
-    }
+    });
   }
 
   async function loadStats() {

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import SuperAdminLayout from '@/components/super-admin/SuperAdminLayout';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface RegistrationToken {
   id: string;
@@ -30,6 +31,7 @@ interface RegistrationToken {
 }
 
 const RegistrationTokensPage: React.FC = () => {
+  const { showConfirm } = useConfirm();
   const [tokens, setTokens] = useState<RegistrationToken[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -117,20 +119,26 @@ const RegistrationTokensPage: React.FC = () => {
     }
   };
 
-  const handleDeleteToken = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this token?')) return;
-    try {
-      const res = await fetch(`/api/super-admin/registration-tokens/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        toast.success('Token deleted');
-        fetchTokens();
-      } else {
-        const err = await res.json();
-        toast.error(err.error || 'Failed to delete token');
+  const handleDeleteToken = (token: RegistrationToken) => {
+    showConfirm({
+      title: 'Delete Registration Token',
+      message: `Are you sure you want to delete the token for "${token.institutionName}"? This action cannot be undone.`,
+      confirmText: 'Delete',
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/super-admin/registration-tokens/${token.id}`, { method: 'DELETE' });
+          if (res.ok) {
+            toast.success('Token deleted');
+            fetchTokens();
+          } else {
+            const err = await res.json();
+            toast.error(err.error || 'Failed to delete token');
+          }
+        } catch (e) {
+          toast.error('Error deleting token');
+        }
       }
-    } catch (e) {
-      toast.error('Error deleting token');
-    }
+    });
   };
 
   const handleReactivateToken = async (id: string) => {
@@ -309,7 +317,7 @@ const RegistrationTokensPage: React.FC = () => {
                           )}
                           {!token.isUsed && (
                             <button
-                              onClick={() => handleDeleteToken(token.id)}
+                              onClick={() => handleDeleteToken(token)}
                               className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                               title="Delete"
                             >

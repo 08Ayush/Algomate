@@ -10,7 +10,8 @@ import {
     Search,
     X,
     Check,
-    ChevronDown
+    ChevronDown,
+    AlertTriangle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import SuperAdminLayout from '@/components/super-admin/SuperAdminLayout';
@@ -55,7 +56,9 @@ const CollegesPage: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [showAddModal, setShowAddModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [editingCollege, setEditingCollege] = useState<College | null>(null);
+    const [deletingCollege, setDeletingCollege] = useState<College | null>(null);
 
     const [newCollege, setNewCollege] = useState<NewCollege>({
         name: '',
@@ -232,12 +235,14 @@ const CollegesPage: React.FC = () => {
         }
     };
 
-    const handleDeleteCollege = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this college?')) return;
+    const handleDeleteCollege = async () => {
+        if (!deletingCollege) return;
         try {
-            const res = await fetch(`/api/super-admin/colleges/${id}`, { method: 'DELETE' });
+            const res = await fetch(`/api/super-admin/colleges/${deletingCollege.id}`, { method: 'DELETE' });
             if (res.ok) {
                 toast.success('College deleted successfully');
+                setShowDeleteModal(false);
+                setDeletingCollege(null);
                 fetchColleges();
             } else {
                 toast.error('Failed to delete college');
@@ -245,6 +250,11 @@ const CollegesPage: React.FC = () => {
         } catch (e) {
             toast.error('Error deleting college');
         }
+    };
+
+    const openDeleteModal = (college: College) => {
+        setDeletingCollege(college);
+        setShowDeleteModal(true);
     };
 
     const resetForm = () => {
@@ -360,7 +370,7 @@ const CollegesPage: React.FC = () => {
                                                     <Edit size={16} />
                                                 </button>
                                                 <button
-                                                    onClick={() => handleDeleteCollege(college.id)}
+                                                    onClick={() => openDeleteModal(college)}
                                                     className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                                 >
                                                     <Trash2 size={16} />
@@ -516,6 +526,46 @@ const CollegesPage: React.FC = () => {
                                 >
                                     {showEditModal ? 'Update' : 'Add College'}
                                 </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+
+                {/* Delete Confirmation Modal */}
+                {showDeleteModal && deletingCollege && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[2000] p-4">
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-xl p-10"
+                        >
+                            <div className="flex items-start gap-6">
+                                <div className="w-16 h-16 rounded-full bg-yellow-100 flex items-center justify-center flex-shrink-0">
+                                    <AlertTriangle className="text-yellow-600" size={32} />
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="text-2xl font-bold text-gray-900 mb-4">Delete College</h3>
+                                    <p className="text-lg text-gray-600 mb-8 leading-relaxed">
+                                        Are you sure you want to delete "{deletingCollege.name}"? This action cannot be undone and will remove all associated data.
+                                    </p>
+                                    <div className="flex justify-end gap-3">
+                                        <button
+                                            onClick={() => {
+                                                setShowDeleteModal(false);
+                                                setDeletingCollege(null);
+                                            }}
+                                            className="px-6 py-2.5 text-gray-700 font-medium hover:bg-gray-100 rounded-lg transition-colors"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={handleDeleteCollege}
+                                            className="px-6 py-2.5 bg-[#4D869C] text-white font-medium rounded-lg hover:bg-[#3d6b7d] transition-colors"
+                                        >
+                                            Delete
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </motion.div>
                     </div>

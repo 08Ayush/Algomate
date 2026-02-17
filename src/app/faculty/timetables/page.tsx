@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface Timetable {
     id: string;
@@ -30,6 +31,7 @@ interface Timetable {
 
 const TimetablesPage: React.FC = () => {
     const router = useRouter();
+    const { showConfirm } = useConfirm();
     const [user, setUser] = useState<any>(null);
     const [timetables, setTimetables] = useState<Timetable[]>([]);
     const [loading, setLoading] = useState(true);
@@ -74,92 +76,110 @@ const TimetablesPage: React.FC = () => {
         } catch { toast.error('Error loading timetables'); } finally { setLoading(false); }
     };
 
-    const submitForReview = async (timetableId: string, e: React.MouseEvent) => {
+    const submitForReview = (timetable: Timetable, e: React.MouseEvent) => {
         e.stopPropagation();
-        if (!confirm('Submit this timetable for review by publisher?')) return;
+        
+        showConfirm({
+            title: 'Submit for Review',
+            message: `Submit "${timetable.title}" for review by publisher? Once submitted, you cannot edit it until the publisher reviews it.`,
+            confirmText: 'Submit',
+            onConfirm: async () => {
+                setActionLoading(timetable.id);
+                try {
+                    const headers = getAuthHeaders();
+                    if (!headers) return;
 
-        setActionLoading(timetableId);
-        try {
-            const headers = getAuthHeaders();
-            if (!headers) return;
+                    const res = await fetch(`/api/timetables/${timetable.id}/submit`, {
+                        method: 'POST',
+                        headers
+                    });
 
-            const res = await fetch(`/api/timetables/${timetableId}/submit`, {
-                method: 'POST',
-                headers
-            });
-
-            const data = await res.json();
-            if (data.success) {
-                toast.success('Timetable submitted for review!');
-                fetchTimetables();
-            } else {
-                toast.error(data.error || 'Failed to submit');
+                    const data = await res.json();
+                    if (data.success) {
+                        toast.success('Timetable submitted for review!');
+                        fetchTimetables();
+                    } else {
+                        toast.error(data.error || 'Failed to submit');
+                    }
+                } catch (error) {
+                    console.error('Error submitting timetable:', error);
+                    toast.error('Failed to submit timetable');
+                } finally {
+                    setActionLoading(null);
+                }
             }
-        } catch (error) {
-            console.error('Error submitting timetable:', error);
-            toast.error('Failed to submit timetable');
-        } finally {
-            setActionLoading(null);
-        }
+        });
     };
 
-    const deleteTimetable = async (timetableId: string, e: React.MouseEvent) => {
+    const deleteTimetable = (timetable: Timetable, e: React.MouseEvent) => {
         e.stopPropagation();
-        if (!confirm('Are you sure you want to delete this timetable? This action cannot be undone.')) return;
+        
+        showConfirm({
+            title: 'Delete Timetable',
+            message: `Are you sure you want to delete "${timetable.title}"? This action cannot be undone.`,
+            confirmText: 'Delete',
+            onConfirm: async () => {
+                setActionLoading(timetable.id);
+                try {
+                    const headers = getAuthHeaders();
+                    if (!headers) return;
 
-        setActionLoading(timetableId);
-        try {
-            const headers = getAuthHeaders();
-            if (!headers) return;
+                    const res = await fetch(`/api/timetables/${timetable.id}/delete`, {
+                        method: 'DELETE',
+                        headers
+                    });
 
-            const res = await fetch(`/api/timetables/${timetableId}/delete`, {
-                method: 'DELETE',
-                headers
-            });
-
-            const data = await res.json();
-            if (data.success) {
-                toast.success('Timetable deleted successfully!');
-                setTimetables(prev => prev.filter(t => t.id !== timetableId));
-            } else {
-                toast.error(data.error || 'Failed to delete');
+                    const data = await res.json();
+                    if (data.success) {
+                        toast.success('Timetable deleted successfully!');
+                        setTimetables(prev => prev.filter(t => t.id !== timetable.id));
+                    } else {
+                        toast.error(data.error || 'Failed to delete');
+                    }
+                } catch (error) {
+                    console.error('Error deleting timetable:', error);
+                    toast.error('Failed to delete timetable');
+                } finally {
+                    setActionLoading(null);
+                }
             }
-        } catch (error) {
-            console.error('Error deleting timetable:', error);
-            toast.error('Failed to delete timetable');
-        } finally {
-            setActionLoading(null);
-        }
+        });
     };
 
-    const unpublishTimetable = async (timetableId: string, e: React.MouseEvent) => {
+    const unpublishTimetable = (timetable: Timetable, e: React.MouseEvent) => {
         e.stopPropagation();
-        if (!confirm('Are you sure you want to unpublish this timetable? It will be reverted to draft status.')) return;
+        
+        showConfirm({
+            title: 'Unpublish Timetable',
+            message: `Are you sure you want to unpublish "${timetable.title}"? It will be reverted to draft status and students will no longer be able to view it.`,
+            confirmText: 'Unpublish',
+            onConfirm: async () => {
+                setActionLoading(timetable.id);
+                try {
+                    const headers = getAuthHeaders();
+                    if (!headers) return;
 
-        setActionLoading(timetableId);
-        try {
-            const headers = getAuthHeaders();
-            if (!headers) return;
+                    const res = await fetch(`/api/timetables/${timetable.id}/unpublish`, {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify({ reason: 'Unpublished by publisher' })
+                    });
 
-            const res = await fetch(`/api/timetables/${timetableId}/unpublish`, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ reason: 'Unpublished by publisher' })
-            });
-
-            const data = await res.json();
-            if (data.success) {
-                toast.success('Timetable unpublished successfully!');
-                fetchTimetables();
-            } else {
-                toast.error(data.error || 'Failed to unpublish');
+                    const data = await res.json();
+                    if (data.success) {
+                        toast.success('Timetable unpublished successfully!');
+                        fetchTimetables();
+                    } else {
+                        toast.error(data.error || 'Failed to unpublish');
+                    }
+                } catch (error) {
+                    console.error('Error unpublishing timetable:', error);
+                    toast.error('Failed to unpublish timetable');
+                } finally {
+                    setActionLoading(null);
+                }
             }
-        } catch (error) {
-            console.error('Error unpublishing timetable:', error);
-            toast.error('Failed to unpublish timetable');
-        } finally {
-            setActionLoading(null);
-        }
+        });
     };
 
     const notifyStudents = async (timetableId: string, e: React.MouseEvent) => {
@@ -329,7 +349,7 @@ const TimetablesPage: React.FC = () => {
                                         {/* Submit Button - Only for Creator, only for Draft */}
                                         {isCreator && tt.status === 'draft' && (
                                             <button
-                                                onClick={(e) => submitForReview(tt.id, e)}
+                                                onClick={(e) => submitForReview(tt, e)}
                                                 disabled={actionLoading === tt.id}
                                                 className="flex items-center gap-1.5 px-3 py-2 bg-[#4D869C] text-white rounded-lg text-sm font-medium hover:shadow-md disabled:opacity-50"
                                             >
@@ -350,7 +370,7 @@ const TimetablesPage: React.FC = () => {
                                         {/* Unpublish Button - Only for Publisher, only for Published */}
                                         {isPublisher && tt.status === 'published' && (
                                             <button
-                                                onClick={(e) => unpublishTimetable(tt.id, e)}
+                                                onClick={(e) => unpublishTimetable(tt, e)}
                                                 disabled={actionLoading === tt.id}
                                                 className="flex items-center gap-1.5 px-3 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:shadow-md disabled:opacity-50"
                                             >
@@ -361,7 +381,7 @@ const TimetablesPage: React.FC = () => {
                                         {/* Delete Button - For Creator/Publisher, only for Draft */}
                                         {(isCreator || isPublisher) && tt.status === 'draft' && (
                                             <button
-                                                onClick={(e) => deleteTimetable(tt.id, e)}
+                                                onClick={(e) => deleteTimetable(tt, e)}
                                                 disabled={actionLoading === tt.id}
                                                 className="flex items-center gap-1.5 px-3 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:shadow-md disabled:opacity-50"
                                             >

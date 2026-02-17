@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { ClipboardList, Plus, Edit, Trash2, X, Search, RefreshCw, BookOpen, Eye, CheckCircle, XCircle, Users, Pen } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface Department { id: string; name: string; code: string; }
 interface Batch { id: string; name: string; semester: number; section: string; academic_year: string; department_id: string; departments?: { name: string } | null; }
@@ -28,6 +29,7 @@ interface Bucket {
 
 const BucketsPage: React.FC = () => {
     const router = useRouter();
+    const { showConfirm } = useConfirm();
     const [buckets, setBuckets] = useState<Bucket[]>([]);
     const [batches, setBatches] = useState<Batch[]>([]);
     const [departments, setDepartments] = useState<Department[]>([]);
@@ -114,14 +116,20 @@ const BucketsPage: React.FC = () => {
         setShowForm(true);
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Delete bucket?')) return;
-        try {
-            const headers = getAuthHeaders();
-            if (!headers) return;
-            const res = await fetch(`/api/admin/buckets/${id}`, { method: 'DELETE', headers });
-            if (res.ok) { toast.success('Deleted'); setBuckets(prev => prev.filter(b => b.id !== id)); }
-        } catch { toast.error('Error'); }
+    const handleDelete = (bucket: Bucket) => {
+        showConfirm({
+            title: 'Delete Elective Bucket',
+            message: `Are you sure you want to delete the bucket "${bucket.bucket_name}"? This action cannot be undone.`,
+            confirmText: 'Delete',
+            onConfirm: async () => {
+                try {
+                    const headers = getAuthHeaders();
+                    if (!headers) return;
+                    const res = await fetch(`/api/admin/buckets/${bucket.id}`, { method: 'DELETE', headers });
+                    if (res.ok) { toast.success('Deleted'); setBuckets(prev => prev.filter(b => b.id !== bucket.id)); }
+                } catch { toast.error('Error'); }
+            }
+        });
     };
 
     const handlePublish = async (id: string) => {
@@ -134,15 +142,21 @@ const BucketsPage: React.FC = () => {
         } catch { toast.error('Error publishing'); }
     };
 
-    const handleUnpublish = async (id: string) => {
-        if (!confirm('Unpublish this bucket? Students will no longer be able to see it.')) return;
-        try {
-            const headers = getAuthHeaders();
-            if (!headers) return;
-            const res = await fetch(`/api/admin/buckets/${id}/unpublish`, { method: 'POST', headers });
-            if (res.ok) { toast.success('Unpublished'); fetchData(); }
-            else { const err = await res.json(); toast.error(err.error || 'Failed to unpublish'); }
-        } catch { toast.error('Error unpublishing'); }
+    const handleUnpublish = (bucket: Bucket) => {
+        showConfirm({
+            title: 'Unpublish Bucket',
+            message: `Are you sure you want to unpublish "${bucket.bucket_name}"? Students will no longer be able to see it.`,
+            confirmText: 'Unpublish',
+            onConfirm: async () => {
+                try {
+                    const headers = getAuthHeaders();
+                    if (!headers) return;
+                    const res = await fetch(`/api/admin/buckets/${bucket.id}/unpublish`, { method: 'POST', headers });
+                    if (res.ok) { toast.success('Unpublished'); fetchData(); }
+                    else { const err = await res.json(); toast.error(err.error || 'Failed to unpublish'); }
+                } catch { toast.error('Error unpublishing'); }
+            }
+        });
     };
 
     // Toggle Live for Creators
@@ -317,10 +331,10 @@ const BucketsPage: React.FC = () => {
                                                     {!bucket.is_published ? (
                                                         <button onClick={() => handlePublish(bucket.id)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg" title="Publish"><CheckCircle size={16} /></button>
                                                     ) : (
-                                                        <button onClick={() => handleUnpublish(bucket.id)} className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg" title="Unpublish"><XCircle size={16} /></button>
+                                                        <button onClick={() => handleUnpublish(bucket)} className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg" title="Unpublish"><XCircle size={16} /></button>
                                                     )}
                                                     <button onClick={() => handleEdit(bucket)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={16} /></button>
-                                                    <button onClick={() => handleDelete(bucket.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                                                    <button onClick={() => handleDelete(bucket)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
                                                 </div></td>
                                             </motion.tr>
                                         );

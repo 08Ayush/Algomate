@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface Classroom {
     id: string;
@@ -32,6 +33,7 @@ interface Classroom {
 }
 
 const ClassroomsPage: React.FC = () => {
+    const { showConfirm } = useConfirm();
     const router = useRouter();
     const [classrooms, setClassrooms] = useState<Classroom[]>([]);
     const [loading, setLoading] = useState(true);
@@ -167,19 +169,25 @@ const ClassroomsPage: React.FC = () => {
         setShowForm(true);
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Delete this classroom?')) return;
-        try {
-            const headers = getAuthHeaders();
-            if (!headers) return;
-            const res = await fetch(`/api/admin/classrooms/${id}`, { method: 'DELETE', headers });
-            if (res.ok) {
-                toast.success('Deleted');
-                setClassrooms(prev => prev.filter(c => c.id !== id));
+    const handleDelete = (classroom: Classroom) => {
+        showConfirm({
+            title: 'Delete Classroom',
+            message: `Are you sure you want to delete classroom "${classroom.name}"? This action cannot be undone.`,
+            confirmText: 'Delete',
+            onConfirm: async () => {
+                try {
+                    const headers = getAuthHeaders();
+                    if (!headers) return;
+                    const res = await fetch(`/api/admin/classrooms/${classroom.id}`, { method: 'DELETE', headers });
+                    if (res.ok) {
+                        toast.success('Deleted');
+                        setClassrooms(prev => prev.filter(c => c.id !== classroom.id));
+                    }
+                } catch (error) {
+                    toast.error('Error deleting');
+                }
             }
-        } catch (error) {
-            toast.error('Error deleting');
-        }
+        });
     };
 
     const filteredClassrooms = classrooms.filter(c => {
