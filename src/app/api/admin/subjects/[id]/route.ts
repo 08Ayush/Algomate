@@ -182,6 +182,8 @@ export async function DELETE(
     }
 
     const { id: subjectId } = await params;
+    const { searchParams } = new URL(request.url);
+    const force = searchParams.get('force') === 'true';
 
     // Verify subject belongs to user's college
     const { data: existingSubject, error: fetchError } = await supabaseAdmin
@@ -198,18 +200,74 @@ export async function DELETE(
       );
     }
 
-    // Check if subject is used in any timetables or other relations
-    const { data: timetableEntries } = await supabaseAdmin
-      .from('timetable_entries')
-      .select('id')
-      .eq('subject_id', subjectId)
-      .limit(1);
+    // Check for dependent records
+    const [{ data: timetableEntries }, { data: scheduledClasses }] = await Promise.all([
+      supabaseAdmin
+        .from('timetable_entries')
+        .select('id')
+        .eq('subject_id', subjectId)
+        .limit(1),
+      supabaseAdmin
+        .from('scheduled_classes')
+        .select('id')
+        .eq('subject_id', subjectId)
+        .limit(1),
+    ]);
 
-    if (timetableEntries && timetableEntries.length > 0) {
+    const hasTimetableRefs = timetableEntries && timetableEntries.length > 0;
+    const hasScheduledRefs = scheduledClasses && scheduledClasses.length > 0;
+
+    if ((hasTimetableRefs || hasScheduledRefs) && !force) {
+      const refs = [
+        hasTimetableRefs && 'timetable entries',
+        hasScheduledRefs && 'scheduled classes',
+      ].filter(Boolean).join(' and ');
+
       return NextResponse.json(
-        { error: 'Cannot delete subject. It is being used in timetables.' },
+        {
+          error: `Cannot delete subject. It is referenced by ${refs}. Use force delete to remove all related data.`,
+          hasReferences: true,
+          references: {
+            timetable_entries: hasTimetableRefs,
+            scheduled_classes: hasScheduledRefs,
+          },
+        },
         { status: 409 }
       );
+    }
+
+    // Force delete: remove dependent records first
+    if (force && (hasTimetableRefs || hasScheduledRefs)) {
+      const cleanupPromises = [];
+
+      if (hasScheduledRefs) {
+        cleanupPromises.push(
+          supabaseAdmin
+            .from('scheduled_classes')
+            .delete()
+            .eq('subject_id', subjectId)
+        );
+      }
+
+      if (hasTimetableRefs) {
+        cleanupPromises.push(
+          supabaseAdmin
+            .from('timetable_entries')
+            .delete()
+            .eq('subject_id', subjectId)
+        );
+      }
+
+      const cleanupResults = await Promise.all(cleanupPromises);
+      for (const result of cleanupResults) {
+        if (result.error) {
+          console.error('Cleanup error during force delete:', result.error);
+          return NextResponse.json(
+            { error: 'Failed to clean up dependent records before deletion.' },
+            { status: 500 }
+          );
+        }
+      }
     }
 
     // Delete the subject
@@ -220,6 +278,12 @@ export async function DELETE(
 
     if (deleteError) {
       console.error('Subject deletion error:', deleteError);
+      if (deleteError.code === '23503') {
+        return NextResponse.json(
+          { error: 'Cannot delete subject. It is still referenced by other records. Please remove all dependent data first.' },
+          { status: 409 }
+        );
+      }
       return NextResponse.json(
         { error: 'Failed to delete subject' },
         { status: 500 }
@@ -227,7 +291,8 @@ export async function DELETE(
     }
 
     return NextResponse.json({
-      message: 'Subject deleted successfully'
+      message: 'Subject deleted successfully',
+      force_deleted: force && (hasTimetableRefs || hasScheduledRefs),
     });
 
   } catch (error: any) {

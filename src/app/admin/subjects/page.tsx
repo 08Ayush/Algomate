@@ -100,8 +100,22 @@ const SubjectsPage: React.FC = () => {
         try {
             const headers = getAuthHeaders();
             if (!headers) return;
-            const res = await fetch(`/api/admin/subjects/${id}`, { method: 'DELETE', headers });
+            let res = await fetch(`/api/admin/subjects/${id}`, { method: 'DELETE', headers });
+
+            // If subject has references, ask user to force delete
+            if (res.status === 409) {
+                const data = await res.json();
+                if (data.hasReferences) {
+                    const forceConfirm = confirm(
+                        `${data.error}\n\nDo you want to force delete this subject and remove all related scheduled classes and timetable entries?`
+                    );
+                    if (!forceConfirm) return;
+                    res = await fetch(`/api/admin/subjects/${id}?force=true`, { method: 'DELETE', headers });
+                }
+            }
+
             if (res.ok) { toast.success('Deleted'); setSubjects(prev => prev.filter(s => s.id !== id)); }
+            else { const data = await res.json().catch(() => ({})); toast.error(data.error || 'Failed to delete'); }
         } catch { toast.error('Error'); }
     };
 
