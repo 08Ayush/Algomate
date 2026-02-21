@@ -1069,7 +1069,49 @@ class GeneticAlgorithmSolver:
         # Gentle penalty for unavoidable over-allocation (awareness only)
         if excess_hours > 0:
             penalty += excess_hours * 15
+        
+        # Penalize over-scheduling (subject appearing MORE than credits_per_week)
+        for batch in self.context.batches:
+            for sid in batch.subjects:
+                subj = self.context.get_subject(sid)
+                if subj:
+                    scheduled = subj_batch_hours.get(f"{batch.id}|{sid}", 0)
+                    if scheduled > subj.hours_per_week:
+                        over_scheduled = scheduled - subj.hours_per_week
+                        penalty += over_scheduled * 250  # Heavy penalty for over-scheduling
+        
         _pen['coverage'] = penalty - _p_before
+
+        # ── 3B. Same-day clustering penalty (NEW) ─────────────────
+        _p_before = penalty
+        # Penalize subjects appearing multiple times on same day
+        for batch in self.context.batches:
+            # Group assignments by day for this batch
+            day_subjects: Dict[int, Dict[str, int]] = {}  # day -> {subject_id: count}
+            
+            for assign in solution.assignments:
+                if assign.batch_id == batch.id:
+                    day = assign.time_slot.day
+                    if day not in day_subjects:
+                        day_subjects[day] = {}
+                    sid = assign.subject_id
+                    day_subjects[day][sid] = day_subjects[day].get(sid, 0) + 1
+            
+            # Penalize multiple occurrences of same subject on same day
+            for day, subject_counts in day_subjects.items():
+                for subject_id, count in subject_counts.items():
+                    if count > 2:
+                        # More than 2 classes of same subject on same day is bad
+                        penalty += (count - 2) * 200  # Heavy penalty
+                    elif count == 2:
+                        # 2 classes of same subject on same day is acceptable for labs
+                        # but check if it's actually a lab
+                        subj = self.context.get_subject(subject_id)
+                        if subj and not subj.is_lab:
+                            # Theory subject appearing twice on same day = mild penalty
+                            penalty += 50
+        
+        _pen['same_day_clustering'] = penalty - _p_before
 
         # ── 4. Faculty min/max hour violations + idle penalty ─
         _p_before = penalty

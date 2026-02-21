@@ -156,8 +156,25 @@ class Loader:
         # Track how many times each subject has been scheduled for sequential credit_hour_number
         subject_hour_counters: Dict[str, int] = {}
         
+        # Track consecutive lab sessions for proper continuation marking
+        # Key: (batch_id, subject_id, faculty_id, room_id, day)
+        # Value: list of (time_slot, assignment_index) tuples sorted by start time
+        lab_groups: Dict[tuple, List[tuple]] = {}
+        
+        # First pass: group consecutive lab assignments
+        for idx, asgn in enumerate(solution.assignments):
+            if asgn.is_lab_session:
+                key = (asgn.batch_id, asgn.subject_id, asgn.faculty_id, asgn.room_id, asgn.time_slot.day)
+                if key not in lab_groups:
+                    lab_groups[key] = []
+                lab_groups[key].append((asgn.time_slot, idx))
+        
+        # Sort each group by start time to identify consecutive pairs
+        for key in lab_groups:
+            lab_groups[key].sort(key=lambda x: x[0].start_hour * 60 + x[0].start_minute)
+        
         records = []
-        for asgn in solution.assignments:
+        for idx, asgn in enumerate(solution.assignments):
             # Map class_type: LAB/PRACTICAL for labs, THEORY otherwise
             if asgn.is_lab_session:
                 class_type = "LAB"
@@ -243,7 +260,29 @@ class Loader:
                         "class_type": class_type,
                     })
             else:
-                # Single-hour session - insert as-is
+                # Single-hour session - check if it's part of a consecutive lab block
+                is_continuation = False
+                session_number = 1
+                
+                if asgn.is_lab_session:
+                    key = (asgn.batch_id, asgn.subject_id, asgn.faculty_id, asgn.room_id, asgn.time_slot.day)
+                    if key in lab_groups:
+                        group = lab_groups[key]
+                        # Find this assignment's position in the group
+                        for position, (slot, assign_idx) in enumerate(group):
+                            if assign_idx == idx:
+                                session_number = position + 1
+                                # Check if previous slot is consecutive (1 hour before)
+                                if position > 0:
+                                    prev_slot = group[position - 1][0]
+                                    prev_end = prev_slot.start_hour * 60 + prev_slot.start_minute + prev_slot.duration_minutes
+                                    curr_start = asgn.time_slot.start_hour * 60 + asgn.time_slot.start_minute
+                                    if prev_end == curr_start:
+                                        is_continuation = True
+                                        logger.info(f"✅ Marking continuation: {asgn.subject_id} slot {session_number}")
+                                break
+                
+                # Increment counter
                 if asgn.subject_id not in subject_hour_counters:
                     subject_hour_counters[asgn.subject_id] = 0
                 subject_hour_counters[asgn.subject_id] += 1
@@ -257,6 +296,8 @@ class Loader:
                     "classroom_id": asgn.room_id,
                     "time_slot_id": asgn.time_slot.id,
                     "is_lab": asgn.is_lab_session,
+                    "is_continuation": is_continuation,
+                    "session_number": session_number,
                     "credit_hour_number": subject_hour_counters[asgn.subject_id],
                     "class_type": class_type,
                 })
