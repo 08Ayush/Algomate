@@ -8,7 +8,7 @@ import numpy as np
 from typing import List, Tuple, Optional, Dict, Any
 from dataclasses import dataclass
 
-from core.models import Solution, Assignment, TimeSlot, Room, Faculty, Subject
+from core.models import Solution, Assignment, TimeSlot, Room, Faculty, Subject, ConstraintRule
 from core.context import SchedulingContext
 from core.config import SolverConfig
 
@@ -40,6 +40,25 @@ class GeneticAlgorithmSolver:
         self.generation = 0
         self.best_fitness_history = []
         self.logger = logging.getLogger(__name__)
+
+        # Pre-compute faculty unavailability set for fast lookup
+        self._faculty_unavailable: set = set()  # (faculty_id, slot_id)
+        self._faculty_preferred: set = set()     # (faculty_id, slot_id)
+        self._faculty_avoid: set = set()         # (faculty_id, slot_id)
+        for fac in self.context.faculty:
+            for slot_id, avail in fac.slot_availability.items():
+                if not avail.get('is_available', True) or avail.get('type') == 'unavailable':
+                    self._faculty_unavailable.add((fac.id, slot_id))
+                elif avail.get('type') == 'preferred':
+                    self._faculty_preferred.add((fac.id, slot_id))
+                elif avail.get('type') == 'avoid':
+                    self._faculty_avoid.add((fac.id, slot_id))
+        if self._faculty_unavailable:
+            self.logger.info(
+                f"Faculty availability: {len(self._faculty_unavailable)} unavailable, "
+                f"{len(self._faculty_preferred)} preferred, "
+                f"{len(self._faculty_avoid)} avoid slot-pairs"
+            )
         
     def solve(self, timeout: Optional[int] = None) -> Solution:
         """Solve using genetic algorithm following industry-standard flow.
@@ -298,6 +317,10 @@ class GeneticAlgorithmSolver:
                         if ((faculty.id, slot_a.id) in faculty_slots or
                             (faculty.id, slot_b.id) in faculty_slots):
                             continue
+                        # Check faculty availability
+                        if ((faculty.id, slot_a.id) in self._faculty_unavailable or
+                            (faculty.id, slot_b.id) in self._faculty_unavailable):
+                            continue
 
                         # Find a room free for both slots
                         random.shuffle(valid_rooms)
@@ -371,6 +394,7 @@ class GeneticAlgorithmSolver:
                     # Check all constraints before placement
                     if (faculty and 
                         (faculty.id, slot.id) not in faculty_slots and
+                        (faculty.id, slot.id) not in self._faculty_unavailable and
                         (room.id, slot.id) not in room_slots and
                         (req['batch_id'], slot.id) not in batch_slots):
 
@@ -944,6 +968,11 @@ class GeneticAlgorithmSolver:
                 violations += 1
             batch_slots[key] = True
         
+        # Faculty availability violations (scheduling faculty when unavailable)
+        for assign in solution.assignments:
+            if (assign.faculty_id, assign.time_slot.id) in self._faculty_unavailable:
+                violations += 1
+        
         return violations
     
     def _get_violation_breakdown(self, solution: Solution) -> Dict[str, int]:
@@ -980,6 +1009,11 @@ class GeneticAlgorithmSolver:
                 breakdown['batch_conflicts'] += 1
             else:
                 batch_slots[key] = assign.id
+        
+        # Faculty availability violations
+        for assign in solution.assignments:
+            if (assign.faculty_id, assign.time_slot.id) in self._faculty_unavailable:
+                breakdown['faculty_availability'] = breakdown.get('faculty_availability', 0) + 1
         
         return breakdown
     
@@ -1265,6 +1299,22 @@ class GeneticAlgorithmSolver:
                 penalty += dept_cv * 30  # penalise uneven cross-department load
         _pen['balance'] = penalty - _p_before
 
+        # ── 9. Faculty preference-weighted slot scoring ──────────
+        _p_before = penalty
+        for assign in solution.assignments:
+            key = (assign.faculty_id, assign.time_slot.id)
+            if key in self._faculty_preferred:
+                penalty -= 5  # reward: scheduled in preferred slot
+            elif key in self._faculty_avoid:
+                penalty += 15  # penalty: scheduled in avoid slot
+        _pen['faculty_pref'] = penalty - _p_before
+
+        # ── 10. Admin constraint rules ──────────────────────────
+        _p_before = penalty
+        rules_penalty = self._evaluate_constraint_rules(solution)
+        penalty += rules_penalty
+        _pen['constraint_rules'] = penalty - _p_before
+
         # Store penalty breakdown in solution metadata
         solution.metadata['_pen'] = {k: round(v, 1) for k, v in _pen.items()}
         solution.metadata['_pen']['total'] = round(penalty, 1)
@@ -1285,6 +1335,100 @@ class GeneticAlgorithmSolver:
             groups[assignment.batch_id].append(assignment)
         return groups
     
+    def _evaluate_constraint_rules(self, solution: Solution) -> float:
+        """Evaluate admin-defined constraint rules from constraint_rules table.
+
+        Supported rule_name patterns:
+        - 'max_consecutive_hours': params = {"max": 3}
+        - 'no_early_morning': params = {"before_hour": 9}
+        - 'preferred_days': params = {"days": ["Monday", "Wednesday", "Friday"]}
+        - 'max_classes_per_day': params = {"max": 4}
+
+        Returns total penalty from all matching rules.
+        """
+        penalty = 0.0
+        rules = self.context.constraint_rules
+        if not rules:
+            return 0.0
+
+        # Pre-compute faculty assignments by day for rule evaluation
+        faculty_day_slots: Dict[str, Dict[int, List[int]]] = {}  # fac_id -> {day -> [start_minutes]}
+        faculty_day_count: Dict[str, Dict[int, int]] = {}  # fac_id -> {day -> count}
+
+        for assign in solution.assignments:
+            fid = assign.faculty_id
+            day = assign.time_slot.day
+            start_min = assign.time_slot.start_hour * 60 + assign.time_slot.start_minute
+
+            if fid not in faculty_day_slots:
+                faculty_day_slots[fid] = {}
+                faculty_day_count[fid] = {}
+            faculty_day_slots[fid].setdefault(day, []).append(start_min)
+            faculty_day_count[fid][day] = faculty_day_count[fid].get(day, 0) + 1
+
+        DAY_NAME_TO_INT = {
+            "monday": 0, "tuesday": 1, "wednesday": 2,
+            "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6,
+        }
+
+        for rule in rules:
+            if not rule.is_active:
+                continue
+
+            params = rule.rule_parameters or {}
+            rule_key = rule.rule_name.lower().replace(" ", "_").replace("-", "_")
+            w = rule.weight
+
+            if rule_key == "max_consecutive_hours":
+                # Penalize faculty exceeding max consecutive teaching hours
+                max_consec = params.get("max", 3)
+                for fid, day_map in faculty_day_slots.items():
+                    if rule.applies_to_faculty and fid not in rule.applies_to_faculty:
+                        continue
+                    for day, starts in day_map.items():
+                        sorted_starts = sorted(starts)
+                        consec = 1
+                        for i in range(1, len(sorted_starts)):
+                            gap = sorted_starts[i] - sorted_starts[i - 1]
+                            if gap <= 65:  # consecutive (60 min + 5 min tolerance)
+                                consec += 1
+                                if consec > max_consec:
+                                    penalty += 100 * w
+                            else:
+                                consec = 1
+
+            elif rule_key == "no_early_morning":
+                before_hour = params.get("before_hour", 9)
+                for assign in solution.assignments:
+                    if rule.applies_to_faculty and assign.faculty_id not in rule.applies_to_faculty:
+                        continue
+                    if assign.time_slot.start_hour < before_hour:
+                        penalty += 50 * w
+
+            elif rule_key == "preferred_days":
+                day_names = [d.lower() for d in params.get("days", [])]
+                preferred_ints = {DAY_NAME_TO_INT.get(d, -1) for d in day_names}
+                preferred_ints.discard(-1)
+                if preferred_ints:
+                    for assign in solution.assignments:
+                        if rule.applies_to_faculty and assign.faculty_id not in rule.applies_to_faculty:
+                            continue
+                        if assign.time_slot.day not in preferred_ints:
+                            penalty += 20 * w
+
+            elif rule_key == "max_classes_per_day":
+                max_per_day = params.get("max", 6)
+                for fid, day_map in faculty_day_count.items():
+                    if rule.applies_to_faculty and fid not in rule.applies_to_faculty:
+                        continue
+                    for day, count in day_map.items():
+                        if count > max_per_day:
+                            penalty += (count - max_per_day) * 80 * w
+
+            # Unknown rules are silently skipped
+
+        return penalty
+
     def _get_qualified_faculty(self, subject_id: str) -> List[Faculty]:
         """Get faculty qualified to teach subject using Faculty.can_teach()."""
         subject = self.context.subject_map.get(subject_id)

@@ -6,6 +6,7 @@ import ManualSchedulingComponent from './ManualSchedulingComponent';
 
 interface TimetableCreatorIntegratedProps {
   user: any;
+  activeSemesters?: number[];
 }
 
 interface GeneratedSchedule {
@@ -28,7 +29,7 @@ interface TimetableData {
   conflicts: any[];
 }
 
-export default function TimetableCreatorIntegrated({ user }: TimetableCreatorIntegratedProps) {
+export default function TimetableCreatorIntegrated({ user, activeSemesters }: TimetableCreatorIntegratedProps) {
   const [mode, setMode] = useState<'ai' | 'manual'>('ai');
   const [messages, setMessages] = useState<Array<{ role: 'user' | 'ai'; content: string }>>([
     {
@@ -91,7 +92,7 @@ Just tell me what semester or batch you'd like to schedule, and I'll generate an
 
     const userMessage = inputMessage.trim();
     setInputMessage('');
-    
+
     // Add user message
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
     setIsProcessing(true);
@@ -116,9 +117,9 @@ Just tell me what semester or batch you'd like to schedule, and I'll generate an
     const semester = semesterMatch ? parseInt(semesterMatch[1]) : 3;
 
     try {
-      setMessages(prev => [...prev, { 
-        role: 'ai', 
-        content: `🔄 Generating timetable for Semester ${semester}...\n\nFetching data from database...` 
+      setMessages(prev => [...prev, {
+        role: 'ai',
+        content: `🔄 Generating timetable for Semester ${semester}...\n\nFetching data from database...`
       }]);
 
       // Call AI generation API
@@ -141,8 +142,8 @@ Just tell me what semester or batch you'd like to schedule, and I'll generate an
         const stats = result.data.statistics;
         const conflicts = result.data.conflicts || [];
 
-        setMessages(prev => [...prev, { 
-          role: 'ai', 
+        setMessages(prev => [...prev, {
+          role: 'ai',
           content: `✅ **Timetable Generated Successfully!**
 
 📊 **Generation Summary:**
@@ -161,19 +162,19 @@ You can now:
 • **Submit for Approval** - Send to HOD/Publisher
 • **Publish** - Make it live (if you have permissions)
 
-The timetable is displayed in the grid below. Review it and choose an action!` 
+The timetable is displayed in the grid below. Review it and choose an action!`
         }]);
       } else {
-        setMessages(prev => [...prev, { 
-          role: 'ai', 
-          content: `❌ **Error generating timetable:**\n\n${result.error}\n\n${result.details || ''}\n\nPlease try again or contact support if the issue persists.` 
+        setMessages(prev => [...prev, {
+          role: 'ai',
+          content: `❌ **Error generating timetable:**\n\n${result.error}\n\n${result.details || ''}\n\nPlease try again or contact support if the issue persists.`
         }]);
       }
     } catch (error: any) {
       console.error('Error generating timetable:', error);
-      setMessages(prev => [...prev, { 
-        role: 'ai', 
-        content: `❌ **Error:** Failed to generate timetable.\n\n${error.message}\n\nPlease check your connection and try again.` 
+      setMessages(prev => [...prev, {
+        role: 'ai',
+        content: `❌ **Error:** Failed to generate timetable.\n\n${error.message}\n\nPlease check your connection and try again.`
       }]);
     } finally {
       setIsProcessing(false);
@@ -209,7 +210,7 @@ The timetable is displayed in the grid below. Review it and choose an action!`
 
       if (result.success) {
         const timetableId = result.data.timetable_id;
-        
+
         // If published, send email notifications
         if (status === 'published') {
           try {
@@ -226,7 +227,7 @@ The timetable is displayed in the grid below. Review it and choose an action!`
             });
 
             const notifyData = await notifyResponse.json();
-            
+
             if (notifyData.success) {
               const stats = notifyData.stats;
               alert(
@@ -236,33 +237,33 @@ The timetable is displayed in the grid below. Review it and choose an action!`
                 `• ${stats.faculty} faculty members\n` +
                 `Total: ${stats.sent}/${stats.total} emails delivered`
               );
-              
-              setMessages(prev => [...prev, { 
-                role: 'ai', 
-                content: `✅ **Timetable published successfully!**\n\nTimetable ID: ${timetableId}\nClasses Created: ${result.data.classes_created}\n\n📧 **Email Notifications Sent:**\n• ${stats.students} students notified\n• ${stats.faculty} faculty members notified\n• Total: ${stats.sent}/${stats.total} emails delivered\n\nThe timetable is now live and all users have been notified!` 
+
+              setMessages(prev => [...prev, {
+                role: 'ai',
+                content: `✅ **Timetable published successfully!**\n\nTimetable ID: ${timetableId}\nClasses Created: ${result.data.classes_created}\n\n📧 **Email Notifications Sent:**\n• ${stats.students} students notified\n• ${stats.faculty} faculty members notified\n• Total: ${stats.sent}/${stats.total} emails delivered\n\nThe timetable is now live and all users have been notified!`
               }]);
             } else {
               alert(`✅ ${result.data.message}\n\n⚠️ Warning: Failed to send email notifications.`);
-              
-              setMessages(prev => [...prev, { 
-                role: 'ai', 
-                content: `✅ **Timetable published successfully!**\n\nTimetable ID: ${timetableId}\nClasses Created: ${result.data.classes_created}\n\n⚠️ Email notifications could not be sent. Please inform students manually.` 
+
+              setMessages(prev => [...prev, {
+                role: 'ai',
+                content: `✅ **Timetable published successfully!**\n\nTimetable ID: ${timetableId}\nClasses Created: ${result.data.classes_created}\n\n⚠️ Email notifications could not be sent. Please inform students manually.`
               }]);
             }
           } catch (emailError) {
             console.error('Error sending email notifications:', emailError);
             alert(`✅ ${result.data.message}\n\n⚠️ Warning: Failed to send email notifications.`);
-            
-            setMessages(prev => [...prev, { 
-              role: 'ai', 
-              content: `✅ **Timetable published successfully!**\n\nTimetable ID: ${timetableId}\nClasses Created: ${result.data.classes_created}\n\n⚠️ Email notifications could not be sent.` 
+
+            setMessages(prev => [...prev, {
+              role: 'ai',
+              content: `✅ **Timetable published successfully!**\n\nTimetable ID: ${timetableId}\nClasses Created: ${result.data.classes_created}\n\n⚠️ Email notifications could not be sent.`
             }]);
           }
         } else {
           alert(`✅ ${result.data.message}`);
-          setMessages(prev => [...prev, { 
-            role: 'ai', 
-            content: `✅ **Timetable ${status === 'draft' ? 'saved as draft' : 'submitted for approval'} successfully!**\n\nTimetable ID: ${timetableId}\nClasses Created: ${result.data.classes_created}\n\n${status === 'pending_approval' ? 'Your HOD/Publisher will review and approve it.' : 'You can edit it later from the drafts section.'}` 
+          setMessages(prev => [...prev, {
+            role: 'ai',
+            content: `✅ **Timetable ${status === 'draft' ? 'saved as draft' : 'submitted for approval'} successfully!**\n\nTimetable ID: ${timetableId}\nClasses Created: ${result.data.classes_created}\n\n${status === 'pending_approval' ? 'Your HOD/Publisher will review and approve it.' : 'You can edit it later from the drafts section.'}`
           }]);
         }
       } else {
@@ -377,22 +378,20 @@ What would you like to do?`;
             <div className="flex items-center bg-gray-100 dark:bg-slate-700 rounded-lg p-1">
               <button
                 onClick={() => setMode('ai')}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-all ${
-                  mode === 'ai'
+                className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-all ${mode === 'ai'
                     ? 'bg-white dark:bg-slate-600 shadow-sm text-blue-600 dark:text-blue-400'
                     : 'text-gray-600 dark:text-gray-400'
-                }`}
+                  }`}
               >
                 <Bot className="w-4 h-4" />
                 <span className="font-medium">AI Guided</span>
               </button>
               <button
                 onClick={() => setMode('manual')}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-all ${
-                  mode === 'manual'
+                className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-all ${mode === 'manual'
                     ? 'bg-white dark:bg-slate-600 shadow-sm text-blue-600 dark:text-blue-400'
                     : 'text-gray-600 dark:text-gray-400'
-                }`}
+                  }`}
               >
                 <Grid3x3 className="w-4 h-4" />
                 <span className="font-medium">Manual</span>
@@ -439,11 +438,10 @@ What would you like to do?`;
                         </div>
                       )}
                       <div
-                        className={`max-w-[80%] rounded-2xl p-4 ${
-                          msg.role === 'user'
+                        className={`max-w-[80%] rounded-2xl p-4 ${msg.role === 'user'
                             ? 'bg-blue-600 text-white rounded-tr-none'
                             : 'bg-white dark:bg-slate-800 text-gray-900 dark:text-white rounded-tl-none border border-gray-200 dark:border-slate-700'
-                        }`}
+                          }`}
                       >
                         <p className="whitespace-pre-line text-sm leading-relaxed">{msg.content}</p>
                       </div>
@@ -499,23 +497,24 @@ What would you like to do?`;
                   Quick Actions
                 </h3>
                 <div className="space-y-2">
-                  {[
-                    'Create Semester 3 timetable',
-                    'Generate Semester 5 schedule',
-                    'Create Semester 1 timetable',
-                    'Generate Semester 7 schedule',
-                  ].map((action, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => {
-                        setInputMessage(action);
-                        setTimeout(() => handleSendMessage(), 100);
-                      }}
-                      className="w-full text-left px-4 py-2 bg-gray-50 dark:bg-slate-700 hover:bg-gray-100 dark:hover:bg-slate-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 transition-colors"
-                    >
-                      {action}
-                    </button>
-                  ))}
+                  {(activeSemesters && activeSemesters.length > 0
+                    ? activeSemesters
+                    : [1, 3, 5, 7]
+                  ).map((sem) => {
+                    const action = sem <= 2 ? `Create Semester ${sem} timetable` : `Generate Semester ${sem} schedule`;
+                    return (
+                      <button
+                        key={sem}
+                        onClick={() => {
+                          setInputMessage(action);
+                          setTimeout(() => handleSendMessage(), 100);
+                        }}
+                        className="w-full text-left px-4 py-2 bg-gray-50 dark:bg-slate-700 hover:bg-gray-100 dark:hover:bg-slate-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 transition-colors"
+                      >
+                        {action}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

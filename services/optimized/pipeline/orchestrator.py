@@ -295,12 +295,14 @@ class OptimizedOrchestrator:
             faculty=domain_data["faculty"],
             batches=[batch],
             subjects=domain_data["subjects"],
+            constraint_rules=domain_data.get("constraint_rules", []),
         )
 
         self.logger.info(
             f"Context built: {len(context.time_slots)} slots, "
             f"{len(context.rooms)} rooms, {len(context.faculty)} faculty, "
-            f"{len(context.subjects)} subjects"
+            f"{len(context.subjects)} subjects, "
+            f"{len(context.constraint_rules)} constraint rules"
         )
         return context
 

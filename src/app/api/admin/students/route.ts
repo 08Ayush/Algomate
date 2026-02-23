@@ -37,10 +37,15 @@ export const GET = asyncHandler(
 
     const supabase = createClient();
     const cacheKey = redisCache.buildKey(targetCollegeId, 'students', 'list');
+    const forceRefresh = searchParams.get('refresh') === '1';
+    if (forceRefresh) {
+      await invalidateCache(cacheKey);
+    }
 
     const students = await withCacheAside(
       { key: cacheKey, ttl: 1800 },
       async () => {
+        // Step 1: Fetch students with dept + course joins
         const { data, error } = await supabase
           .from('users')
           .select(`
@@ -65,7 +70,35 @@ export const GET = asyncHandler(
           .order('created_at', { ascending: false });
 
         if (error) throw error;
-        return data || [];
+        if (!data || data.length === 0) return [];
+
+        // Step 2: Fetch active batch enrollments for all students in one query
+        const studentIds = data.map((s: any) => s.id);
+        const { data: enrollments } = await supabase
+          .from('student_batch_enrollment' as any)
+          .select('student_id, batch_id, is_active, batches(id, name, semester, section)')
+          .in('student_id', studentIds)
+          .eq('is_active', true);
+
+        // Build lookup: student_id → batch info
+        const batchByStudent: Record<string, any> = {};
+        if (enrollments) {
+          for (const e of enrollments) {
+            if (e.student_id && e.batches) {
+              batchByStudent[e.student_id] = {
+                ...(e.batches as any),
+                batch_id: e.batch_id
+              };
+            }
+          }
+        }
+
+        // Step 3: Merge batch into each student
+        return data.map((s: any) => ({
+          ...s,
+          batch_id: batchByStudent[s.id]?.batch_id || null,
+          batch: batchByStudent[s.id] || null
+        }));
       }
     );
 

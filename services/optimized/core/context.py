@@ -10,6 +10,7 @@ from .models import (
     Subject,
     Constraint,
     ConstraintType,
+    ConstraintRule,
 )
 
 
@@ -46,6 +47,7 @@ class SchedulingContext:
     batches: List[Batch] = field(default_factory=list)
     subjects: List[Subject] = field(default_factory=list)
     constraints: List[Constraint] = field(default_factory=list)
+    constraint_rules: List[ConstraintRule] = field(default_factory=list)
     
     # Lookup dictionaries for fast access
     _time_slot_map: Dict[str, TimeSlot] = field(default_factory=dict, init=False, repr=False)

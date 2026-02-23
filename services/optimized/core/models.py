@@ -97,6 +97,10 @@ class Faculty:
     unavailable_slots: List[str] = field(default_factory=list)
     qualifications: List[str] = field(default_factory=list)
     rank_weight: float = 1.0  # For preference weighting
+    # Per-slot availability from faculty_availability table
+    # Maps time_slot_id -> (is_available, availability_type, preference_weight)
+    # availability_type: 'available', 'unavailable', 'preferred', 'avoid'
+    slot_availability: Dict[str, dict] = field(default_factory=dict)
     
     def can_teach(self, subject: 'Subject') -> bool:
         """Check if faculty is qualified to teach the subject.
@@ -261,3 +265,48 @@ class Constraint:
     is_hard: bool
     description: str
     parameters: Dict = field(default_factory=dict)
+
+
+@dataclass
+class ConstraintRule:
+    """Represents a constraint rule from the constraint_rules table.
+
+    rule_type: 'HARD' | 'SOFT' | 'PREFERENCE'
+    rule_parameters: JSONB dict with rule-specific config, e.g.:
+      - max_consecutive_hours: {"max": 3}
+      - no_early_morning: {"before_hour": 9}
+      - preferred_days: {"days": ["Monday", "Wednesday", "Friday"]}
+    applies_to_*: arrays of UUIDs that scope this rule
+    """
+    id: str
+    rule_name: str
+    rule_type: str  # 'HARD', 'SOFT', 'PREFERENCE'
+    description: str
+    rule_parameters: Dict = field(default_factory=dict)
+    weight: float = 1.0
+    applies_to_departments: List[str] = field(default_factory=list)
+    applies_to_subjects: List[str] = field(default_factory=list)
+    applies_to_faculty: List[str] = field(default_factory=list)
+    applies_to_batches: List[str] = field(default_factory=list)
+    is_active: bool = True
+
+    @property
+    def is_hard(self) -> bool:
+        return self.rule_type == 'HARD'
+
+    def applies_to(self, *, batch_id: str = '', department_id: str = '',
+                   subject_id: str = '', faculty_id: str = '') -> bool:
+        """Check if this rule applies to the given entity.
+
+        A rule applies if the scoping arrays are empty (applies globally)
+        OR the specific entity ID is in the scoping array.
+        """
+        if self.applies_to_batches and batch_id not in self.applies_to_batches:
+            return False
+        if self.applies_to_departments and department_id not in self.applies_to_departments:
+            return False
+        if self.applies_to_subjects and subject_id not in self.applies_to_subjects:
+            return False
+        if self.applies_to_faculty and faculty_id not in self.applies_to_faculty:
+            return False
+        return True

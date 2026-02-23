@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
+import { useSemesterMode } from '@/contexts/SemesterModeContext';
 
 interface Timetable {
     id: string;
@@ -30,11 +31,13 @@ interface Timetable {
 
 const TimetablesPage: React.FC = () => {
     const router = useRouter();
+    const { semesterMode, activeSemesters, modeLabel } = useSemesterMode();
     const [user, setUser] = useState<any>(null);
     const [timetables, setTimetables] = useState<Timetable[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
+    const [semesterFilter, setSemesterFilter] = useState('all');
     const [actionLoading, setActionLoading] = useState<string | null>(null);
 
     const isCreator = user?.faculty_type === 'creator';
@@ -50,6 +53,8 @@ const TimetablesPage: React.FC = () => {
         setUser(parsedUser);
         fetchTimetables(parsedUser);
     }, [router]);
+
+    useEffect(() => { setSemesterFilter('all'); }, [semesterMode]);
 
     const getAuthHeaders = () => {
         const userData = localStorage.getItem('user');
@@ -168,11 +173,21 @@ const TimetablesPage: React.FC = () => {
         // TODO: Implement notification API call
     };
 
+    // Unique semesters from timetables for the dropdown
+    const uniqueSemesters = [...new Set(
+        timetables.map(t => t.batch?.semester || t.semester).filter(Boolean)
+    )]
+        .filter(sem => semesterMode === 'all' || activeSemesters.includes(sem!))
+        .sort((a, b) => (a || 0) - (b || 0));
+
     const filteredTimetables = timetables.filter(t => {
         const matchesSearch = t.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             (t.batch?.name || t.batch_name)?.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesStatus = statusFilter === 'all' || t.status === statusFilter;
-        return matchesSearch && matchesStatus;
+        const ttSem = t.batch?.semester || t.semester;
+        const matchesSem = semesterFilter === 'all' || ttSem?.toString() === semesterFilter;
+        const matchesMode = semesterMode === 'all' || (ttSem != null && activeSemesters.includes(ttSem));
+        return matchesSearch && matchesStatus && matchesSem && matchesMode;
     });
 
     const getStatusColor = (status: string) => {
@@ -240,7 +255,25 @@ const TimetablesPage: React.FC = () => {
                             <option value="generating">Generating</option>
                             <option value="rejected">Rejected</option>
                         </select>
+                        <select
+                            value={semesterFilter}
+                            onChange={(e) => setSemesterFilter(e.target.value)}
+                            className="px-4 py-3 border border-gray-200 rounded-xl min-w-[150px]"
+                        >
+                            <option value="all">All Semesters</option>
+                            {uniqueSemesters.map(sem => (
+                                <option key={sem} value={sem?.toString()}>Semester {sem}</option>
+                            ))}
+                        </select>
                     </div>
+                    {semesterMode !== 'all' && (
+                        <div className={`mt-3 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium ${semesterMode === 'odd' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-violet-50 text-violet-700 border border-violet-200'
+                            }`}>
+                            <span className="w-2 h-2 rounded-full animate-pulse inline-block bg-current"></span>
+                            Active mode: <strong className="ml-1">{modeLabel}</strong>
+                            <span className="ml-1 text-xs opacity-70">— Sem {activeSemesters.join(', ')} only.</span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Stats */}

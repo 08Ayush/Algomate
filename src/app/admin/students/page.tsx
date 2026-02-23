@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Users, Plus, Edit, Trash2, X, Search, RefreshCw, GraduationCap, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
+import { useSemesterMode } from '@/contexts/SemesterModeContext';
 
 interface Department { id: string; name: string; code: string; }
 interface Course { id: string; title: string; code: string; }
@@ -30,6 +31,7 @@ interface Student {
 
 const StudentsPage: React.FC = () => {
     const router = useRouter();
+    const { semesterMode, activeSemesters, modeLabel } = useSemesterMode();
     const [students, setStudents] = useState<Student[]>([]);
     const [departments, setDepartments] = useState<Department[]>([]);
     const [courses, setCourses] = useState<Course[]>([]);
@@ -37,6 +39,7 @@ const StudentsPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [departmentFilter, setDepartmentFilter] = useState('all');
+    const [semesterFilter, setSemesterFilter] = useState('all');
     const [showForm, setShowForm] = useState(false);
     const [editingStudent, setEditingStudent] = useState<Student | null>(null);
     const [submitting, setSubmitting] = useState(false);
@@ -47,6 +50,7 @@ const StudentsPage: React.FC = () => {
     });
 
     useEffect(() => { fetchData(); }, []);
+    useEffect(() => { setSemesterFilter('all'); }, [semesterMode]);
 
     const getAuthHeaders = () => {
         const userData = localStorage.getItem('user');
@@ -62,7 +66,7 @@ const StudentsPage: React.FC = () => {
             const user = JSON.parse(userData);
             const headers = getAuthHeaders();
             if (!headers) return;
-            const q = user.college_id ? `?college_id=${user.college_id}&limit=1000` : '?limit=1000';
+            const q = user.college_id ? `?college_id=${user.college_id}&limit=1000&refresh=1` : '?limit=1000&refresh=1';
             const [studentRes, deptRes, courseRes, batchRes] = await Promise.all([
                 fetch(`/api/admin/students${q}`, { headers }),
                 fetch(`/api/admin/departments${q}`, { headers }),
@@ -142,10 +146,17 @@ const StudentsPage: React.FC = () => {
         } catch { toast.error('Error'); }
     };
 
+    // Unique semesters from students — scoped to active mode
+    const uniqueSemesters = [...new Set(students.map(s => s.current_semester).filter(Boolean))]
+        .filter(sem => semesterMode === 'all' || activeSemesters.includes(sem!))
+        .sort((a, b) => (a || 0) - (b || 0));
+
     const filteredStudents = students.filter(s => {
         const matchesSearch = `${s.first_name} ${s.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) || s.email.toLowerCase().includes(searchQuery.toLowerCase()) || s.college_uid.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesDept = departmentFilter === 'all' || s.department_id === departmentFilter;
-        return matchesSearch && matchesDept;
+        const matchesSem = semesterFilter === 'all' || s.current_semester?.toString() === semesterFilter;
+        const matchesMode = semesterMode === 'all' || (s.current_semester != null && activeSemesters.includes(s.current_semester));
+        return matchesSearch && matchesDept && matchesSem && matchesMode;
     });
 
     return (
@@ -160,8 +171,8 @@ const StudentsPage: React.FC = () => {
                 </div>
 
                 <div className="bg-white rounded-2xl shadow-lg p-6">
-                    <div className="flex gap-4">
-                        <div className="relative flex-1">
+                    <div className="flex gap-4 flex-wrap">
+                        <div className="relative flex-1 min-w-[200px]">
                             <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
                             <input type="text" placeholder="Search students..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none" />
                         </div>
@@ -169,7 +180,19 @@ const StudentsPage: React.FC = () => {
                             <option value="all">All Departments</option>
                             {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                         </select>
+                        <select value={semesterFilter} onChange={(e) => setSemesterFilter(e.target.value)} className="px-4 py-3 border border-gray-200 rounded-xl min-w-[150px]">
+                            <option value="all">All Semesters</option>
+                            {uniqueSemesters.map(sem => <option key={sem} value={sem?.toString()}>Semester {sem}</option>)}
+                        </select>
                     </div>
+                    {semesterMode !== 'all' && (
+                        <div className={`mt-3 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium ${semesterMode === 'odd' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-violet-50 text-violet-700 border border-violet-200'
+                            }`}>
+                            <span className="w-2 h-2 rounded-full animate-pulse inline-block bg-current"></span>
+                            Active mode: <strong className="ml-1">{modeLabel}</strong>
+                            <span className="ml-1 text-xs opacity-70">— showing semesters {activeSemesters.join(', ')} only.</span>
+                        </div>
+                    )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">

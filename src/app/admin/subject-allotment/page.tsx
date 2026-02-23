@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { CheckSquare, RefreshCw, Search, Eye, EyeOff, Download, Play, AlertCircle, CheckCircle, Users, BookOpen, Undo2, FileText, FileSpreadsheet } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
+import { useSemesterMode } from '@/contexts/SemesterModeContext';
 
 interface BucketSubject { subject_id: string; subjects: { id: string; code: string; name: string; } | null; }
 
@@ -47,6 +48,7 @@ interface Allotment {
 
 const SubjectAllotmentPage: React.FC = () => {
   const router = useRouter();
+  const { semesterMode, activeSemesters, modeLabel } = useSemesterMode();
   const [buckets, setBuckets] = useState<Bucket[]>([]);
   const [selectedBucket, setSelectedBucket] = useState<string>('');
   const [studentChoices, setStudentChoices] = useState<StudentChoice[]>([]);
@@ -403,12 +405,22 @@ const SubjectAllotmentPage: React.FC = () => {
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none text-lg"
               >
                 <option value="">-- Select a Bucket --</option>
-                {buckets.map(b => (
-                  <option key={b.id} value={b.id}>
-                    [{b.is_published ? '✓ Published' : '○ Draft'}] {b.bucket_name} - {b.batches?.name || 'Unknown Batch'} (Sem {b.batches?.semester || '?'})
-                  </option>
-                ))}
+                {buckets
+                  .filter(b => semesterMode === 'all' || (b.batches?.semester != null && activeSemesters.includes(b.batches.semester)))
+                  .map(b => (
+                    <option key={b.id} value={b.id}>
+                      [{b.is_published ? '✓ Published' : '○ Draft'}] {b.bucket_name} - {b.batches?.name || 'Unknown Batch'} (Sem {b.batches?.semester || '?'})
+                    </option>
+                  ))}
               </select>
+              {semesterMode !== 'all' && (
+                <div className={`mt-3 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium w-fit ${semesterMode === 'odd' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-violet-50 text-violet-700 border border-violet-200'
+                  }`}>
+                  <span className="w-2 h-2 rounded-full animate-pulse inline-block bg-current"></span>
+                  Active mode: <strong className="ml-1">{modeLabel}</strong>
+                  <span className="ml-1 text-xs opacity-70">— Sem {activeSemesters.join(', ')} only.</span>
+                </div>
+              )}
             </div>
 
             {/* Bucket Info Row */}

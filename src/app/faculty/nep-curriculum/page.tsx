@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
 import { motion } from 'framer-motion';
+import { useSemesterMode } from '@/contexts/SemesterModeContext';
 import {
   BookOpen, Plus, Minus, RefreshCw, CheckCircle,
   AlertCircle, Info, ChevronDown, ChevronUp, Layers, GraduationCap,
@@ -73,6 +74,7 @@ interface Bucket {
 
 export default function NEPCurriculumPage() {
   const router = useRouter();
+  const { semesterMode, activeSemesters, modeLabel } = useSemesterMode();
   const [user, setUser] = useState<User | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [userDepartment, setUserDepartment] = useState<Department | null>(null);
@@ -96,8 +98,10 @@ export default function NEPCurriculumPage() {
     const selectedCourseObj = courses.find(c => c.id === selectedCourse);
     const duration = selectedCourseObj?.duration_years || 4;
     const totalSemesters = duration * 2;
-    return Array.from({ length: totalSemesters }, (_, i) => i + 1);
-  }, [courses, selectedCourse]);
+    const all = Array.from({ length: totalSemesters }, (_, i) => i + 1);
+    // Scope to active mode
+    return semesterMode === 'all' ? all : all.filter(s => activeSemesters.includes(s));
+  }, [courses, selectedCourse, semesterMode, activeSemesters]);
 
   const semesters = getAvailableSemesters();
 
@@ -195,7 +199,13 @@ export default function NEPCurriculumPage() {
         setBuckets(mappedBuckets);
       }
 
-      const subjectsResponse = await fetch(`/api/admin/subjects`, {
+      // Fetch subjects scoped to faculty's department + college + selected semester
+      const subjectParams = new URLSearchParams();
+      subjectParams.set('department_id', user.department_id);
+      subjectParams.set('college_id', user.college_id);
+      if (selectedSemester) subjectParams.set('semester', selectedSemester.toString());
+
+      const subjectsResponse = await fetch(`/api/admin/subjects?${subjectParams.toString()}`, {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json'
@@ -204,14 +214,11 @@ export default function NEPCurriculumPage() {
 
       if (subjectsResponse.ok) {
         const { subjects: allSubjects } = await subjectsResponse.json();
-        let availableSubjects = (allSubjects || []).filter((s: Subject) => !s.course_group_id);
-
-        if (selectedSemester && availableSubjects.length > 0) {
-          availableSubjects = availableSubjects.filter((s: Subject) => s.semester === selectedSemester);
-        }
-
+        // Only show subjects NOT already assigned to any bucket
+        const availableSubjects = (allSubjects || []).filter((s: Subject) => !s.course_group_id);
         setAvailableSubjects(availableSubjects);
       }
+
 
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -270,6 +277,14 @@ export default function NEPCurriculumPage() {
       fetchBucketsAndSubjects();
     }
   }, [user, selectedCourse, selectedSemester, fetchBucketsAndSubjects]);
+
+  // When mode changes, snap selectedSemester to first valid option
+  useEffect(() => {
+    const validSems = getAvailableSemesters();
+    if (validSems.length > 0 && !validSems.includes(selectedSemester)) {
+      setSelectedSemester(validSems[0]);
+    }
+  }, [semesterMode, activeSemesters]); // eslint-disable-line
 
   async function addSubjectToBucket(bucketId: string, subjectId: string) {
     setSavingBucket(bucketId);
@@ -422,7 +437,7 @@ export default function NEPCurriculumPage() {
               </label>
               <select
                 value={selectedCourse}
-                onChange={(e) => { setSelectedCourse(e.target.value); setSelectedSemester(1); }}
+                onChange={(e) => { setSelectedCourse(e.target.value); setSelectedSemester(semesters[0] || 1); }}
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none"
               >
                 {courses.length === 0 ? (
@@ -453,12 +468,24 @@ export default function NEPCurriculumPage() {
                 onChange={(e) => setSelectedSemester(parseInt(e.target.value))}
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none"
               >
-                {semesters.map((sem) => (
-                  <option key={sem} value={sem}>Semester {sem}</option>
-                ))}
+                {semesters.length === 0 ? (
+                  <option value="">No semesters for current mode</option>
+                ) : (
+                  semesters.map((sem) => (
+                    <option key={sem} value={sem}>Semester {sem}</option>
+                  ))
+                )}
               </select>
             </div>
           </div>
+          {semesterMode !== 'all' && (
+            <div className={`mt-4 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium ${semesterMode === 'odd' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-violet-50 text-violet-700 border border-violet-200'
+              }`}>
+              <span className="w-2 h-2 rounded-full animate-pulse inline-block bg-current"></span>
+              Active mode: <strong className="ml-1">{modeLabel}</strong>
+              <span className="ml-1 text-xs opacity-70">— Semester dropdown scoped to {activeSemesters.join(', ')} only.</span>
+            </div>
+          )}
         </motion.div>
 
         {/* Main Content */}

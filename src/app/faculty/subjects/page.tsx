@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { BookOpen, Search, RefreshCw, Clock, Tag, Building, FlaskConical } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
+import { useSemesterMode } from '@/contexts/SemesterModeContext';
 
 interface Subject {
   id: string;
@@ -25,6 +26,7 @@ interface Subject {
 
 const SubjectsPage: React.FC = () => {
   const router = useRouter();
+  const { semesterMode, activeSemesters, modeLabel } = useSemesterMode();
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -32,6 +34,7 @@ const SubjectsPage: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState('all');
 
   useEffect(() => { fetchSubjects(); }, []);
+  useEffect(() => { setSemesterFilter('all'); }, [semesterMode]);
 
   const getAuthHeaders = () => {
     const userData = localStorage.getItem('user');
@@ -57,7 +60,9 @@ const SubjectsPage: React.FC = () => {
     } catch { toast.error('Error loading subjects'); } finally { setLoading(false); }
   };
 
-  const uniqueSemesters = [...new Set(subjects.map(s => s.semester).filter(Boolean))].sort((a, b) => (a || 0) - (b || 0));
+  const uniqueSemesters = [...new Set(subjects.map(s => s.semester).filter(Boolean))]
+    .filter(sem => semesterMode === 'all' || activeSemesters.includes(sem!))
+    .sort((a, b) => (a || 0) - (b || 0));
   const uniqueCategories = [...new Set(subjects.map(s => s.nep_category).filter(Boolean))];
 
   const filteredSubjects = subjects.filter(s => {
@@ -65,7 +70,8 @@ const SubjectsPage: React.FC = () => {
       s.code.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesSem = semesterFilter === 'all' || s.semester?.toString() === semesterFilter;
     const matchesCategory = categoryFilter === 'all' || s.nep_category === categoryFilter;
-    return matchesSearch && matchesSem && matchesCategory;
+    const matchesMode = semesterMode === 'all' || (s.semester != null && activeSemesters.includes(s.semester));
+    return matchesSearch && matchesSem && matchesCategory && matchesMode;
   });
 
   const getTypeColor = (type: string) => {
@@ -139,6 +145,14 @@ const SubjectsPage: React.FC = () => {
               ))}
             </select>
           </div>
+          {semesterMode !== 'all' && (
+            <div className={`mt-3 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium ${semesterMode === 'odd' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-violet-50 text-violet-700 border border-violet-200'
+              }`}>
+              <span className="w-2 h-2 rounded-full animate-pulse inline-block bg-current"></span>
+              Active mode: <strong className="ml-1">{modeLabel}</strong>
+              <span className="ml-1 text-xs opacity-70">— Sem {activeSemesters.join(', ')} only.</span>
+            </div>
+          )}
         </div>
 
         {/* Stats */}

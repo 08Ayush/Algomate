@@ -26,6 +26,7 @@ from core.models import (
     Room,
     Subject,
     TimeSlot,
+    ConstraintRule,
 )
 from .quality import DataQualityReport
 
@@ -59,7 +60,8 @@ class Transformer:
         transformer = Transformer()
         domain = transformer.transform(raw_data, report)
         # domain = {"batch": Batch, "subjects": [...], "faculty": [...],
-        #           "classrooms": [...], "time_slots": [...]}
+        #           "classrooms": [...], "time_slots": [...],
+        #           "constraint_rules": [...]}
     """
 
     # ------------------------------------------------------------------
@@ -83,17 +85,20 @@ class Transformer:
 
         Returns
         -------
-        dict  with keys: batch, subjects, faculty, classrooms, time_slots
+        dict  with keys: batch, subjects, faculty, classrooms, time_slots, constraint_rules
         """
         t0 = time.perf_counter()
         logger.info("TRANSFORM START")
 
         # 1. Batch
         batch = self._transform_batch(raw["batch_row"], report)
+        batch_department_id = raw["batch_row"].get("department_id", "")
 
         # 2. Subjects (from batch_subjects join rows)
+        #    Filter to only subjects in this batch's department (or shared/common subjects)
         subjects = self._transform_subjects(
             raw["batch_subjects_rows"], report,
+            batch_department_id=batch_department_id,
         )
 
         # 3. Faculty + qualification wiring
@@ -114,6 +119,15 @@ class Transformer:
         # 6. Wire subject IDs into batch.subjects
         batch.subjects = [s.id for s in subjects]
 
+        # 6b. Attach faculty_availability to Faculty objects
+        fa_rows = raw.get("faculty_availability_rows", [])
+        if fa_rows:
+            self._attach_faculty_availability(faculty, fa_rows, report)
+
+        # 6c. Transform constraint_rules
+        cr_rows = raw.get("constraint_rules_rows", [])
+        constraint_rules = self._transform_constraint_rules(cr_rows, report)
+
         # 7. Faculty-subject coverage summary
         self._assess_faculty_coverage(subjects, faculty, report)
 
@@ -125,6 +139,7 @@ class Transformer:
             "faculty": faculty,
             "classrooms": classrooms,
             "time_slots": time_slots,
+            "constraint_rules": constraint_rules,
         }
 
     # ------------------------------------------------------------------
@@ -149,8 +164,10 @@ class Transformer:
         self,
         batch_subjects_rows: List[dict],
         report: DataQualityReport,
+        batch_department_id: str = "",
     ) -> List[Subject]:
         seen: Dict[str, Subject] = {}
+        skipped_cross_dept = 0
         for bs in batch_subjects_rows:
             sub_data = bs.get("subjects", {}) or {}
             sid = sub_data.get("id") or bs.get("subject_id")
@@ -161,6 +178,22 @@ class Transformer:
                     "duplicate", "subject", sid,
                     f"Duplicate subject in batch_subjects: {sid}",
                 )
+                continue
+
+            # ── Department filter: skip subjects from other departments ──
+            # batch_subjects may contain subjects from multiple departments
+            # (e.g. shared curriculum between CSE and CSE-DS). Only include
+            # subjects that belong to THIS batch's department, or subjects
+            # with no department (common/elective).
+            subj_dept = sub_data.get("department_id", "")
+            if batch_department_id and subj_dept and subj_dept != batch_department_id:
+                subj_code = sub_data.get("code", "")
+                subj_name = sub_data.get("name", "")
+                logger.debug(
+                    f"Skipping cross-dept subject '{subj_name}' ({subj_code}) "
+                    f"— dept {subj_dept[:8]} ≠ batch dept {batch_department_id[:8]}"
+                )
+                skipped_cross_dept += 1
                 continue
 
             raw_name = sub_data.get("name", "")
@@ -203,22 +236,16 @@ class Transformer:
             credits = int(float(raw_credits))
 
             # ── Step 3: Credit-based hours calculation ───────────
-            # Priority 1: required_hours_per_week from batch_subjects
-            #   This is the admin's explicit weekly slot count — most
-            #   authoritative source. BUT for labs/practicals, double it
-            #   because 1 credit = 2 consecutive slots.
-            # Priority 2: Credits-based with lab adjustment
-            #   Theory:        1 credit = 1 slot  (lecture hour)
-            #   Lab/Practical: 1 credit = 2 consecutive slots
-            #     (NEP credit_value = practical_hours / 2, so the
-            #      credit number is already halved; we double back
-            #      to real hours.)
-            # Priority 3: weekly_hours / hours_per_week fallback
+            # required_hours_per_week in batch_subjects is the CREDIT value
+            # (matching credit_value from the subjects table). For lab/practical
+            # subjects, 1 credit = 2 consecutive time slots. For theory,
+            # 1 credit = 1 slot.
+            # Fallback chain: rhpw → credits → weekly_hours → 3
+            MAX_WEEKLY_SLOTS = 36  # 6 days × 6 periods — hard safety cap
             rhpw = bs.get("required_hours_per_week")
             if rhpw and int(rhpw) > 0:
                 hours = int(rhpw)
-                # For labs/practicals, required_hours_per_week represents credits,
-                # but we need SLOTS. 1 lab credit = 2 time slots.
+                # Lab/practical: 1 credit = 2 time slots
                 if db_is_lab:
                     hours = hours * 2
             elif credits > 0:
@@ -232,6 +259,15 @@ class Transformer:
                     or sub_data.get("hours_per_week")
                     or 3
                 )
+
+            # Hard cap: never schedule more slots than the weekly grid can hold
+            if hours > MAX_WEEKLY_SLOTS:
+                logger.warning(
+                    f"Subject '{cleaned_name}' hours_per_week={hours} exceeds "
+                    f"weekly grid ({MAX_WEEKLY_SLOTS} slots), capping."
+                )
+                hours = MAX_WEEKLY_SLOTS
+
 
             logger.debug(
                 f"Subject '{cleaned_name}' ({sid[:8]}): "
@@ -287,6 +323,12 @@ class Transformer:
             seen[sid] = subj
 
         report.total_subjects = len(seen)
+        if skipped_cross_dept > 0:
+            logger.info(
+                f"Filtered {skipped_cross_dept} cross-department subject(s) "
+                f"(batch dept={batch_department_id[:8]}). "
+                f"Keeping {len(seen)} subjects."
+            )
         return list(seen.values())
 
     def _transform_faculty(
@@ -637,3 +679,88 @@ class Transformer:
                 entity_id=room.id,
                 message=f"Failed to save virtual lab room to DB: {exc}",
             )
+
+    # ------------------------------------------------------------------
+    # Faculty availability & constraint rules
+    # ------------------------------------------------------------------
+
+    def _attach_faculty_availability(
+        self,
+        faculty_list: List[Faculty],
+        fa_rows: List[dict],
+        report: DataQualityReport,
+    ) -> None:
+        """Attach per-slot availability data to Faculty objects.
+
+        Each Faculty.slot_availability will be populated with:
+            {time_slot_id: {
+                "is_available": bool,
+                "type": "available"|"unavailable"|"preferred"|"avoid",
+                "weight": float  (0.1 – 2.0)
+            }}
+
+        The solver uses this to:
+        - HARD: never schedule faculty in 'unavailable' slots
+        - SOFT: prefer 'preferred' slots, avoid 'avoid' slots
+        """
+        # Build faculty lookup
+        fac_map = {f.id: f for f in faculty_list}
+
+        count = 0
+        for row in fa_rows:
+            fid = row.get("faculty_id")
+            tsid = row.get("time_slot_id")
+            if not fid or not tsid or fid not in fac_map:
+                continue
+
+            fac_map[fid].slot_availability[tsid] = {
+                "is_available": row.get("is_available", True),
+                "type": row.get("availability_type", "available"),
+                "weight": float(row.get("preference_weight", 1.0)),
+            }
+            count += 1
+
+            # Also update the legacy unavailable_slots list
+            if not row.get("is_available", True) or row.get("availability_type") == "unavailable":
+                if tsid not in fac_map[fid].unavailable_slots:
+                    fac_map[fid].unavailable_slots.append(tsid)
+
+        logger.info(f"Faculty availability: attached {count} entries to {len(fac_map)} faculty")
+
+    def _transform_constraint_rules(
+        self,
+        cr_rows: List[dict],
+        report: DataQualityReport,
+    ) -> List[ConstraintRule]:
+        """Transform raw constraint_rules rows into ConstraintRule domain objects."""
+        rules = []
+        for row in cr_rows:
+            try:
+                rule = ConstraintRule(
+                    id=row["id"],
+                    rule_name=row.get("rule_name", ""),
+                    rule_type=row.get("rule_type", "SOFT"),
+                    description=row.get("description", ""),
+                    rule_parameters=row.get("rule_parameters", {}),
+                    weight=float(row.get("weight", 1.0)),
+                    applies_to_departments=row.get("applies_to_departments") or [],
+                    applies_to_subjects=row.get("applies_to_subjects") or [],
+                    applies_to_faculty=row.get("applies_to_faculty") or [],
+                    applies_to_batches=row.get("applies_to_batches") or [],
+                    is_active=row.get("is_active", True),
+                )
+                rules.append(rule)
+            except Exception as exc:
+                report.add_warning(
+                    "transform_failed", "constraint_rule",
+                    entity_id=row.get("id", "?"),
+                    message=f"Could not transform constraint rule: {exc}",
+                )
+
+        if rules:
+            hard = sum(1 for r in rules if r.is_hard)
+            soft = len(rules) - hard
+            logger.info(f"Constraint rules: {len(rules)} total ({hard} hard, {soft} soft)")
+
+        return rules
+
