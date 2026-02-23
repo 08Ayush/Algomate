@@ -1,0 +1,230 @@
+/** @import must precede all other statements */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+
+  /**
+   * Premium Academic Compass Theme
+   * Modern, vibrant educational platform design
+   */
+  :root {
+    /* Light theme - Premium Academic Style */
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* Primary: Deep Ocean Blue - Main brand color */
+    --primary: 197 37% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Primary Dark: Deeper shade for gradients */
+    --primary-dark: 197 45% 35%;
+
+    /* Primary Light: Lighter shade for backgrounds */
+    --primary-light: 197 35% 55%;
+
+    /* Secondary: Teal Accent */
+    --secondary: 174 42% 60%;
+    --secondary-foreground: 0 0% 100%;
+
+    /* Secondary Light: For subtle backgrounds */
+    --secondary-light: 174 42% 70%;
+
+    /* Tertiary: Soft Cyan for highlights */
+    --tertiary: 180 51% 85%;
+    --tertiary-foreground: 197 37% 25%;
+
+    /* Muted colors */
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    /* Accent: Vibrant Purple for CTAs */
+    --accent: 262 52% 47%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Accent variants */
+    --accent-pink: 330 81% 60%;
+    --accent-sky: 199 89% 48%;
+    --accent-emerald: 142 76% 36%;
+
+    /* Status colors */
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* UI Elements */
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 197 37% 45%;
+
+    --radius: 0.75rem;
+
+    /* Custom gradient colors */
+    --gradient-start: 197 37% 45%;
+    --gradient-end: 174 42% 60%;
+  }
+
+  .dark {
+    /* Dark theme - Premium Academic Dark Mode */
+    --background: 222 47% 8%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 11%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 197 37% 55%;
+    --primary-foreground: 0 0% 100%;
+
+    --primary-dark: 197 45% 45%;
+    --primary-light: 197 35% 65%;
+
+    --secondary: 174 42% 50%;
+    --secondary-foreground: 0 0% 100%;
+
+    --secondary-light: 174 42% 60%;
+
+    --tertiary: 180 51% 25%;
+    --tertiary-foreground: 180 51% 95%;
+
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 262 52% 57%;
+    --accent-foreground: 0 0% 100%;
+
+    --accent-pink: 330 81% 70%;
+    --accent-sky: 199 89% 58%;
+    --accent-emerald: 142 76% 46%;
+
+    --success: 142 76% 46%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 60%;
+    --warning-foreground: 0 0% 100%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217 33% 20%;
+    --input: 217 33% 17%;
+    --ring: 197 37% 55%;
+
+    --gradient-start: 197 37% 55%;
+    --gradient-end: 174 42% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', 'Outfit', system-ui, -apple-system, sans-serif;
+    font-weight: 500;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: 'Outfit', 'Inter', system-ui, sans-serif;
+  }
+}
+
+/* Custom utility classes */
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(var(--secondary))];
+  }
+
+  .bg-gradient-primary {
+    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary-light)) 100%);
+  }
+
+  .bg-gradient-secondary {
+    background: linear-gradient(135deg, hsl(var(--secondary)) 0%, hsl(var(--secondary-light)) 100%);
+  }
+
+  .bg-gradient-accent {
+    background: linear-gradient(135deg, hsl(var(--accent)) 0%, hsl(var(--accent-pink)) 100%);
+  }
+
+  .bg-gradient-hero {
+    background: linear-gradient(135deg, hsl(var(--tertiary)) 0%, hsl(var(--secondary-light)) 50%, hsl(var(--primary-light)) 100%);
+  }
+}
+
+/* Background grid pattern */
+.bg-grid {
+  background-image: linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px);
+  background-size: 4rem 4rem;
+}
+
+/* Floating animation for background shapes */
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0) translateX(0);
+  }
+
+  25% {
+    transform: translateY(-20px) translateX(10px);
+  }
+
+  50% {
+    transform: translateY(-10px) translateX(-10px);
+  }
+
+  75% {
+    transform: translateY(-30px) translateX(5px);
+  }
+}
+
+/* Smooth scroll behavior */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary) / 0.3);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.5);
+}

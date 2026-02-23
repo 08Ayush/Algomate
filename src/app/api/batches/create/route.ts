@@ -1,0 +1,34 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+import { CreateBatchUseCase, SupabaseBatchRepository, CreateBatchDtoSchema } from '@/modules/batch';
+import { authenticate } from '@/shared/middleware/auth';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
+const batchRepo = new SupabaseBatchRepository(supabase);
+const createBatchUseCase = new CreateBatchUseCase(batchRepo);
+
+export async function POST(request: NextRequest) {
+  try {
+    const user = await authenticate(request);
+    if (!user || (user.role !== 'college_admin' && user.role !== 'admin')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const dto = CreateBatchDtoSchema.parse(body);
+
+    const result = await createBatchUseCase.execute(dto);
+    return NextResponse.json(result);
+
+  } catch (error: any) {
+    console.error('Error creating batch:', error);
+    const status = error.name === 'ZodError' ? 400 : 500;
+    return NextResponse.json(
+      { error: error.message || 'Internal server error' },
+      { status }
+    );
+  }
+}

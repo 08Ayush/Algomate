@@ -1,0 +1,55 @@
+<h2>Schedule Change Alert 🔔</h2>
+
+<p>Hello {{recipientName}},</p>
+
+<p>There has been a change to your class schedule for <strong>{{batchName}}</strong>. Please take note of the following:</p>
+
+<div class="{{#if (eq changeType 'cancellation')}}urgent-box{{else}}warning-box{{/if}}">
+    <strong>{{#if (eq changeType 'cancellation')}}⚠️ Class Cancelled{{else}}📅 Schedule Changed{{/if}}</strong>
+    <ul style="margin: 10px 0;">
+        <li><strong>Subject:</strong> {{subjectName}} ({{subjectCode}})</li>
+        <li><strong>Faculty:</strong> {{facultyName}}</li>
+        {{#if originalDate}}
+        <li><strong>Original Date:</strong> {{formatDate originalDate}}</li>
+        {{/if}}
+        {{#if newDate}}
+        <li><strong>New Date:</strong> {{formatDate newDate}}</li>
+        {{/if}}
+        {{#if originalTime}}
+        <li><strong>Original Time:</strong> {{formatTime originalTime}}</li>
+        {{/if}}
+        {{#if newTime}}
+        <li><strong>New Time:</strong> {{formatTime newTime}}</li>
+        {{/if}}
+        {{#if originalRoom}}
+        <li><strong>Original Room:</strong> {{originalRoom}}</li>
+        {{/if}}
+        {{#if newRoom}}
+        <li><strong>New Room:</strong> {{newRoom}}</li>
+        {{/if}}
+    </ul>
+</div>
+
+{{#if reason}}
+<p><strong>Reason for Change:</strong> {{reason}}</p>
+{{/if}}
+
+<p style="text-align: center; margin: 30px 0;">
+    <a href="{{scheduleUrl}}" class="button">View Full Schedule</a>
+</p>
+
+<p><strong>Action Required:</strong></p>
+<ul>
+    <li>Update your personal calendar</li>
+    {{#if (ne changeType 'cancellation')}}
+    <li>Arrive at the new location on time</li>
+    {{/if}}
+    <li>Inform classmates who might have missed this notification</li>
+    {{#if (eq changeType 'cancellation')}}
+    <li>Check for makeup class schedule</li>
+    {{/if}}
+</ul>
+
+<p>If you have any questions or concerns, please contact your faculty coordinator immediately.</p>
+
+<p>Best regards,<br><strong>Academic Compass Team</strong></p>
