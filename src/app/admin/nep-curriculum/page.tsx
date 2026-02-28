@@ -164,6 +164,7 @@ export default function NEPCurriculumPage() {
                   setSelectedSemester(1);
                 }}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                aria-label="Select course"
               >
                 {courses.length === 0 ? (
                   <option value="">No courses available</option>
@@ -188,6 +189,7 @@ export default function NEPCurriculumPage() {
                 value={selectedSemester}
                 onChange={(e) => setSelectedSemester(parseInt(e.target.value))}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                aria-label="Select semester"
               >
                 {semesters.map((sem) => (
                   <option key={sem} value={sem}>

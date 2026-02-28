@@ -269,6 +269,7 @@ const FacultyPage: React.FC = () => {
                             value={departmentFilter}
                             onChange={(e) => setDepartmentFilter(e.target.value)}
                             className="px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none min-w-[200px]"
+                            aria-label="Filter by department"
                         >
                             <option value="all">All Departments</option>
                             {departments.map(dept => (
@@ -359,12 +360,14 @@ const FacultyPage: React.FC = () => {
                                                 <button
                                                     onClick={() => handleEdit(fac)}
                                                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                    title="Edit"
                                                 >
                                                     <Edit size={16} />
                                                 </button>
                                                 <button
-                                                    onClick={() => handleDelete(fac.id)}
+                                                    onClick={() => handleDelete(fac)}
                                                     className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                    title="Delete"
                                                 >
                                                     <Trash2 size={16} />
                                                 </button>
@@ -389,7 +392,7 @@ const FacultyPage: React.FC = () => {
                                 <h3 className="text-lg font-bold text-gray-800">
                                     {editingFaculty ? 'Edit Faculty' : 'Add New Faculty'}
                                 </h3>
-                                <button onClick={() => { setShowForm(false); setEditingFaculty(null); }} className="text-gray-400 hover:text-gray-600">
+                                <button onClick={() => { setShowForm(false); setEditingFaculty(null); }} className="text-gray-400 hover:text-gray-600" title="Close">
                                     <X size={20} />
                                 </button>
                             </div>
@@ -443,6 +446,7 @@ const FacultyPage: React.FC = () => {
                                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4D869C] outline-none"
                                         value={form.department_id}
                                         onChange={(e) => setForm({ ...form, department_id: e.target.value })}
+                                        aria-label="Department"
                                     >
                                         <option value="">Select Department</option>
                                         {departments.map(dept => (
@@ -456,6 +460,7 @@ const FacultyPage: React.FC = () => {
                                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4D869C] outline-none"
                                         value={form.faculty_type}
                                         onChange={(e) => setForm({ ...form, faculty_type: e.target.value })}
+                                        aria-label="Faculty type"
                                     >
                                         <option value="general">General</option>
                                         <option value="creator">Creator</option>

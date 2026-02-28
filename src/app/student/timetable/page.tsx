@@ -282,6 +282,7 @@ export default function StudentTimetable() {
                             onClick={() => navigateDay('prev')}
                             disabled={days.indexOf(selectedDay) === 0}
                             className="p-2 rounded-xl bg-gray-100 disabled:opacity-30"
+                            title="Previous day"
                         >
                             <ChevronLeft size={20} />
                         </button>
@@ -293,6 +294,7 @@ export default function StudentTimetable() {
                             onClick={() => navigateDay('next')}
                             disabled={days.indexOf(selectedDay) === days.length - 1}
                             className="p-2 rounded-xl bg-gray-100 disabled:opacity-30"
+                            title="Next day"
                         >
                             <ChevronRight size={20} />
                         </button>

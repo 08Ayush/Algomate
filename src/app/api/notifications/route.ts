@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth } from '@/lib/auth';
 import {
   BroadcastNotificationUseCase,
   GetNotificationsUseCase,
@@ -24,6 +25,9 @@ const markAsReadUseCase = new MarkAsReadUseCase(notificationRepo);
  */
 export async function GET(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const searchParams = request.nextUrl.searchParams;
     const userId = searchParams.get('user_id');
     // limit and unread_only are implementation details handled by UseCase if complex, 
@@ -59,6 +63,9 @@ export async function GET(request: NextRequest) {
  */
 export async function PATCH(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
 
     // Validate DTO
@@ -89,6 +96,9 @@ export async function PATCH(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
 
     // Validate with Zod

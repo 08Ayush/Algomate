@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/shared/database/client';
+import { requireRoles } from '@/lib/auth';
 
 // GET - List all colleges with counts
 export async function GET(request: NextRequest) {
   try {
+    // Only super_admin can access college management
+    const user = requireRoles(request, ['super_admin']);
+    if (user instanceof NextResponse) return user;
+
     console.log('Fetching colleges from database...');
 
     // First get all colleges
@@ -66,6 +71,10 @@ export async function GET(request: NextRequest) {
 // POST - Create new college
 export async function POST(request: NextRequest) {
   try {
+    // Only super_admin can create colleges
+    const user = requireRoles(request, ['super_admin']);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
     const {
       name,

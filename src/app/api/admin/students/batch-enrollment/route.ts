@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { authenticate } from '@/shared/middleware/auth';
+import { requireAuth } from '@/lib/auth';
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,10 +10,8 @@ const supabase = createClient(
 // GET - Get batch enrollment for a student
 export async function GET(request: NextRequest) {
     try {
-        const user = await authenticate(request);
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        const user = requireAuth(request);
+    if (user instanceof NextResponse) return user; // Auth failed
 
         const { searchParams } = new URL(request.url);
         const studentId = searchParams.get('studentId');
@@ -50,10 +48,8 @@ export async function GET(request: NextRequest) {
 // POST - Assign a batch to a student (create enrollment)
 export async function POST(request: NextRequest) {
     try {
-        const user = await authenticate(request);
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        const user = requireAuth(request);
+    if (user instanceof NextResponse) return user; // Auth failed
 
         const allowedRoles = ['college_admin', 'admin', 'super_admin'];
         if (!allowedRoles.includes(user.role)) {
@@ -127,10 +123,8 @@ export async function POST(request: NextRequest) {
 // DELETE - Remove batch enrollment
 export async function DELETE(request: NextRequest) {
     try {
-        const user = await authenticate(request);
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        const user = requireAuth(request);
+    if (user instanceof NextResponse) return user; // Auth failed
 
         const allowedRoles = ['college_admin', 'admin', 'super_admin'];
         if (!allowedRoles.includes(user.role)) {
@@ -175,10 +169,8 @@ export async function DELETE(request: NextRequest) {
 // PATCH - Bulk assign students to a batch
 export async function PATCH(request: NextRequest) {
     try {
-        const user = await authenticate(request);
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
+        const user = requireAuth(request);
+    if (user instanceof NextResponse) return user; // Auth failed
 
         const allowedRoles = ['college_admin', 'admin', 'super_admin'];
         if (!allowedRoles.includes(user.role)) {

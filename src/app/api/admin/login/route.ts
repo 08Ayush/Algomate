@@ -63,24 +63,22 @@ export async function POST(request: NextRequest) {
 
     const token = Buffer.from(JSON.stringify(tokenData)).toString('base64');
 
-    // Update user with new token and last login
-    const { error: updateError } = await supabase
+    // Update user token and last login (Non-blocking - background)
+    // Don't await to avoid blocking login response (~50-100ms saved)
+    supabase
       .from('admin_users')
       .update({
         token: token,
         last_login: new Date().toISOString()
       })
-      .eq('id', user.id);
+      .eq('id', user.id)
+      .then(({ error: updateError }) => {
+        if (updateError) {
+          console.error('Failed to update user token:', updateError);
+        }
+      });
 
-    if (updateError) {
-      console.error('Failed to update user token:', updateError);
-      return NextResponse.json(
-        { error: 'Failed to create session' },
-        { status: 500 }
-      );
-    }
-
-    // Return user data and token
+    // Return user data and token immediately
     const responseData = {
       user: {
         id: user.id,

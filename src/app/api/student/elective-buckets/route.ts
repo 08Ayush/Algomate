@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth } from '@/lib/auth';
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,6 +13,9 @@ const supabase = createClient(
  */
 export async function GET(request: NextRequest) {
     try {
+        const user = requireAuth(request);
+        if (user instanceof NextResponse) return user;
+
         const { searchParams } = new URL(request.url);
         const studentId = searchParams.get('studentId');
         const batchId = searchParams.get('batchId');
@@ -156,6 +160,9 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
     try {
+        const user = requireAuth(request);
+        if (user instanceof NextResponse) return user;
+
         const body = await request.json();
         const { student_id, bucket_id, choices } = body;
 

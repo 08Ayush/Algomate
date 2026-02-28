@@ -400,7 +400,7 @@ export default function StudentAssignments() {
                                     <Upload size={40} className="mx-auto text-gray-400 mb-3" />
                                     <p className="text-gray-600 font-medium">Drop your file here or click to browse</p>
                                     <p className="text-gray-400 text-sm mt-1">PDF, DOC, DOCX up to 10MB</p>
-                                    <input type="file" className="hidden" />
+                                    <input type="file" className="hidden" aria-label="Upload file" />
                                     <button className="mt-4 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors">
                                         Browse Files
                                     </button>

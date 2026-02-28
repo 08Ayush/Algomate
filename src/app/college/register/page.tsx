@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { 
@@ -64,7 +64,7 @@ const workingDayOptions = [
   'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 ];
 
-export default function CollegeRegistrationPage() {
+function CollegeRegistrationPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const registrationToken = searchParams.get('token');
@@ -996,6 +996,7 @@ export default function CollegeRegistrationPage() {
                             name="startTime"
                             value={formData.startTime}
                             onChange={handleInputChange}
+                            title="College Start Time"
                             className={`w-full pl-10 pr-4 py-3 rounded-lg border ${
                               errors.startTime ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
                             } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
@@ -1012,6 +1013,7 @@ export default function CollegeRegistrationPage() {
                           name="endTime"
                           value={formData.endTime}
                           onChange={handleInputChange}
+                          title="College End Time"
                           className={`w-full px-4 py-3 rounded-lg border ${
                             errors.endTime ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
                           } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
@@ -1124,5 +1126,13 @@ export default function CollegeRegistrationPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CollegeRegistrationPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4D869C]"></div></div>}>
+      <CollegeRegistrationPageContent />
+    </Suspense>
   );
 }

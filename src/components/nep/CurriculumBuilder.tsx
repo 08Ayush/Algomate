@@ -1,22 +1,4 @@
-'use client';
-
-import React, { useState, useEffect } from 'react';
-import {
-  DndContext,
-  DragEndEvent,
-  DragOverlay,
-  DragStartEvent,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  closestCenter,
-  useDroppable,
-} from '@dnd-kit/core';
-import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { Trash2 } from 'lucide-react';
-import { useConfirm } from '@/components/ui/ConfirmDialog';
+// Legacy duplicate header removed – active component starts below
 
 
 // // Types
@@ -941,6 +923,7 @@ import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-ki
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Trash2 } from 'lucide-react';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 
 // Types
@@ -984,9 +967,10 @@ function DraggableSubject({ subject }: { subject: Subject }) {
   };
 
   return (
+    // eslint-disable-next-line react/forbid-dom-props
     <div
       ref={setNodeRef}
-      style={style}
+      style={style} // NOSONAR - required by @dnd-kit/sortable for drag transforms
       {...attributes}
       {...listeners}
       className="bg-white border border-gray-200 rounded-lg p-3 mb-2 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow hover:border-blue-300"
@@ -1059,6 +1043,7 @@ function DroppableBucket({
               type="checkbox"
               checked={bucket.is_common_slot}
               onChange={() => onToggleCommonSlot(bucket.id)}
+              title="Common Time Slot"
               className="rounded"
             />
             <span>Common Time Slot</span>
@@ -1075,6 +1060,7 @@ function DroppableBucket({
               min="1"
               value={bucket.min_selection}
               onChange={(e) => onUpdateSelection(bucket.id, parseInt(e.target.value), bucket.max_selection)}
+              title="Minimum subject selection"
               className="w-16 px-2 py-1 border rounded text-sm"
             />
           </div>
@@ -1085,6 +1071,7 @@ function DroppableBucket({
               min="1"
               value={bucket.max_selection}
               onChange={(e) => onUpdateSelection(bucket.id, bucket.min_selection, parseInt(e.target.value))}
+              title="Maximum subject selection"
               className="w-16 px-2 py-1 border rounded text-sm"
             />
           </div>
@@ -1794,6 +1781,7 @@ export default function CurriculumBuilder({
                       type="checkbox"
                       checked={bucket.is_common_slot}
                       onChange={() => handleToggleCommonSlot(bucket.id)}
+                      title="Common Time Slot"
                       className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
                     <span className="font-medium text-gray-700">Common Time Slot</span>
@@ -1810,6 +1798,7 @@ export default function CurriculumBuilder({
                       min="1"
                       value={bucket.min_selection}
                       onChange={(e) => handleUpdateSelection(bucket.id, parseInt(e.target.value) || 1, bucket.max_selection)}
+                      title="Minimum subject selection"
                       className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-center mt-1"
                     />
                   </div>
@@ -1820,6 +1809,7 @@ export default function CurriculumBuilder({
                       min="1"
                       value={bucket.max_selection}
                       onChange={(e) => handleUpdateSelection(bucket.id, bucket.min_selection, parseInt(e.target.value) || 1)}
+                      title="Maximum subject selection"
                       className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-center mt-1"
                     />
                   </div>

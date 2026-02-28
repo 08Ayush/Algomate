@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Lazy initialization of Supabase client
@@ -14,22 +15,7 @@ function getSupabase(): SupabaseClient {
 }
 
 // Helper function to decode and verify user from token
-function getAuthenticatedUser(request: NextRequest) {
-    const authHeader = request.headers.get('authorization');
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return null;
-    }
-
-    try {
-        const token = authHeader.substring(7);
-        const decoded = JSON.parse(Buffer.from(token, 'base64').toString());
-        return decoded;
-    } catch (error) {
-        console.error('Token decode error:', error);
-        return null;
-    }
-}
 
 // GET - Fetch single assignment with questions
 export async function GET(
@@ -38,7 +24,7 @@ export async function GET(
 ) {
     try {
         const { id } = await params;
-        const user = getAuthenticatedUser(request);
+        const user = requireAuth(request);
         if (!user || !user.user_id) {
             return NextResponse.json(
                 { success: false, error: 'Unauthorized' },
@@ -125,7 +111,7 @@ export async function PUT(
 ) {
     try {
         const { id } = await params;
-        const user = getAuthenticatedUser(request);
+        const user = requireAuth(request);
         if (!user || !user.user_id) {
             return NextResponse.json(
                 { success: false, error: 'Unauthorized' },
@@ -264,7 +250,7 @@ export async function DELETE(
 ) {
     try {
         const { id } = await params;
-        const user = getAuthenticatedUser(request);
+        const user = requireAuth(request);
         if (!user || !user.user_id) {
             return NextResponse.json(
                 { success: false, error: 'Unauthorized' },

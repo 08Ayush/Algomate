@@ -244,6 +244,7 @@ export default function CreateAssignment() {
             <button
               onClick={() => router.back()}
               className="p-2 hover:bg-white rounded-xl transition-colors"
+              title="Go back"
             >
               <ArrowLeft size={24} className="text-gray-600" />
             </button>
@@ -321,6 +322,7 @@ export default function CreateAssignment() {
                     value={type}
                     onChange={(e) => setType(e.target.value as any)}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#4D869C] outline-none"
+                    aria-label="Assignment type"
                     required
                   >
                     <option value="MCQ">MCQ (Multiple Choice)</option>
@@ -340,6 +342,7 @@ export default function CreateAssignment() {
                     value={batchId}
                     onChange={(e) => setBatchId(e.target.value)}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#4D869C] outline-none"
+                    aria-label="Select batch"
                     required
                   >
                     <option value="">Select Batch</option>
@@ -354,6 +357,7 @@ export default function CreateAssignment() {
                   <select
                     value={subjectId}
                     onChange={(e) => setSubjectId(e.target.value)}
+                    aria-label="Select subject"
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#4D869C] outline-none"
                   >
                     <option value="">Select Subject (Optional)</option>
@@ -398,6 +402,7 @@ export default function CreateAssignment() {
                     type="datetime-local"
                     value={scheduledStart}
                     onChange={(e) => setScheduledStart(e.target.value)}
+                    title="Start date and time"
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#4D869C] outline-none"
                   />
                 </div>
@@ -408,6 +413,7 @@ export default function CreateAssignment() {
                     type="datetime-local"
                     value={scheduledEnd}
                     onChange={(e) => setScheduledEnd(e.target.value)}
+                    title="End date and time"
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#4D869C] outline-none"
                   />
                 </div>
@@ -419,6 +425,7 @@ export default function CreateAssignment() {
                     value={maxAttempts}
                     onChange={(e) => setMaxAttempts(e.target.value)}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#4D869C] outline-none"
+                    placeholder="1"
                     min="1"
                   />
                 </div>
@@ -430,6 +437,7 @@ export default function CreateAssignment() {
                     value={maxViolations}
                     onChange={(e) => setMaxViolations(e.target.value)}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#4D869C] outline-none disabled:opacity-50"
+                    placeholder="3"
                     min="0"
                     disabled={!proctoringEnabled}
                   />
@@ -556,6 +564,7 @@ export default function CreateAssignment() {
                       <button
                         onClick={() => removeQuestion(q.id)}
                         className="ml-4 p-2 text-red-400 hover:bg-red-100 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                        title="Remove question"
                       >
                         <Trash2 size={18} />
                       </button>

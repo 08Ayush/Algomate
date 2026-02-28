@@ -8,6 +8,7 @@ import {
   AuditAction,
 } from '@/lib/auditLog';
 import { getPaginationParams, createPaginatedResponse } from '@/shared/utils/pagination';
+import { requireAuth } from '@/lib/auth';
 
 // ============================================================================
 // GET - Query audit logs
@@ -15,6 +16,9 @@ import { getPaginationParams, createPaginatedResponse } from '@/shared/utils/pag
 
 export async function GET(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action');
 
@@ -141,6 +145,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
 
     const {

@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/shared/database/server';
 import { asyncHandler } from '@/shared/middleware/error-handler';
-import { authenticate } from '@/shared/middleware/auth';
+import { requireAuth } from '@/lib/auth';
 import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
 
 export const GET = asyncHandler(async (request: NextRequest) => {
-  const user = await authenticate(request);
-  if (!user) {
-    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-  }
+  const user = requireAuth(request);
+    if (user instanceof NextResponse) return user; // Auth failed
 
   const { searchParams } = new URL(request.url);
   const collegeId = searchParams.get('college_id') || user.college_id;
@@ -66,8 +64,10 @@ export const GET = asyncHandler(async (request: NextRequest) => {
 });
 
 export const POST = asyncHandler(async (request: NextRequest) => {
-  const user = await authenticate(request);
-  if (!user || !['admin', 'college_admin', 'super_admin'].includes(user.role)) {
+  const user = requireAuth(request);
+  if (user instanceof NextResponse) return user;
+
+  if (!['admin', 'college_admin', 'super_admin'].includes(user.role)) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 });
   }
 

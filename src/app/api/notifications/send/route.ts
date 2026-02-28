@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
+import { requireAuth } from '@/lib/auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -9,6 +10,9 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function POST(request: NextRequest) {
     try {
+        const authCheck = requireAuth(request);
+        if (authCheck instanceof NextResponse) return authCheck;
+
         // 1. Authenticate Request
         const authHeader = request.headers.get('authorization');
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -16,19 +20,19 @@ export async function POST(request: NextRequest) {
         }
 
         const token = authHeader.substring(7);
-        let user;
+        let tokenUser;
         try {
-            user = JSON.parse(Buffer.from(token, 'base64').toString());
+            tokenUser = JSON.parse(Buffer.from(token, 'base64').toString());
         } catch {
             return NextResponse.json({ success: false, error: 'Invalid token' }, { status: 401 });
         }
 
-        if (!user || !user.id || !user.college_id) {
+        if (!tokenUser || !tokenUser.id || !tokenUser.college_id) {
             return NextResponse.json({ success: false, error: 'Invalid user data' }, { status: 401 });
         }
 
         // Only faculty/admins should be sending notifications like this
-        if (user.role === 'student') {
+        if (tokenUser.role === 'student') {
             return NextResponse.json({ success: false, error: 'Student cannot broadcast notifications' }, { status: 403 });
         }
 
@@ -48,7 +52,7 @@ export async function POST(request: NextRequest) {
             const { data: students, error } = await supabase
                 .from('users')
                 .select('id')
-                .eq('college_id', user.college_id)
+                .eq('college_id', tokenUser.college_id)
                 .eq('role', 'student')
                 .eq('is_active', true);
 
@@ -60,7 +64,7 @@ export async function POST(request: NextRequest) {
             const { data: faculty, error } = await supabase
                 .from('users')
                 .select('id')
-                .eq('college_id', user.college_id)
+                .eq('college_id', tokenUser.college_id)
                 .eq('role', 'faculty')
                 .eq('is_active', true);
 
@@ -85,7 +89,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Filter out the sender from recipients if they are included (e.g. faculty broadcasting to faculty)
-        recipientIds = recipientIds.filter(id => id !== user.id);
+        recipientIds = recipientIds.filter(id => id !== tokenUser.id);
 
         if (recipientIds.length === 0) {
             return NextResponse.json({ success: true, message: 'No recipients found', recipients_count: 0 });
@@ -96,7 +100,7 @@ export async function POST(request: NextRequest) {
         const notificationsToInsert = recipientIds.map(recipientId => ({
             id: randomUUID(),
             recipient_id: recipientId,
-            sender_id: user.id,
+            sender_id: tokenUser.id,
             type: type,
             title: title,
             message: message,

@@ -8,6 +8,7 @@ import {
   isUserRegistered,
   RegistrationStatus,
 } from '@/lib/eventRegistrations';
+import { requireAuth } from '@/lib/auth';
 
 // ============================================================================
 // GET - Query event registrations
@@ -15,6 +16,9 @@ import {
 
 export async function GET(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action');
 
@@ -111,6 +115,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
     const { action, event_id, user_id, notes, custom_fields } = body;
 
@@ -182,6 +189,9 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const { searchParams } = new URL(request.url);
     const eventId = searchParams.get('event_id');
     const userId = searchParams.get('user_id') || undefined;

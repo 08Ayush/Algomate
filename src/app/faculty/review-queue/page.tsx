@@ -188,8 +188,6 @@ export default function ReviewQueuePage() {
       }
     });
   };
-    }
-  };
 
   const handleView = (timetableId: string) => {
     router.push(`/faculty/timetables/view/${timetableId}`);
@@ -237,6 +235,8 @@ export default function ReviewQueuePage() {
           </div>
           <button
             onClick={fetchPendingTimetables}
+            title="Refresh"
+            aria-label="Refresh review queue"
             className="flex items-center gap-2 px-4 py-3 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 bg-white"
           >
             <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />

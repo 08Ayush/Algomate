@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth } from '@/lib/auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,6 +9,9 @@ const supabase = createClient(
 
 export async function GET(request: NextRequest) {
   try {
+    const authCheck = requireAuth(request);
+    if (authCheck instanceof NextResponse) return authCheck;
+
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
     const courseId = searchParams.get('courseId');

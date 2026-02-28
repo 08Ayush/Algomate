@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -7,47 +8,12 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Helper function to get authenticated user
-async function getAuthenticatedUser(request: NextRequest) {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  try {
-    const userString = Buffer.from(token, 'base64').toString();
-    const user = JSON.parse(userString);
-
-    // Verify user exists and is active - include department_id
-    const { data: dbUser, error } = await supabase
-      .from('users')
-      .select('id, department_id, role, is_active')
-      .eq('id', user.id)
-      .eq('is_active', true)
-      .single();
-
-    if (error || !dbUser) {
-      return null;
-    }
-
-    return dbUser;
-  } catch {
-    return null;
-  }
-}
-
 // GET - Fetch classrooms by department
 export async function GET(request: NextRequest) {
   try {
     // Get authenticated user
-    const user = await getAuthenticatedUser(request);
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized. Please log in.' },
-        { status: 401 }
-      );
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     const { searchParams } = new URL(request.url);
     const departmentCode = searchParams.get('department_code');

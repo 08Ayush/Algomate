@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import {
   calculateResourceUtilization,
   calculateAllResourceUtilization,
@@ -21,6 +22,9 @@ import {
  */
 export async function GET(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const searchParams = request.nextUrl.searchParams;
     const action = searchParams.get('action') || 'summary';
     const collegeId = searchParams.get('college_id');
@@ -150,6 +154,9 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
 
     if (body.action === 'calculate_all') {

@@ -17,6 +17,7 @@ import {
   UserCheck
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useRealtimeNotifications, type Notification as RealtimeNotification } from '@/hooks/useRealtimeNotifications';
 
 // Extended notification types matching the backend
 type NotificationType =
@@ -43,113 +44,31 @@ type NotificationType =
   | 'maintenance_alert'
   | 'policy_update';
 
-interface Notification {
-  id: string;
-  type: NotificationType;
-  title: string;
-  message: string;
-  timetable_id?: string;
-  batch_id?: string;
-  content_type?: string;
-  content_id?: string;
-  action_url?: string;
-  priority?: 'low' | 'normal' | 'high' | 'urgent';
-  is_read: boolean;
-  created_at: string;
-}
-
 export function NotificationBell() {
   const router = useRouter();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
 
+  // Get user ID from localStorage
   useEffect(() => {
     const userData = localStorage.getItem('user');
     if (userData) {
       const user = JSON.parse(userData);
       setUserId(user.id);
-      fetchNotifications(user.id);
     }
   }, []);
 
-  // Poll for new notifications every 30 seconds
-  useEffect(() => {
-    if (!userId) return;
+  // Use Realtime notifications hook - replaces polling!
+  const {
+    notifications,
+    unreadCount,
+    loading,
+    error,
+    markAsRead,
+    markAllAsRead,
+  } = useRealtimeNotifications(userId);
 
-    const interval = setInterval(() => {
-      fetchNotifications(userId);
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [userId]);
-
-  const fetchNotifications = async (uid: string) => {
-    try {
-      const response = await fetch(`/api/notifications?user_id=${uid}&limit=10`);
-      const data = await response.json();
-
-      if (data.success) {
-        setNotifications(data.data);
-        setUnreadCount(data.unread_count);
-      }
-    } catch (error) {
-      console.error('Error fetching notifications:', error);
-    }
-  };
-
-  const markAsRead = async (notificationId: string) => {
-    if (!userId) return;
-
-    try {
-      const response = await fetch('/api/notifications', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: userId,
-          notification_ids: [notificationId]
-        })
-      });
-
-      if (response.ok) {
-        setNotifications(prev =>
-          prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n)
-        );
-        setUnreadCount(prev => Math.max(0, prev - 1));
-      }
-    } catch (error) {
-      console.error('Error marking notification as read:', error);
-    }
-  };
-
-  const markAllAsRead = async () => {
-    if (!userId) return;
-    setLoading(true);
-
-    try {
-      const response = await fetch('/api/notifications', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: userId,
-          mark_all_read: true
-        })
-      });
-
-      if (response.ok) {
-        setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-        setUnreadCount(0);
-      }
-    } catch (error) {
-      console.error('Error marking all as read:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleNotificationClick = (notification: Notification) => {
+  const handleNotificationClick = (notification: RealtimeNotification) => {
     markAsRead(notification.id);
 
     // Navigate based on action_url or content type
@@ -186,7 +105,7 @@ export function NotificationBell() {
     setIsOpen(false);
   };
 
-  const getNotificationIcon = (type: NotificationType) => {
+  const getNotificationIcon = (type: string) => {
     switch (type) {
       // Timetable notifications
       case 'timetable_published':
@@ -319,6 +238,7 @@ export function NotificationBell() {
                 <button
                   onClick={() => setIsOpen(false)}
                   className="p-1 hover:bg-gray-100 dark:hover:bg-slate-700 rounded"
+                  title="Close notifications"
                 >
                   <X className="w-5 h-5 text-gray-500" />
                 </button>
@@ -334,7 +254,7 @@ export function NotificationBell() {
                 </div>
               ) : (
                 <div className="divide-y divide-gray-200 dark:divide-slate-700">
-                  {notifications.map((notification) => (
+                  {notifications.map((notification: RealtimeNotification) => (
                     <button
                       key={notification.id}
                       onClick={() => handleNotificationClick(notification)}

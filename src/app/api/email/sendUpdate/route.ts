@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth } from '@/lib/auth';
 import { emailService } from '@/services/email/emailService';
 
 const supabase = createClient(
@@ -19,6 +20,9 @@ const supabase = createClient(
  */
 export async function POST(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
     const { timetableId, publishedBy } = body;
 

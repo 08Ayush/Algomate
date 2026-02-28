@@ -352,6 +352,7 @@ const FacultyNotificationsPage: React.FC = () => {
             <button
               onClick={() => user && fetchNotifications(user.id)}
               className="flex items-center gap-2 px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50"
+              title="Refresh"
             >
               <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
             </button>
@@ -435,6 +436,7 @@ const FacultyNotificationsPage: React.FC = () => {
               <select
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
+                aria-label="Filter by type"
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#4D869C] outline-none"
               >
                 <option value="all">All Types</option>
@@ -559,7 +561,7 @@ const FacultyNotificationsPage: React.FC = () => {
                     <Send size={20} />
                     <h3 className="text-lg font-bold">Send Notification</h3>
                   </div>
-                  <button onClick={() => setShowSendModal(false)} className="text-white/80 hover:text-white">
+                  <button onClick={() => setShowSendModal(false)} className="text-white/80 hover:text-white" title="Close">
                     <X size={20} />
                   </button>
                 </div>
@@ -593,6 +595,7 @@ const FacultyNotificationsPage: React.FC = () => {
                       <select
                         value={notificationForm.type}
                         onChange={(e) => setNotificationForm({ ...notificationForm, type: e.target.value })}
+                        aria-label="Notification type"
                         className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#4D869C] outline-none"
                       >
                         <option value="general_announcement">General Announcement</option>
@@ -610,6 +613,7 @@ const FacultyNotificationsPage: React.FC = () => {
                       <select
                         value={notificationForm.target}
                         onChange={(e) => setNotificationForm({ ...notificationForm, target: e.target.value })}
+                        aria-label="Send to"
                         className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#4D869C] outline-none"
                       >
                         <option value="all">All Students</option>
@@ -625,6 +629,7 @@ const FacultyNotificationsPage: React.FC = () => {
                       <select
                         value={notificationForm.batch_id}
                         onChange={(e) => setNotificationForm({ ...notificationForm, batch_id: e.target.value })}
+                        aria-label="Select batch"
                         className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#4D869C] outline-none"
                       >
                         <option value="">Select a batch</option>

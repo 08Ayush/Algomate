@@ -1,4 +1,4 @@
-import Redis from 'ioredis';
+﻿import { Redis } from '@upstash/redis';
 import { logger } from '@/shared/logging';
 
 /**
@@ -20,96 +20,74 @@ interface L1CacheItem<T> {
 }
 
 export class RedisCacheService {
+    // @upstash/redis uses HTTP REST — no TCP sockets, no worker threads.
+    // Lazily initialised so module-level import does not throw at build time.
     private client: Redis | null = null;
-    private isConnected: boolean = false;
-    private failureCount: number = 0;
-    private readonly MAX_FAILURES = 3;
-    private readonly TIMEOUT_MS = 1000;
+    private readonly L1_TTL_MS = 60 * 1000; // 60 seconds
 
-    // L1 Cache (Short-term memory to hit < 1ms response times)
+    // L1 Cache (in-memory, < 0.1 ms)
     private l1Cache = new Map<string, L1CacheItem<any>>();
-    private readonly L1_TTL_MS = 60 * 1000; // 60 seconds L1 TTL
 
-    constructor() {
-        this.initialize();
-    }
+    private getClient(): Redis | null {
+        if (this.client) return this.client;
 
-    private initialize(): void {
-        const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
-        const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+        const url = process.env.UPSTASH_REDIS_REST_URL;
+        const token = process.env.UPSTASH_REDIS_REST_TOKEN;
 
-        if (!redisUrl || !redisToken) {
-            this.isConnected = false;
-            return;
+        if (!url || !token) {
+            // Redis is optional — app continues without cache.
+            return null;
         }
 
-        try {
-            // Extract host from rest URL (https://host -> host)
-            const host = redisUrl.replace('https://', '').trim();
-
-            this.client = new Redis({
-                host: host,
-                port: 6379,
-                password: redisToken,
-                tls: { rejectUnauthorized: false },
-                connectTimeout: 5000,
-                maxRetriesPerRequest: 1
-            });
-
-            this.client.on('connect', () => {
-                this.isConnected = true;
-                logger.info('🚀 Redis TCP (L2) connected successfully');
-            });
-
-            this.client.on('error', (err) => {
-                logger.error('Redis TCP Error:', err);
-                this.failureCount++;
-                if (this.failureCount >= this.MAX_FAILURES) {
-                    this.isConnected = false;
-                }
-            });
-
-        } catch (error) {
-            logger.error('Failed to initialize Redis TCP:', error as Error);
-            this.isConnected = false;
-        }
-    }
-
-    /**
-     * Get from L1 (Memory) only - Speed: < 0.1ms
-     */
-    getL1<T>(key: string): T | null {
-        const now = Date.now();
-        const l1Item = this.l1Cache.get(key);
-        if (l1Item && l1Item.expiry > now) {
-            return l1Item.value as T;
-        }
-        return null;
-    }
-
-    /**
-     * Get from L2 (Redis TCP) only - Speed: ~25-35ms
-     */
-    async getL2<T>(key: string): Promise<T | null> {
-        if (!this.isConnected || !this.client) {
+        // @upstash/redis requires an HTTPS REST URL.
+        // Guard against the legacy rediss:// TCP format being set.
+        if (!url.startsWith('https://')) {
+            logger.warn(
+                'UPSTASH_REDIS_REST_URL does not start with https://. ' +
+                'Cache is disabled. Provide the Upstash REST URL, not the ioredis connection string.'
+            );
             return null;
         }
 
         try {
-            const data = await this.client.get(key);
-            if (!data) return null;
+            this.client = new Redis({ url, token });
+            logger.info('Upstash Redis REST client initialised');
+        } catch (err) {
+            logger.error('Failed to initialise Upstash Redis client:', err as Error);
+            return null;
+        }
 
-            let parsed: T;
-            if (data.startsWith('{') || data.startsWith('[')) {
-                parsed = JSON.parse(data, dateReviver) as T;
-            } else {
-                parsed = data as unknown as T;
-            }
+        return this.client;
+    }
 
-            // Update L1
-            this.l1Cache.set(key, { value: parsed, expiry: Date.now() + this.L1_TTL_MS });
-            return parsed;
+    // -------------------------------------------------------------------------
+    // L1 — in-process memory (< 0.1 ms)
+    // -------------------------------------------------------------------------
+
+    getL1<T>(key: string): T | null {
+        const now = Date.now();
+        const item = this.l1Cache.get(key);
+        if (item && item.expiry > now) return item.value as T;
+        return null;
+    }
+
+    // -------------------------------------------------------------------------
+    // L2 — Upstash Redis REST (~30–60 ms over network)
+    // -------------------------------------------------------------------------
+
+    async getL2<T>(key: string): Promise<T | null> {
+        const redis = this.getClient();
+        if (!redis) return null;
+
+        try {
+            const data = await redis.get<T>(key);
+            if (data === null || data === undefined) return null;
+
+            // Also warm L1
+            this.l1Cache.set(key, { value: data, expiry: Date.now() + this.L1_TTL_MS });
+            return data;
         } catch (error) {
+            logger.error('Redis GET error:', error as Error);
             return null;
         }
     }
@@ -117,34 +95,36 @@ export class RedisCacheService {
     async get<T>(key: string): Promise<T | null> {
         const l1 = this.getL1<T>(key);
         if (l1 !== null) return l1;
-
         return this.getL2<T>(key);
     }
 
     async set<T>(key: string, value: T, ttlSeconds: number = 3600): Promise<void> {
-        // Update L1
+        // Always warm L1
         this.l1Cache.set(key, {
             value,
-            expiry: Date.now() + Math.min(ttlSeconds * 1000, this.L1_TTL_MS)
+            expiry: Date.now() + Math.min(ttlSeconds * 1000, this.L1_TTL_MS),
         });
 
-        if (!this.isConnected || !this.client) return;
+        const redis = this.getClient();
+        if (!redis) return;
 
         try {
-            const serialized = JSON.stringify(value);
-            await this.client.set(key, serialized, 'EX', ttlSeconds);
+            await redis.set(key, value, { ex: ttlSeconds });
         } catch (error) {
-            // Silent ignore
+            logger.error('Redis SET error:', error as Error);
         }
     }
 
     async del(key: string): Promise<void> {
         this.l1Cache.delete(key);
-        if (!this.isConnected || !this.client) return;
+
+        const redis = this.getClient();
+        if (!redis) return;
+
         try {
-            await this.client.del(key);
+            await redis.del(key);
         } catch (error) {
-            // Ignore
+            logger.error('Redis DEL error:', error as Error);
         }
     }
 
@@ -152,19 +132,22 @@ export class RedisCacheService {
         // Clear all L1 on pattern invalidation to be safe
         this.l1Cache.clear();
 
-        if (!this.isConnected || !this.client) return 0;
+        const redis = this.getClient();
+        if (!redis) return 0;
+
         try {
-            const keys = await this.client.keys(pattern);
+            const keys = await redis.keys(pattern);
             if (keys.length === 0) return 0;
-            await this.client.del(...keys);
+            await redis.del(...keys);
             return keys.length;
         } catch (error) {
+            logger.error('Redis invalidatePattern error:', error as Error);
             return 0;
         }
     }
 
     isAvailable(): boolean {
-        return this.isConnected;
+        return this.getClient() !== null;
     }
 
     buildKey(collegeId: string, module: string, resource: string, identifier?: string): string {

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
 import { motion } from 'framer-motion';
 import { Zap, Settings, Play, CheckCircle, AlertCircle, Clock, Save, Send, Eye, ChevronDown, ChevronUp } from 'lucide-react';
+import { useRealtimeTaskStatus } from '@/hooks/useRealtimeTaskStatus';
+import type { GenerationTask } from '@/hooks/useRealtimeTaskStatus';
 
 interface Batch {
   id: string;
@@ -37,13 +39,7 @@ interface Constraint {
   enabled: boolean;
 }
 
-interface GenerationTask {
-  status: 'idle' | 'running' | 'completed' | 'failed';
-  phase: string;
-  progress: number;
-  message: string;
-  metrics?: any;
-}
+// Removed duplicate GenerationTask interface - using one from hook
 
 const DEFAULT_CONSTRAINTS: Constraint[] = [
   { id: 'HC001', type: 'HARD', category: 'FACULTY', name: 'No Faculty Double Booking', description: 'Faculty cannot teach multiple classes at the same time', weight: 10000, enabled: true },
@@ -75,18 +71,55 @@ export default function HybridSchedulerPage() {
     progress: 0,
     message: ''
   });
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   const [generatedSchedule, setGeneratedSchedule] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
-
   const [hybridConfig, setHybridConfig] = useState<HybridConfig>({
     strategy: 'sequential',
-    maxTimeMinutes: 10,
-    cpsatTimeout: 5,
-    cpsatMaxSolutions: 10,
+    maxTimeMinutes: 30,
+    cpsatTimeout: 10,
+    cpsatMaxSolutions: 1,
     gaPopulationSize: 50,
     gaMaxGenerations: 100,
     gaMutationRate: 0.1,
     gaCrossoverRate: 0.8,
+  });
+
+  // Use Realtime task status hook - replaces polling!
+  const realtimeTask = useRealtimeTaskStatus(currentTaskId, {
+    onComplete: async (timetableId, data) => {
+      console.log('✅ Task completed:', timetableId);
+      
+      // Fetch the generated timetable details
+      try {
+        const authToken = Buffer.from(JSON.stringify(user)).toString('base64');
+        const timetableResponse = await fetch(`/api/timetables/${timetableId}`, {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        
+        if (timetableResponse.ok) {
+          const timetableData = await timetableResponse.json();
+          setGeneratedSchedule({
+            ...timetableData.data || timetableData,
+            timetable_id: timetableId,
+            id: timetableId,
+            statistics: {
+              totalAssignments: timetableData.data?.scheduled_classes?.length || 0,
+              theoryAssignments: timetableData.data?.scheduled_classes?.filter((s: any) => !s.is_lab_session).length || 0,
+              labAssignments: timetableData.data?.scheduled_classes?.filter((s: any) => s.is_lab_session).length || 0
+            }
+          });
+        } else {
+          setGeneratedSchedule({ timetable_id: timetableId, id: timetableId });
+        }
+      } catch (fetchError) {
+        console.error('Failed to fetch timetable details:', fetchError);
+        setGeneratedSchedule({ timetable_id: timetableId, id: timetableId });
+      }
+    },
+    onError: (error) => {
+      console.error('❌ Task failed:', error);
+    },
   });
 
   useEffect(() => {
@@ -130,147 +163,49 @@ export default function HybridSchedulerPage() {
 
   const fetchConstraints = async (departmentId: string) => {
     try {
-      setConstraintsLoading(true);
-      const response = await fetch(`/api/constraints?department_id=${departmentId}`);
+      const authToken = Buffer.from(JSON.stringify(user)).toString('base64');
+      const response = await fetch(`/api/constraints?department_id=${departmentId}`, {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
       const data = await response.json();
 
-      if (data.success && data.data && data.data.length > 0) {
-        const mappedConstraints: Constraint[] = data.data.map((rule: any) => ({
-          id: rule.id,
-          type: rule.rule_type,
-          category: rule.rule_parameters?.category || 'GENERAL',
-          name: rule.rule_name,
-          description: rule.description,
-          weight: rule.weight,
-          enabled: rule.is_active
-        }));
-        setConstraints(mappedConstraints);
-      } else {
-        setConstraints(DEFAULT_CONSTRAINTS);
+      if (data.success && data.data) {
+        setConstraints(data.data);
       }
     } catch (error) {
-      setConstraints(DEFAULT_CONSTRAINTS);
-    } finally {
-      setConstraintsLoading(false);
+      console.error('Error fetching constraints:', error);
     }
   };
 
-  const toggleConstraint = (id: string) => {
-    setConstraints(constraints.map(c =>
-      c.id === id ? { ...c, enabled: !c.enabled } : c
-    ));
+  const toggleConstraint = (constraintId: string) => {
+    setConstraints(prev => 
+      prev.map(c => c.id === constraintId ? { ...c, enabled: !c.enabled } : c)
+    );
   };
 
-  // Poll task status for real-time updates
-  const pollTaskStatus = async (taskId: string) => {
-    const maxPolls = 120; // 10 minutes max (5s interval)
-    let pollCount = 0;
+  const handleSave = async () => {
+    try {
+      const authToken = Buffer.from(JSON.stringify(user)).toString('base64');
+      const response = await fetch('/api/constraints', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          department_id: user.department_id,
+          constraints
+        })
+      });
 
-    const poll = async () => {
-      try {
-        const authToken = Buffer.from(JSON.stringify(user)).toString('base64');
-        const response = await fetch(`/api/scheduler/status/${taskId}`, {
-          headers: { 'Authorization': `Bearer ${authToken}` }
-        });
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.error || 'Failed to get status');
-        }
-
-        // Update progress based on status
-        let progress = 0;
-        let phase = 'INITIALIZING';
-
-        switch (data.status) {
-          case 'pending':
-            progress = 5;
-            phase = 'PENDING';
-            break;
-          case 'running':
-            progress = Math.min(50 + pollCount * 2, 90);
-            phase = data.progressMessage?.includes('CP-SAT') ? 'CP-SAT SOLVER' :
-              data.progressMessage?.includes('genetic') ? 'GENETIC OPTIMIZATION' : 'RUNNING';
-            break;
-          case 'completed':
-            progress = 100;
-            phase = 'COMPLETED';
-            break;
-          case 'failed':
-            throw new Error(data.progressMessage || 'Generation failed');
-        }
-
-        setGenerationTask({
-          status: data.status === 'completed' ? 'completed' : data.status === 'failed' ? 'failed' : 'running',
-          phase: phase,
-          progress: progress,
-          message: data.progressMessage || 'Processing...',
-          metrics: data.status === 'completed' ? {
-            strategy: hybridConfig.strategy,
-            execution_time: (pollCount * 5).toFixed(1),
-            quality_score: data.fitnessScore != null
-              ? Math.max(0, Math.min(100, (100 + Number(data.fitnessScore)))).toFixed(1)
-              : '0',
-            violations: data.hardConstraintViolations || 0
-          } : undefined
-        });
-
-        // If completed, fetch the generated timetable
-        if (data.status === 'completed' && data.timetableId) {
-          try {
-            const authToken = Buffer.from(JSON.stringify(user)).toString('base64');
-            const timetableResponse = await fetch(`/api/timetables/${data.timetableId}`, {
-              headers: { 'Authorization': `Bearer ${authToken}` }
-            });
-            if (timetableResponse.ok) {
-              const timetableData = await timetableResponse.json();
-              setGeneratedSchedule({
-                ...timetableData.data || timetableData,
-                timetable_id: data.timetableId,
-                id: data.timetableId,
-                statistics: {
-                  totalAssignments: timetableData.data?.scheduled_classes?.length || 0,
-                  theoryAssignments: timetableData.data?.scheduled_classes?.filter((s: any) => !s.is_lab_session).length || 0,
-                  labAssignments: timetableData.data?.scheduled_classes?.filter((s: any) => s.is_lab_session).length || 0
-                }
-              });
-            } else {
-              // Even if fetch fails, we have the timetableId
-              setGeneratedSchedule({
-                timetable_id: data.timetableId,
-                id: data.timetableId
-              });
-            }
-          } catch (fetchError) {
-            console.error('Failed to fetch timetable details:', fetchError);
-            setGeneratedSchedule({
-              timetable_id: data.timetableId,
-              id: data.timetableId
-            });
-          }
-          return;
-        }
-
-        // If still running, continue polling
-        if (data.status === 'running' || data.status === 'pending') {
-          pollCount++;
-          if (pollCount < maxPolls) {
-            setTimeout(poll, 5000); // Poll every 5 seconds
-          } else {
-            throw new Error('Timeout: Generation took too long');
-          }
-        }
-      } catch (error: any) {
-        setGenerationTask({
-          status: 'failed',
-          phase: 'FAILED',
-          progress: 0,
-          message: error.message || 'Failed to generate timetable'
-        });
+      if (response.ok) {
+        alert('Constraints saved successfully!');
+      } else {
+        throw new Error('Failed to save constraints');
       }
-    };
-
-    poll();
+    } catch (error: any) {
+      alert('Error saving constraints: ' + error.message);
+    }
   };
 
   const startHybridGeneration = async () => {
@@ -327,8 +262,8 @@ export default function HybridSchedulerPage() {
           message: 'Hybrid scheduler process started...'
         });
 
-        // Start polling for status
-        pollTaskStatus(data.taskId);
+        // Start real-time tracking using Realtime hook
+        setCurrentTaskId(data.taskId);
       } else {
         throw new Error(data.error || 'Failed to start generation');
       }
@@ -368,47 +303,9 @@ export default function HybridSchedulerPage() {
       });
 
       const data = await response.json();
-      if (data.success) {
-        router.push(`/faculty/timetables/view/${data.data.timetable_id}`);
-      } else {
-        throw new Error(data.error);
-      }
-    } catch (error: any) {
-      alert('Failed to save timetable: ' + error.message);
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
-  const handleSave = async () => {
-    if (!generatedSchedule) return;
-
-    // If already saved by Python scheduler, show confirmation
-    const timetableId = generatedSchedule.timetable_id || generatedSchedule.id;
-    if (timetableId) {
-      alert('Timetable already saved as draft!');
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      const response = await fetch('/api/hybrid-timetable/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...generatedSchedule,
-          status: 'draft',
-          enabled_constraint_ids: constraints.filter(c => c.enabled).map(c => c.id)
-        })
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        alert('Timetable saved successfully as draft!');
-        setGeneratedSchedule({
-          ...generatedSchedule,
-          timetable_id: data.data.timetable_id
-        });
+      if (data.success && data.timetableId) {
+        router.push(`/faculty/timetables/view/${data.timetableId}`);
       } else {
         throw new Error(data.error);
       }
@@ -541,6 +438,8 @@ export default function HybridSchedulerPage() {
                     onChange={(e) => setSelectedBatch(e.target.value)}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none"
                     disabled={batches.length === 0}
+                    aria-label="Select target batch"
+                    title="Select target batch"
                   >
                     <option value="">{batches.length === 0 ? 'No batches available' : 'Select Batch'}</option>
                     {batches.map(batch => (
@@ -558,6 +457,8 @@ export default function HybridSchedulerPage() {
                     value={academicYear}
                     onChange={(e) => setAcademicYear(e.target.value)}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none"
+                    placeholder="e.g., 2025-26"
+                    title="Academic year"
                   />
                 </div>
 
@@ -567,6 +468,8 @@ export default function HybridSchedulerPage() {
                     value={hybridConfig.strategy}
                     onChange={(e) => setHybridConfig({ ...hybridConfig, strategy: e.target.value as any })}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none"
+                    aria-label="Select hybrid strategy"
+                    title="Hybrid strategy"
                   >
                     <option value="sequential">Sequential (CP-SAT → GA)</option>
                     <option value="parallel">Parallel (Both simultaneously)</option>
@@ -583,6 +486,8 @@ export default function HybridSchedulerPage() {
                     min="1"
                     max="60"
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none"
+                    aria-label="Maximum time in minutes"
+                    title="Maximum time in minutes"
                   />
                 </div>
 
@@ -603,6 +508,8 @@ export default function HybridSchedulerPage() {
                         value={hybridConfig.cpsatTimeout}
                         onChange={(e) => setHybridConfig({ ...hybridConfig, cpsatTimeout: parseInt(e.target.value) })}
                         className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg"
+                        aria-label="CP-SAT timeout in minutes"
+                        title="CP-SAT timeout"
                       />
                     </div>
                     <div>
@@ -612,6 +519,8 @@ export default function HybridSchedulerPage() {
                         value={hybridConfig.gaPopulationSize}
                         onChange={(e) => setHybridConfig({ ...hybridConfig, gaPopulationSize: parseInt(e.target.value) })}
                         className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg"
+                        aria-label="GA population size"
+                        title="GA population size"
                       />
                     </div>
                     <div>
@@ -621,6 +530,8 @@ export default function HybridSchedulerPage() {
                         value={hybridConfig.gaMaxGenerations}
                         onChange={(e) => setHybridConfig({ ...hybridConfig, gaMaxGenerations: parseInt(e.target.value) })}
                         className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg"
+                        aria-label="GA maximum generations"
+                        title="GA max generations"
                       />
                     </div>
                   </div>
@@ -696,64 +607,64 @@ export default function HybridSchedulerPage() {
                 <h3 className="text-lg font-bold text-gray-900">Algorithm Execution</h3>
                 <button
                   onClick={startHybridGeneration}
-                  disabled={generationTask.status === 'running' || !selectedBatch}
+                  disabled={realtimeTask.status === 'running' || !selectedBatch}
                   className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#4D869C] to-[#7AB2B2] text-white rounded-xl font-semibold hover:shadow-lg disabled:opacity-50 transition-all"
                 >
                   <Play size={20} /> Start Hybrid Generation
                 </button>
               </div>
 
-              {generationTask.status !== 'idle' && (
+              {realtimeTask.status !== 'idle' && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-gray-700">Progress</span>
-                    <span className="text-sm font-bold text-gray-900">{generationTask.progress}%</span>
+                    <span className="text-sm font-bold text-gray-900">{realtimeTask.progress}%</span>
                   </div>
 
                   <div className="w-full bg-gray-200 rounded-full h-3">
                     <div
-                      className={`h-3 rounded-full transition-all duration-500 ${generationTask.status === 'completed' ? 'bg-green-500' :
-                        generationTask.status === 'failed' ? 'bg-red-500' :
+                      className={`h-3 rounded-full transition-all duration-500 ${realtimeTask.status === 'completed' ? 'bg-green-500' :
+                        realtimeTask.status === 'failed' ? 'bg-red-500' :
                           'bg-gradient-to-r from-[#4D869C] to-[#7AB2B2]'
                         }`}
-                      style={{ width: `${generationTask.progress}%` }}
+                      {...({ style: { width: `${realtimeTask.progress}%` } } as any)}
                     />
                   </div>
 
                   <div className="flex items-start gap-3 p-4 rounded-lg bg-gray-50">
-                    {generationTask.status === 'completed' && <CheckCircle size={20} className="text-green-500 flex-shrink-0 mt-0.5" />}
-                    {generationTask.status === 'failed' && <AlertCircle size={20} className="text-red-500 flex-shrink-0 mt-0.5" />}
-                    {generationTask.status === 'running' && <Clock size={20} className="text-[#4D869C] flex-shrink-0 mt-0.5 animate-spin" />}
+                    {realtimeTask.status === 'completed' && <CheckCircle size={20} className="text-green-500 flex-shrink-0 mt-0.5" />}
+                    {realtimeTask.status === 'failed' && <AlertCircle size={20} className="text-red-500 flex-shrink-0 mt-0.5" />}
+                    {realtimeTask.status === 'running' && <Clock size={20} className="text-[#4D869C] flex-shrink-0 mt-0.5 animate-spin" />}
                     <div>
-                      <div className="text-sm font-medium text-gray-900">{generationTask.phase}</div>
-                      <div className="text-xs text-gray-500">{generationTask.message}</div>
+                      <div className="text-sm font-medium text-gray-900">{realtimeTask.phase}</div>
+                      <div className="text-xs text-gray-500">{realtimeTask.message}</div>
                     </div>
                   </div>
 
-                  {generationTask.metrics && (
+                  {realtimeTask.metrics && (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                       <div className="p-3 bg-blue-50 rounded-lg">
                         <div className="text-xs text-blue-600 font-medium">Strategy</div>
-                        <div className="text-lg font-bold text-gray-900 capitalize">{generationTask.metrics.strategy}</div>
+                        <div className="text-lg font-bold text-gray-900 capitalize">{realtimeTask.metrics.strategy}</div>
                       </div>
                       <div className="p-3 bg-green-50 rounded-lg">
                         <div className="text-xs text-green-600 font-medium">Execution Time</div>
-                        <div className="text-lg font-bold text-gray-900">{generationTask.metrics.execution_time}s</div>
+                        <div className="text-lg font-bold text-gray-900">{realtimeTask.metrics.execution_time}s</div>
                       </div>
                       <div className="p-3 bg-[#4D869C]/10 rounded-lg">
                         <div className="text-xs text-[#4D869C] font-medium">Quality Score</div>
-                        <div className="text-lg font-bold text-gray-900">{generationTask.metrics.quality_score}%</div>
+                        <div className="text-lg font-bold text-gray-900">{realtimeTask.metrics.quality_score}%</div>
                       </div>
                       <div className="p-3 bg-orange-50 rounded-lg">
                         <div className="text-xs text-orange-600 font-medium">Violations</div>
-                        <div className="text-lg font-bold text-gray-900">{generationTask.metrics.violations || 0}</div>
+                        <div className="text-lg font-bold text-gray-900">{realtimeTask.metrics.violations || 0}</div>
                       </div>
                     </div>
                   )}
                 </div>
               )}
 
-              {generationTask.status === 'completed' && generatedSchedule && (
+              {realtimeTask.status === 'completed' && generatedSchedule && (
                 <div className="flex gap-3 mt-6">
                   <button
                     onClick={handleViewTimetable}

@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import {
   getActiveMasterTimetables,
   getResourceOccupation,
@@ -17,6 +18,9 @@ import {
  */
 export async function GET(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const searchParams = request.nextUrl.searchParams;
     const collegeId = searchParams.get('college_id');
     const departmentId = searchParams.get('department_id');

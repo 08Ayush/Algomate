@@ -413,6 +413,7 @@ const PreferencesPage: React.FC = () => {
                                 onChange={(e) => setMaxHoursPerDay(parseInt(e.target.value) || 6)}
                                 min={1}
                                 max={8}
+                                placeholder="6"
                                 className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none"
                             />
                         </div>
@@ -440,7 +441,7 @@ const PreferencesPage: React.FC = () => {
                         >
                             <div className="flex items-center justify-between mb-6">
                                 <h3 className="text-xl font-bold text-gray-900">Add Subject Qualification</h3>
-                                <button onClick={() => setShowAddQualification(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                                <button onClick={() => setShowAddQualification(false)} className="p-2 hover:bg-gray-100 rounded-lg" title="Close">
                                     <X size={20} />
                                 </button>
                             </div>
@@ -465,6 +466,7 @@ const PreferencesPage: React.FC = () => {
                                     <select
                                         value={selectedSubjectId}
                                         onChange={(e) => setSelectedSubjectId(e.target.value)}
+                                        aria-label="Select subject"
                                         className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none"
                                     >
                                         <option value="">Select a subject</option>
@@ -482,6 +484,7 @@ const PreferencesPage: React.FC = () => {
                                         max={5}
                                         value={proficiency}
                                         onChange={(e) => setProficiency(parseInt(e.target.value))}
+                                        title="Proficiency level"
                                         className="w-full"
                                     />
                                     <div className="flex justify-between text-sm text-gray-500 mt-1">
@@ -498,6 +501,7 @@ const PreferencesPage: React.FC = () => {
                                         value={experience}
                                         onChange={(e) => setExperience(parseInt(e.target.value) || 0)}
                                         min={0}
+                                        placeholder="Years of experience"
                                         className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none"
                                     />
                                 </div>

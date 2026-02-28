@@ -100,6 +100,25 @@ export class SupabaseUserRepository implements IUserRepository {
     }
 
     /**
+     * Find user by college UID - Direct (Skip Cache)
+     * Used for login to avoid Redis latency overhead (~76ms saved)
+     */
+    async findByCollegeUidDirect(collegeUid: string): Promise<User | null> {
+        const { data, error } = await this.db
+            .from('users')
+            .select('*')
+            .eq('college_uid', collegeUid)
+            .single();
+
+        if (error) {
+            if (error.code === 'PGRST116') return null; // Not found
+            throw error;
+        }
+
+        return this.mapToEntity(data);
+    }
+
+    /**
      * Find all users
      */
     async findAll(): Promise<User[]> {

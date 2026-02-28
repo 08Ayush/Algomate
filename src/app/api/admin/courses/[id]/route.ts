@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
 
 // Create server-side supabase client with service role key
@@ -13,50 +14,14 @@ const supabaseAdmin = createClient(
   }
 );
 
-// Helper function to get user from Authorization header
-async function getAuthenticatedUser(request: NextRequest) {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  try {
-    const userString = Buffer.from(token, 'base64').toString();
-    const user = JSON.parse(userString);
-    
-    // Verify user exists and is active admin
-    const { data: dbUser, error } = await supabaseAdmin
-      .from('users')
-      .select('id, college_id, role, is_active')
-      .eq('id', user.id)
-      .eq('is_active', true)
-      .in('role', ['admin', 'college_admin'])
-      .single();
-
-    if (error || !dbUser) {
-      return null;
-    }
-
-    return dbUser;
-  } catch {
-    return null;
-  }
-}
-
 // PUT - Update existing course
 export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await getAuthenticatedUser(request);
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized. Please log in as an admin.' },
-        { status: 401 }
-      );
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     const { title, code, nature_of_course, intake, duration_years } = await request.json();
 
@@ -140,13 +105,8 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await getAuthenticatedUser(request);
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized. Please log in as an admin.' },
-        { status: 401 }
-      );
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     // Verify the course belongs to the user's college
     const { data: existingCourse } = await supabaseAdmin

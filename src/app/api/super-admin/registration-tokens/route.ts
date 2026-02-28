@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireRoles } from '@/lib/auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -9,6 +10,9 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 // GET - Fetch all registration tokens (Super Admin only)
 export async function GET(request: NextRequest) {
   try {
+    const user = requireRoles(request, ['super_admin']);
+    if (user instanceof NextResponse) return user;
+
     const { data: tokens, error } = await supabase
       .from('registration_tokens')
       .select(`
@@ -43,6 +47,9 @@ export async function GET(request: NextRequest) {
 // POST - Create a new registration token
 export async function POST(request: NextRequest) {
   try {
+    const user = requireRoles(request, ['super_admin']);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
     const {
       institution_name,

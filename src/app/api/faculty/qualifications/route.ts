@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
 
 // Create server-side supabase client with service role key
@@ -13,64 +14,12 @@ const supabaseAdmin = createClient(
   }
 );
 
-// Helper function to get user from Authorization header
-async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  try {
-    // Decode and verify the user token
-    const userString = Buffer.from(token, 'base64').toString();
-    const user = JSON.parse(userString);
-    
-    // Verify user exists and is active - include department_id
-    const { data: dbUser, error } = await supabaseAdmin
-      .from('users')
-      .select('id, college_id, department_id, role, faculty_type, is_active')
-      .eq('id', user.id)
-      .eq('is_active', true)
-      .single();
-
-    if (error || !dbUser) {
-      return null;
-    }
-
-    // For write operations, only allow admin/college_admin
-    if (requireAdmin && !['admin', 'college_admin'].includes(dbUser.role)) {
-      return null;
-    }
-
-    // For read operations, allow admin, college_admin, and faculty with creator/publisher types
-    if (!requireAdmin) {
-      const allowedRoles = ['admin', 'college_admin'];
-      const allowedFacultyTypes = ['creator', 'publisher'];
-      
-      if (!allowedRoles.includes(dbUser.role) && 
-          !(dbUser.role === 'faculty' && allowedFacultyTypes.includes(dbUser.faculty_type))) {
-        return null;
-      }
-    }
-
-    return dbUser;
-  } catch {
-    return null;
-  }
-}
-
 // GET: Fetch all faculty qualifications (filtered by department for creator users)
 export async function GET(request: NextRequest) {
   try {
     // Get authenticated user - allow read access for creator/publisher
-    const user = await getAuthenticatedUser(request, false);
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized. Please log in.' },
-        { status: 401 }
-      );
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     const { searchParams } = new URL(request.url);
     const facultyId = searchParams.get('faculty_id');
@@ -82,6 +31,7 @@ export async function GET(request: NextRequest) {
       facultyId
     });
 
+    // Use !inner joins to filter at DB level by college_id (avoids full table scan)
     let query = supabaseAdmin
       .from('faculty_qualified_subjects')
       .select(`
@@ -95,7 +45,7 @@ export async function GET(request: NextRequest) {
         can_handle_lab,
         can_handle_tutorial,
         created_at,
-        faculty:users!faculty_qualified_subjects_faculty_id_fkey(
+        faculty:users!faculty_qualified_subjects_faculty_id_fkey!inner(
           id,
           first_name,
           last_name,
@@ -104,7 +54,7 @@ export async function GET(request: NextRequest) {
           college_id,
           department_id
         ),
-        subject:subjects(
+        subject:subjects!inner(
           id,
           name,
           code,
@@ -117,10 +67,17 @@ export async function GET(request: NextRequest) {
           department_id
         )
       `)
+      .eq('faculty.college_id', user.college_id)
+      .eq('subject.college_id', user.college_id)
       .order('created_at', { ascending: false });
 
     if (facultyId) {
       query = query.eq('faculty_id', facultyId);
+    }
+
+    // Filter by department at DB level for non-admin users
+    if (user.role !== 'admin' && user.role !== 'college_admin' && user.department_id) {
+      query = query.eq('faculty.department_id', user.department_id);
     }
 
     const { data, error } = await query;
@@ -134,23 +91,8 @@ export async function GET(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // Filter by college and department based on user role
-    let filteredData = data || [];
-    
-    // Always filter by college
-    filteredData = filteredData.filter(qual => {
-      const faculty = Array.isArray(qual.faculty) ? qual.faculty[0] : qual.faculty;
-      const subject = Array.isArray(qual.subject) ? qual.subject[0] : qual.subject;
-      return faculty?.college_id === user.college_id && subject?.college_id === user.college_id;
-    });
-
-    // Filter by department for non-admin users
+    const filteredData = data || [];
     if (user.role !== 'admin' && user.role !== 'college_admin' && user.department_id) {
-      filteredData = filteredData.filter(qual => {
-        const faculty = Array.isArray(qual.faculty) ? qual.faculty[0] : qual.faculty;
-        const subject = Array.isArray(qual.subject) ? qual.subject[0] : qual.subject;
-        return faculty?.department_id === user.department_id && subject?.department_id === user.department_id;
-      });
       console.log(`🔍 Filtered to ${filteredData.length} qualifications for department ${user.department_id}`);
     }
 
@@ -174,9 +116,10 @@ export async function GET(request: NextRequest) {
 // POST: Add new faculty-subject qualification
 export async function POST(request: NextRequest) {
   try {
-    // Get authenticated user - allow creator/publisher to write
-    const user = await getAuthenticatedUser(request, false);
-    if (!user) {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
+    if (!['admin', 'college_admin', 'super_admin', 'faculty', 'creator', 'publisher'].includes(user.role)) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized. Only admins can create qualifications.' },
         { status: 403 }
@@ -209,13 +152,27 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Verify faculty exists and belongs to user's college
-    const { data: facultyCheck, error: facultyError } = await supabaseAdmin
-      .from('users')
-      .select('id, first_name, last_name, role, college_id')
-      .eq('id', faculty_id)
-      .eq('college_id', user.college_id)
-      .maybeSingle();
+    // Parallelize all 3 validation queries
+    const [{ data: facultyCheck, error: facultyError }, { data: subjectCheck, error: subjectError }, { data: existing }] = await Promise.all([
+      supabaseAdmin
+        .from('users')
+        .select('id, first_name, last_name, role, college_id')
+        .eq('id', faculty_id)
+        .eq('college_id', user.college_id)
+        .maybeSingle(),
+      supabaseAdmin
+        .from('subjects')
+        .select('id, name, code, college_id')
+        .eq('id', subject_id)
+        .eq('college_id', user.college_id)
+        .maybeSingle(),
+      supabaseAdmin
+        .from('faculty_qualified_subjects')
+        .select('id')
+        .eq('faculty_id', faculty_id)
+        .eq('subject_id', subject_id)
+        .maybeSingle()
+    ]);
 
     if (facultyError || !facultyCheck) {
       console.error('❌ Faculty not found:', faculty_id, facultyError);
@@ -224,14 +181,6 @@ export async function POST(request: NextRequest) {
         error: 'Selected faculty not found in your college'
       }, { status: 404 });
     }
-
-    // Verify subject exists and belongs to user's college
-    const { data: subjectCheck, error: subjectError } = await supabaseAdmin
-      .from('subjects')
-      .select('id, name, code, college_id')
-      .eq('id', subject_id)
-      .eq('college_id', user.college_id)
-      .maybeSingle();
 
     if (subjectError || !subjectCheck) {
       console.error('❌ Subject not found:', subject_id, subjectError);
@@ -242,14 +191,6 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('✅ Validation passed - Faculty:', facultyCheck.first_name, facultyCheck.last_name, '| Subject:', subjectCheck.name);
-
-    // Check if qualification already exists
-    const { data: existing } = await supabaseAdmin
-      .from('faculty_qualified_subjects')
-      .select('id')
-      .eq('faculty_id', faculty_id)
-      .eq('subject_id', subject_id)
-      .maybeSingle();
 
     if (existing) {
       return NextResponse.json({
@@ -327,9 +268,10 @@ export async function POST(request: NextRequest) {
 // DELETE: Remove faculty-subject qualification
 export async function DELETE(request: NextRequest) {
   try {
-    // Get authenticated user - allow creator/publisher to delete
-    const user = await getAuthenticatedUser(request, false);
-    if (!user) {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
+    if (!['admin', 'college_admin', 'super_admin', 'faculty', 'creator', 'publisher'].includes(user.role)) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized. Please log in.' },
         { status: 403 }

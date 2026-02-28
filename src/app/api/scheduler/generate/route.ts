@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from '@/lib/auth';
 
 /**
  * Scheduler API - Proxy to FastAPI Backend
@@ -28,6 +29,9 @@ interface TaskResponse {
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     // Parse request body
     const body: GenerateRequest = await request.json();
     const { batchId, collegeId, config } = body;
@@ -37,23 +41,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { error: "Missing required fields: batchId, collegeId" },
         { status: 400 }
       );
-    }
-
-    // Get user from auth header (base64 encoded user object from frontend)
-    const authHeader = request.headers.get("Authorization");
-    let userId = "";
-
-    if (authHeader?.startsWith("Bearer ")) {
-      try {
-        const token = authHeader.substring(7);
-        const decoded = Buffer.from(token, "base64").toString();
-        const userData = JSON.parse(decoded);
-        userId = userData.id;
-      } catch {
-        return NextResponse.json({ error: "Invalid auth token" }, { status: 401 });
-      }
-    } else {
-      return NextResponse.json({ error: "Authorization required" }, { status: 401 });
     }
 
     console.log(`📅 Proxying generate request to FastAPI: batch=${batchId}`);
@@ -67,7 +54,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       body: JSON.stringify({
         batch_id: batchId,
         college_id: collegeId,
-        user_id: userId,
+        user_id: user.id,
         cpsat_time_limit: config?.cpsatTimeLimit || 300,
         ga_generations: config?.gaGenerations || 100,
         population_size: config?.populationSize || 50,

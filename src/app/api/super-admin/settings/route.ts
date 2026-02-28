@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireRoles } from '@/lib/auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -9,6 +10,10 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 // GET - Fetch all system settings
 export async function GET(request: NextRequest) {
     try {
+        // Only super_admin can access system settings
+        const user = requireRoles(request, ['super_admin']);
+        if (user instanceof NextResponse) return user;
+
         const { searchParams } = new URL(request.url);
         const category = searchParams.get('category');
 
@@ -68,6 +73,10 @@ export async function GET(request: NextRequest) {
 // POST/PUT - Update system settings (bulk update)
 export async function POST(request: NextRequest) {
     try {
+        // Only super_admin can update system settings
+        const user = requireRoles(request, ['super_admin']);
+        if (user instanceof NextResponse) return user;
+
         const body = await request.json();
         const { settings } = body;
 
@@ -124,6 +133,10 @@ export async function POST(request: NextRequest) {
 // PATCH - Update a single setting
 export async function PATCH(request: NextRequest) {
     try {
+        // Auth check
+        const user = requireRoles(request, ['super_admin']);
+        if (user instanceof NextResponse) return user;
+
         const body = await request.json();
         const { key, value, description, category } = body;
 

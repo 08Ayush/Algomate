@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/shared/database/client';
+import { requireAuth } from '@/lib/auth';
 
 /**
  * Make Bucket Live for Students API
@@ -10,19 +11,16 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const { id } = await params;
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
 
     const body = await request.json();
     const { is_live, admin_id } = body;
 
-    // Validate admin_id
-    if (!admin_id) {
-      return NextResponse.json({ error: 'Admin ID is required' }, { status: 400 });
-    }
+    // Use admin_id from body if provided, otherwise use authenticated user id
+    const adminId = admin_id || user.id;
 
     // First, check if bucket has subjects added (using bucket_subjects table for new workflow)
     const { data: bucketSubjects, error: checkError } = await supabaseAdmin
@@ -58,9 +56,9 @@ export async function POST(
 
     if (is_live) {
       updateData.student_live_at = new Date().toISOString();
-      updateData.student_live_by = admin_id;
+      updateData.student_live_by = adminId;
       updateData.published_at = new Date().toISOString();
-      updateData.published_by = admin_id;
+      updateData.published_by = adminId;
     } else {
       // Making it not live for students
       updateData.student_live_at = null;
@@ -108,7 +106,7 @@ export async function POST(
             bucketId: bucket.id,
             bucketName: bucket.bucket_name,
             batchId: batchId,
-            publisherId: admin_id,
+            publisherId: adminId,
             publisherName: 'College Admin' // Placeholder as we don't have name readily available
           });
         }

@@ -1043,17 +1043,6 @@ CREATE TABLE exam_notification_tracking (
     read_at TIMESTAMPTZ
 );
 
--- Submission Question Grades - Detailed grading for each question in assignments
-CREATE TABLE submission_question_grades (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    submission_id UUID NOT NULL REFERENCES assignment_submissions(id) ON DELETE CASCADE,
-    question_id UUID NOT NULL REFERENCES assignment_questions(id) ON DELETE CASCADE,
-    obtained_marks NUMERIC(5, 2) DEFAULT 0,
-    feedback TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(submission_id, question_id)
-);
-
 -- ============================================================================
 -- 6. MULTI-COLLEGE OPTIMIZED INDEXES
 -- ============================================================================
@@ -2516,19 +2505,6 @@ END $$;
 -- ============================================================================
 
 -- Helper function to get the current user's college ID from the session
-CREATE OR REPLACE FUNCTION current_app_college_id() RETURNS UUID AS $$
-BEGIN
-    RETURN NULLIF(current_setting('app.current_college_id', TRUE), '')::UUID;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Helper function to get the current user's role
-CREATE OR REPLACE FUNCTION current_app_role() RETURNS VARCHAR AS $$
-BEGIN
-    RETURN NULLIF(current_setting('app.current_role', TRUE), '');
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
 -- Enable RLS on Sensitive Tables
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE departments ENABLE ROW LEVEL SECURITY;

@@ -1,53 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient } from '@/shared/database/server';
 import { asyncHandler } from '@/shared/middleware/error-handler';
 
-// Helper function to get user from Authorization header
-async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  try {
-    const userString = Buffer.from(token, 'base64').toString();
-    const user = JSON.parse(userString);
-    const supabase = createClient();
-
-    const { data: dbUser, error } = await supabase
-      .from('users')
-      .select('id, college_id, role, faculty_type, is_active')
-      .eq('id', user.id)
-      .eq('is_active', true)
-      .single();
-
-    if (error || !dbUser) return null;
-
-    if (requireAdmin && !['admin', 'college_admin', 'super_admin'].includes(dbUser.role)) return null;
-
-    if (!requireAdmin) {
-      const allowedRoles = ['admin', 'college_admin', 'super_admin'];
-      const allowedFacultyTypes = ['creator', 'publisher'];
-      if (!allowedRoles.includes(dbUser.role) &&
-        !(dbUser.role === 'faculty' && allowedFacultyTypes.includes(dbUser.faculty_type))) return null;
-    }
-
-    return dbUser;
-  } catch {
-    return null;
-  }
-}
-
 export const GET = asyncHandler(
   async (request: NextRequest): Promise<NextResponse<any>> => {
-    const user = await getAuthenticatedUser(request, false);
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized. Please log in as an admin.' },
-        { status: 401 }
-      );
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     const { searchParams } = new URL(request.url);
     const queryCollegeId = searchParams.get('college_id');
@@ -86,8 +45,10 @@ export const GET = asyncHandler(
 
 export const POST = asyncHandler(
   async (request: NextRequest): Promise<NextResponse<any>> => {
-    const user = await getAuthenticatedUser(request, true);
-    if (!user) {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
+    if (!['admin', 'college_admin', 'super_admin'].includes(user.role)) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized. Only admins can create departments.' },
         { status: 403 }

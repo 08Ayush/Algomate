@@ -423,6 +423,7 @@ export default function NEPCurriculumPage() {
               <select
                 value={selectedCourse}
                 onChange={(e) => { setSelectedCourse(e.target.value); setSelectedSemester(1); }}
+                aria-label="Select course"
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none"
               >
                 {courses.length === 0 ? (
@@ -451,6 +452,7 @@ export default function NEPCurriculumPage() {
               <select
                 value={selectedSemester}
                 onChange={(e) => setSelectedSemester(parseInt(e.target.value))}
+                aria-label="Select semester"
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none"
               >
                 {semesters.map((sem) => (
@@ -474,6 +476,7 @@ export default function NEPCurriculumPage() {
                 <button
                   onClick={fetchBucketsAndSubjects}
                   disabled={refreshing}
+                  title="Refresh"
                   className="p-2 text-gray-500 hover:text-[#4D869C] hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50"
                 >
                   <RefreshCw size={18} className={refreshing ? 'animate-spin' : ''} />
@@ -580,6 +583,7 @@ export default function NEPCurriculumPage() {
                                     <button
                                       onClick={(e) => { e.stopPropagation(); removeSubjectFromBucket(bucket.id, subject.id); }}
                                       disabled={savingBucket === bucket.id}
+                                      title="Remove subject"
                                       className="p-3 text-red-600 hover:bg-red-100 rounded-xl transition-all disabled:opacity-50 border border-red-200"
                                     >
                                       <Minus size={18} />
@@ -611,6 +615,7 @@ export default function NEPCurriculumPage() {
                                     <button
                                       onClick={(e) => { e.stopPropagation(); addSubjectToBucket(bucket.id, subject.id); }}
                                       disabled={savingBucket === bucket.id}
+                                      title="Add subject"
                                       className="p-3 text-green-600 hover:bg-green-100 rounded-xl transition-all disabled:opacity-50 border border-green-200"
                                     >
                                       <Plus size={18} />

@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { 
   fetchConstraintRules, 
   validateConstraints, 
@@ -17,6 +18,9 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // Save Hybrid Generated Timetable
 export async function POST(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
     let { 
       semester, 

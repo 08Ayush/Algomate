@@ -162,7 +162,7 @@ const StudentsPage: React.FC = () => {
                 <div className="flex justify-between items-center">
                     <div><h1 className="text-4xl font-bold text-gray-900 mb-2">Students</h1><p className="text-gray-600">Manage student records and information</p></div>
                     <div className="flex gap-3">
-                        <button onClick={fetchData} className="flex items-center gap-2 px-4 py-3 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 bg-white"><RefreshCw size={18} className={loading ? 'animate-spin' : ''} /></button>
+                        <button onClick={fetchData} className="flex items-center gap-2 px-4 py-3 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 bg-white" title="Refresh"><RefreshCw size={18} className={loading ? 'animate-spin' : ''} /></button>
                         <button onClick={() => { resetForm(); setShowForm(true); }} className="flex items-center gap-2 px-5 py-3 bg-[#4D869C] text-white rounded-xl font-semibold hover:shadow-lg"><Plus size={18} /> Add Student</button>
                     </div>
                 </div>
@@ -173,7 +173,7 @@ const StudentsPage: React.FC = () => {
                             <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
                             <input type="text" placeholder="Search students..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none" />
                         </div>
-                        <select value={departmentFilter} onChange={(e) => setDepartmentFilter(e.target.value)} className="px-4 py-3 border border-gray-200 rounded-xl min-w-[200px]">
+                        <select value={departmentFilter} onChange={(e) => setDepartmentFilter(e.target.value)} className="px-4 py-3 border border-gray-200 rounded-xl min-w-[200px]" aria-label="Filter by department">
                             <option value="all">All Departments</option>
                             {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                         </select>
@@ -218,8 +218,8 @@ const StudentsPage: React.FC = () => {
                                         <td className="px-6 py-4"><span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">{student.batch?.name ? `${student.batch.name} (${student.batch.section})` : '-'}</span></td>
                                         <td className="px-6 py-4"><span className={`px-3 py-1 rounded-full text-xs font-bold ${student.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{student.is_active ? 'Active' : 'Inactive'}</span></td>
                                         <td className="px-6 py-4"><div className="flex gap-2">
-                                            <button onClick={() => handleEdit(student)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={16} /></button>
-                                            <button onClick={() => handleDelete(student.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                                            <button onClick={() => handleEdit(student)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit"><Edit size={16} /></button>
+                                            <button onClick={() => handleDelete(student)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 size={16} /></button>
                                         </div></td>
                                     </motion.tr>
                                 ))}
@@ -233,35 +233,35 @@ const StudentsPage: React.FC = () => {
                         <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
                             <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50/50 sticky top-0">
                                 <h3 className="text-lg font-bold text-gray-800">{editingStudent ? 'Edit Student' : 'Add Student'}</h3>
-                                <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+                                <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600" title="Close"><X size={20} /></button>
                             </div>
                             <form onSubmit={handleSubmit} className="p-6 space-y-4">
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label><input className="w-full px-4 py-2 border rounded-lg" value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} required /></div>
-                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label><input className="w-full px-4 py-2 border rounded-lg" value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} required /></div>
+                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label><input className="w-full px-4 py-2 border rounded-lg" value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} required placeholder="First name" /></div>
+                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label><input className="w-full px-4 py-2 border rounded-lg" value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} required placeholder="Last name" /></div>
                                 </div>
-                                <div><label className="block text-sm font-medium text-gray-700 mb-1">Email *</label><input type="email" className="w-full px-4 py-2 border rounded-lg" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required /></div>
+                                <div><label className="block text-sm font-medium text-gray-700 mb-1">Email *</label><input type="email" className="w-full px-4 py-2 border rounded-lg" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required placeholder="Email" /></div>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Phone</label><input className="w-full px-4 py-2 border rounded-lg" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
-                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Student ID</label><input className="w-full px-4 py-2 border rounded-lg" value={form.student_id} onChange={(e) => setForm({ ...form, student_id: e.target.value })} /></div>
+                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Phone</label><input className="w-full px-4 py-2 border rounded-lg" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="Phone number" /></div>
+                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Student ID</label><input className="w-full px-4 py-2 border rounded-lg" value={form.student_id} onChange={(e) => setForm({ ...form, student_id: e.target.value })} placeholder="Student ID" /></div>
                                 </div>
-                                {!editingStudent && <div><label className="block text-sm font-medium text-gray-700 mb-1">Password *</label><input type="password" className="w-full px-4 py-2 border rounded-lg" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required={!editingStudent} /></div>}
+                                {!editingStudent && <div><label className="block text-sm font-medium text-gray-700 mb-1">Password *</label><input type="password" className="w-full px-4 py-2 border rounded-lg" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required={!editingStudent} placeholder="Password" /></div>}
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Admission Year</label><input type="number" className="w-full px-4 py-2 border rounded-lg" value={form.admission_year} onChange={(e) => setForm({ ...form, admission_year: parseInt(e.target.value) })} /></div>
-                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Semester</label><input type="number" min="1" max="8" className="w-full px-4 py-2 border rounded-lg" value={form.current_semester} onChange={(e) => setForm({ ...form, current_semester: parseInt(e.target.value) })} /></div>
+                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Admission Year</label><input type="number" className="w-full px-4 py-2 border rounded-lg" value={form.admission_year} onChange={(e) => setForm({ ...form, admission_year: parseInt(e.target.value) })} placeholder="Admission year" /></div>
+                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Semester</label><input type="number" min="1" max="8" className="w-full px-4 py-2 border rounded-lg" value={form.current_semester} onChange={(e) => setForm({ ...form, current_semester: parseInt(e.target.value) })} placeholder="Semester" /></div>
                                 </div>
                                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
-                                    <select className="w-full px-4 py-2 border rounded-lg" value={form.department_id} onChange={(e) => setForm({ ...form, department_id: e.target.value })}>
+                                    <select className="w-full px-4 py-2 border rounded-lg" value={form.department_id} onChange={(e) => setForm({ ...form, department_id: e.target.value })} aria-label="Department">
                                         <option value="">Select</option>{departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                                     </select>
                                 </div>
                                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Course</label>
-                                    <select className="w-full px-4 py-2 border rounded-lg" value={form.course_id} onChange={(e) => setForm({ ...form, course_id: e.target.value })}>
+                                    <select className="w-full px-4 py-2 border rounded-lg" value={form.course_id} onChange={(e) => setForm({ ...form, course_id: e.target.value })} aria-label="Course">
                                         <option value="">Select</option>{courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
                                     </select>
                                 </div>
                                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Batch</label>
-                                    <select className="w-full px-4 py-2 border rounded-lg" value={form.batch_id} onChange={(e) => setForm({ ...form, batch_id: e.target.value })}>
+                                    <select className="w-full px-4 py-2 border rounded-lg" value={form.batch_id} onChange={(e) => setForm({ ...form, batch_id: e.target.value })} aria-label="Batch">
                                         <option value="">Select Batch/Section</option>
                                         {batches.map(b => (
                                             <option key={b.id} value={b.id}>

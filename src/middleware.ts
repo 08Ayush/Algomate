@@ -1,10 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { updateSession } from '@/shared/database/middleware';
 import { rateLimitMiddleware } from '@/shared/rate-limit/middleware';
 import { requestIdMiddleware, HEADER_REQUEST_ID } from '@/middleware/request-id';
 import { requestLoggingMiddleware } from '@/middleware/logging';
 import { securityHeadersMiddleware } from '@/middleware/security-headers';
 import { corsMiddleware } from '@/middleware/cors';
+import { authenticateAndCache, HEADER_AUTH_USER } from '@/lib/auth';
 
 export async function middleware(request: NextRequest) {
     // 1. Request ID (Always run, useful for tracing)
@@ -32,31 +32,58 @@ export async function middleware(request: NextRequest) {
         }
     }
 
-    // 5. Supabase Auth Middleware & Session (The main handler)
-    // This creates the actual "next" response that we will build upon
-    const response = await updateSession(request);
+    // 5. Authenticate user and inject into REQUEST headers
+    // ---------------------------------------------------------------
+    // CRITICAL: In Next.js middleware, to pass data forward to API route
+    // handlers, you MUST set headers on the REQUEST (not the response).
+    // Response headers go back to the browser, not to the route handler.
+    // We do this via NextResponse.next({ request: { headers } }).
+    // ---------------------------------------------------------------
+    if (request.nextUrl.pathname.startsWith('/api/')) {
+        const authHeader = request.headers.get('authorization');
 
-    // 6. Merge Headers from all middleware steps
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.split(' ')[1];
+
+            if (token) {
+                const user = await authenticateAndCache(token);
+
+                if (user) {
+                    requestHeaders.set(HEADER_AUTH_USER, JSON.stringify(user));
+                }
+            }
+        }
+    }
+
+    // 6. Create the response with modified REQUEST headers
+    // This forwards the injected auth user to downstream API route handlers
+    const response = NextResponse.next({
+        request: {
+            headers: requestHeaders,
+        },
+    });
+
+    // 7. Merge Response Headers from all middleware steps
 
     // Merge Request ID headers
-    requestIdResponse.headers.forEach((value, key) => {
+    requestIdResponse.headers.forEach((value: string, key: string) => {
         response.headers.set(key, value);
     });
 
     // Merge CORS headers
-    corsResponse.headers.forEach((value, key) => {
+    corsResponse.headers.forEach((value: string, key: string) => {
         response.headers.set(key, value);
     });
 
     // Merge Rate Limit headers
-    rateLimitResponse.headers.forEach((value, key) => {
+    rateLimitResponse.headers.forEach((value: string, key: string) => {
         response.headers.set(key, value);
     });
 
-    // 7. Apply Security Headers (Helmet-like)
+    // 8. Apply Security Headers (Helmet-like)
     // We apply this to the final response
     const securityResponse = securityHeadersMiddleware(request);
-    securityResponse.headers.forEach((value, key) => {
+    securityResponse.headers.forEach((value: string, key: string) => {
         response.headers.set(key, value);
     });
 

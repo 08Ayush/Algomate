@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -7,47 +8,12 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Helper function to get authenticated user
-async function getAuthenticatedUser(request: NextRequest) {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  try {
-    const userString = Buffer.from(token, 'base64').toString();
-    const user = JSON.parse(userString);
-
-    // Verify user exists and is active - include department_id
-    const { data: dbUser, error } = await supabase
-      .from('users')
-      .select('id, department_id, role, is_active')
-      .eq('id', user.id)
-      .eq('is_active', true)
-      .single();
-
-    if (error || !dbUser) {
-      return null;
-    }
-
-    return dbUser;
-  } catch {
-    return null;
-  }
-}
-
 // GET - Fetch batches by department
 export async function GET(request: NextRequest) {
   try {
     // Get authenticated user
-    const user = await getAuthenticatedUser(request);
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized. Please log in.' },
-        { status: 401 }
-      );
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     const { searchParams } = new URL(request.url);
     const departmentCode = searchParams.get('department_code');
@@ -211,6 +177,9 @@ export async function GET(request: NextRequest) {
 // POST - Create a new batch
 export async function POST(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
     const {
       name,
@@ -228,6 +197,7 @@ export async function POST(request: NextRequest) {
 
     // Get department ID if code is provided
     let deptId = department_id;
+    let collegeId: string | undefined;
     if (!deptId && department_code) {
       const { data: deptData } = await supabase
         .from('departments')
@@ -236,6 +206,7 @@ export async function POST(request: NextRequest) {
         .single();
 
       deptId = deptData?.id;
+      collegeId = deptData?.college_id;
     }
 
     if (!deptId) {
@@ -245,14 +216,16 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Get college_id from department
-    const { data: deptData } = await supabase
-      .from('departments')
-      .select('college_id')
-      .eq('id', deptId)
-      .single();
+    // Get college_id from department (only if not already fetched above)
+    if (!collegeId) {
+      const { data: deptData } = await supabase
+        .from('departments')
+        .select('college_id')
+        .eq('id', deptId)
+        .single();
 
-    const collegeId = deptData?.college_id;
+      collegeId = deptData?.college_id;
+    }
 
     // Insert new batch
     const { data: batchData, error: batchError } = await supabase
@@ -299,6 +272,9 @@ export async function POST(request: NextRequest) {
 // DELETE - Delete a batch
 export async function DELETE(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const { searchParams } = new URL(request.url);
     const batchId = searchParams.get('id');
 

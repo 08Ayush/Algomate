@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { emailService } from '@/services/email/emailService';
 
 export async function POST(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const { to } = await request.json();
 
     console.log('🧪 Testing email configuration...');
@@ -65,6 +69,9 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const isConfigured = !!(
       process.env.SMTP_HOST &&
       process.env.SMTP_USER &&

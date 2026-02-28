@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
 
 // Create server-side supabase client with service role key
@@ -13,43 +14,13 @@ const supabaseAdmin = createClient(
   }
 );
 
-// Helper function to get user from Authorization header
-async function getAuthenticatedUser(request: NextRequest) {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  try {
-    const userString = Buffer.from(token, 'base64').toString();
-    const user = JSON.parse(userString);
-
-    const { data: dbUser, error } = await supabaseAdmin
-      .from('users')
-      .select('id, college_id, role, is_active')
-      .eq('id', user.id)
-      .eq('is_active', true)
-      .in('role', ['admin', 'college_admin'])
-      .single();
-
-    if (error || !dbUser) {
-      return null;
-    }
-
-    return dbUser;
-  } catch {
-    return null;
-  }
-}
-
 // PUT - Update subject
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getAuthenticatedUser(request);
+    const user = requireAuth(request);
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized. Only admins can update subjects.' },
@@ -173,7 +144,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getAuthenticatedUser(request);
+    const user = requireAuth(request);
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized. Only admins can delete subjects.' },

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
 import { GetFacultyDashboardStatsUseCase, SupabaseDashboardQueryService } from '@/modules/dashboard';
 
@@ -9,31 +10,10 @@ const supabase = createClient(
 const queryService = new SupabaseDashboardQueryService(supabase);
 const getStatsUseCase = new GetFacultyDashboardStatsUseCase(queryService);
 
-async function getAuthenticatedUser(request: NextRequest) {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  const token = authHeader.substring(7);
-  try {
-    const userString = Buffer.from(token, 'base64').toString();
-    const user = JSON.parse(userString);
-    const { data: dbUser } = await supabase
-      .from('users')
-      .select('id, department_id, college_id, role, faculty_type, is_active')
-      .eq('id', user.id)
-      .eq('is_active', true)
-      .single();
-    return dbUser;
-  } catch {
-    return null;
-  }
-}
-
 export async function GET(request: NextRequest) {
   try {
-    const user = await getAuthenticatedUser(request);
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     console.log('📋 Fetching recent data for user:', user.id);
 

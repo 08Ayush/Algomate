@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { GetStudentDashboardStatsUseCase, SupabaseDashboardQueryService } from '@/modules/dashboard';
+import { requireAuth } from '@/lib/auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,6 +12,9 @@ const getStudentDataUseCase = new GetStudentDashboardStatsUseCase(queryService);
 
 export async function GET(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
     const userRole = searchParams.get('role');

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth } from '@/lib/auth';
 import { SaveGeneratedTimetableUseCase, SaveGeneratedTimetableDtoSchema } from '@/modules/timetable';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -10,6 +11,9 @@ const saveUseCase = new SaveGeneratedTimetableUseCase(supabase);
 // Save AI Generated Timetable
 export async function POST(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
 
     // Validate
@@ -35,6 +39,9 @@ export async function POST(request: NextRequest) {
 // Publish timetable for approval (Keeping this simple update logic here or could move to a separate UseCase)
 export async function PUT(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
     const { timetable_id, action } = body;
 

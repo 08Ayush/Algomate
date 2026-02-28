@@ -279,6 +279,7 @@ export default function AssignmentPage() {
       } finally {
         setIsSubmitting(false);
       }
+      }
     });
   };
 

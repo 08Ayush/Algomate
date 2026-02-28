@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
 import { Database } from '@/shared/database';
 import { SupabaseTimetableRepository, SupabaseScheduledClassRepository } from '@/modules/timetable/infrastructure/persistence/SupabaseTimetableRepository';
@@ -10,52 +11,12 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 
-// Helper function to get authenticated user
-interface AuthenticatedUser {
-  id: string;
-  department_id: string | null;
-  role: string | null;
-  is_active: boolean | null;
-  college_id: string | null;
-}
-
-async function getAuthenticatedUser(request: NextRequest): Promise<AuthenticatedUser | null> {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  try {
-    const userString = Buffer.from(token, 'base64').toString();
-    const user = JSON.parse(userString);
-
-    // Verify user exists and is active
-    const { data: dbUser, error } = await supabase
-      .from('users')
-      .select('id, department_id, role, is_active, college_id')
-      .eq('id', user.id)
-      .eq('is_active', true)
-      .single();
-
-    if (error || !dbUser) {
-      return null;
-    }
-
-    return dbUser as AuthenticatedUser;
-  } catch {
-    return null;
-  }
-}
-
 import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getAuthenticatedUser(request);
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     const { searchParams } = new URL(request.url);
     const batchId = searchParams.get('batchId') || undefined;
@@ -80,7 +41,7 @@ export async function GET(request: NextRequest) {
       `, { count: 'exact' });
 
     // Apply filters
-    if (user.role !== 'platform_admin') {
+    if (user.role !== 'super_admin') {
       query = query.eq('college_id', user.college_id ?? '');
     }
 
@@ -171,11 +132,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const user = await getAuthenticatedUser(request);
-
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     // Validate createdBy matches authenticated user or is allowed
     if (body.createdBy && body.createdBy !== user.id) {

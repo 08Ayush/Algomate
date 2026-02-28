@@ -1,4 +1,4 @@
-import Redis from 'ioredis';
+import { Redis } from '@upstash/redis';
 
 export class CacheService {
     private redis: Redis | null = null;
@@ -6,18 +6,21 @@ export class CacheService {
     private useRedis: boolean = false;
 
     constructor() {
-        // Try to connect to Redis if available
-        if (process.env.REDIS_URL) {
+        // Try to connect to Upstash Redis REST if available
+        const url = process.env.UPSTASH_REDIS_REST_URL;
+        const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+        if (url && token && url.startsWith('https://')) {
             try {
-                this.redis = new Redis(process.env.REDIS_URL);
+                this.redis = new Redis({ url, token });
                 this.useRedis = true;
-                console.log('✅ Cache: Redis connected');
+                console.log('✅ Cache: Upstash Redis REST connected');
             } catch (error) {
                 console.warn('⚠️ Cache: Redis failed, falling back to memory cache');
                 this.useRedis = false;
             }
         } else {
-            console.log('💡 Cache: Using in-memory cache (set REDIS_URL for Redis)');
+            console.log('💡 Cache: Using in-memory cache (set UPSTASH_REDIS_REST_URL + TOKEN for Redis)');
         }
     }
 
@@ -27,9 +30,10 @@ export class CacheService {
     async get<T>(key: string): Promise<T | null> {
         try {
             if (this.useRedis && this.redis) {
-                const value = await this.redis.get(key);
-                if (!value) return null;
-                return JSON.parse(value) as T;
+                // @upstash/redis auto-deserialises JSON
+                const value = await this.redis.get<T>(key);
+                if (value === null || value === undefined) return null;
+                return value;
             } else {
                 // Memory cache
                 const cached = this.memoryCache.get(key);
@@ -55,7 +59,8 @@ export class CacheService {
     async set(key: string, value: any, ttl: number = 300): Promise<void> {
         try {
             if (this.useRedis && this.redis) {
-                await this.redis.setex(key, ttl, JSON.stringify(value));
+                // @upstash/redis auto-serialises & uses { ex: seconds } for TTL
+                await this.redis.set(key, value, { ex: ttl });
             } else {
                 // Memory cache
                 this.memoryCache.set(key, {
@@ -89,7 +94,7 @@ export class CacheService {
     async deletePattern(pattern: string): Promise<void> {
         try {
             if (this.useRedis && this.redis) {
-                const keys = await this.redis.keys(pattern);
+                const keys: string[] = await this.redis.keys(pattern);
                 if (keys.length > 0) {
                     await this.redis.del(...keys);
                 }
@@ -111,7 +116,7 @@ export class CacheService {
     async clear(): Promise<void> {
         try {
             if (this.useRedis && this.redis) {
-                await this.redis.flushdb();
+                await this.redis.flushall();
             } else {
                 this.memoryCache.clear();
             }
@@ -129,12 +134,12 @@ export class CacheService {
     }
 
     /**
-     * Close Redis connection
+     * Close Redis connection (no-op for @upstash/redis REST client)
      */
     async disconnect(): Promise<void> {
-        if (this.redis) {
-            await this.redis.quit();
-        }
+        // @upstash/redis is stateless HTTP — nothing to close
+        this.redis = null;
+        this.useRedis = false;
     }
 }
 

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import {
   setFacultyAvailability,
   setBulkFacultyAvailability,
@@ -28,6 +29,9 @@ import {
  */
 export async function GET(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const searchParams = request.nextUrl.searchParams;
     const action = searchParams.get('action') || 'get';
     const facultyId = searchParams.get('faculty_id');
@@ -178,6 +182,9 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
 
     // Check if bulk operation
@@ -256,6 +263,9 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const searchParams = request.nextUrl.searchParams;
     const facultyId = searchParams.get('faculty_id');
     const timeSlotId = searchParams.get('time_slot_id');

@@ -375,8 +375,8 @@ const ManagePage: React.FC = () => {
                   <td className="px-6 py-4 text-gray-600 text-sm">{dept.description || '-'}</td>
                   <td className="px-6 py-4">
                     <div className="flex gap-2">
-                      <button onClick={() => startEditDept(dept)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={16} /></button>
-                      <button onClick={() => handleDeleteItem('departments', dept.id, dept.name)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                      <button onClick={() => startEditDept(dept)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit"><Edit size={16} /></button>
+                      <button onClick={() => handleDeleteItem('departments', dept.id, dept.name)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 size={16} /></button>
                     </div>
                   </td>
                 </tr>
@@ -407,7 +407,7 @@ const ManagePage: React.FC = () => {
                   <td className="px-6 py-4"><span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">{f.faculty_type || 'general'}</span></td>
                   <td className="px-6 py-4"><span className={`px-2 py-1 rounded-full text-xs font-bold ${f.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{f.is_active ? 'Active' : 'Inactive'}</span></td>
                   <td className="px-6 py-4">
-                    <button onClick={() => handleDeleteItem('faculty', f.id, `${f.first_name} ${f.last_name}`)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                    <button onClick={() => handleDeleteItem('faculty', f.id, `${f.first_name} ${f.last_name}`)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 size={16} /></button>
                   </td>
                 </tr>
               ))}
@@ -442,7 +442,7 @@ const ManagePage: React.FC = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <button onClick={() => handleDeleteItem('classrooms', c.id, c.name)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                    <button onClick={() => handleDeleteItem('classrooms', c.id, c.name)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 size={16} /></button>
                   </td>
                 </tr>
               ))}
@@ -472,7 +472,7 @@ const ManagePage: React.FC = () => {
                   <td className="px-6 py-4 text-gray-600">{b.section}</td>
                   <td className="px-6 py-4 text-gray-600">{b.actual_strength}/{b.expected_strength}</td>
                   <td className="px-6 py-4">
-                    <button onClick={() => handleDeleteItem('batches', b.id, b.name)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                    <button onClick={() => handleDeleteItem('batches', b.id, b.name)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 size={16} /></button>
                   </td>
                 </tr>
               ))}
@@ -502,7 +502,7 @@ const ManagePage: React.FC = () => {
                   <td className="px-6 py-4"><span className="px-2 py-1 bg-orange-100 text-orange-700 rounded-full text-xs">{s.subject_type}</span></td>
                   <td className="px-6 py-4 text-gray-600">{s.departments?.name || '-'}</td>
                   <td className="px-6 py-4">
-                    <button onClick={() => handleDeleteItem('subjects', s.id, s.name)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                    <button onClick={() => handleDeleteItem('subjects', s.id, s.name)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 size={16} /></button>
                   </td>
                 </tr>
               ))}
@@ -530,7 +530,7 @@ const ManagePage: React.FC = () => {
                   <td className="px-6 py-4 text-gray-600">{c.duration_years || 4} years</td>
                   <td className="px-6 py-4 text-gray-600">{c.intake}</td>
                   <td className="px-6 py-4">
-                    <button onClick={() => handleDeleteItem('courses', c.id, c.title)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                    <button onClick={() => handleDeleteItem('courses', c.id, c.title)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 size={16} /></button>
                   </td>
                 </tr>
               ))}
@@ -560,7 +560,7 @@ const ManagePage: React.FC = () => {
                   <td className="px-6 py-4"><span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">Sem {s.current_semester}</span></td>
                   <td className="px-6 py-4"><span className={`px-2 py-1 rounded-full text-xs font-bold ${s.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{s.is_active ? 'Active' : 'Inactive'}</span></td>
                   <td className="px-6 py-4">
-                    <button onClick={() => handleDeleteItem('students', s.id, `${s.first_name} ${s.last_name}`)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                    <button onClick={() => handleDeleteItem('students', s.id, `${s.first_name} ${s.last_name}`)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 size={16} /></button>
                   </td>
                 </tr>
               ))}
@@ -696,22 +696,22 @@ const ManagePage: React.FC = () => {
             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
               <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
                 <h3 className="text-lg font-bold text-gray-800">{editingDept ? 'Edit Department' : 'Add Department'}</h3>
-                <button onClick={() => setShowDeptForm(false)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+                <button onClick={() => setShowDeptForm(false)} className="text-gray-400 hover:text-gray-600" title="Close"><X size={20} /></button>
               </div>
               <div className="p-6 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-                  <input className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4D869C] outline-none"
+                  <input className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4D869C] outline-none" placeholder="Department name"
                     value={deptForm.name} onChange={(e) => setDeptForm({ ...deptForm, name: e.target.value })} />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Code *</label>
-                  <input className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4D869C] outline-none font-mono"
+                  <input className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4D869C] outline-none font-mono" placeholder="Department code"
                     value={deptForm.code} onChange={(e) => setDeptForm({ ...deptForm, code: e.target.value.toUpperCase() })} />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                  <textarea className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4D869C] outline-none resize-none h-20"
+                  <textarea className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4D869C] outline-none resize-none h-20" placeholder="Description"
                     value={deptForm.description} onChange={(e) => setDeptForm({ ...deptForm, description: e.target.value })} />
                 </div>
               </div>

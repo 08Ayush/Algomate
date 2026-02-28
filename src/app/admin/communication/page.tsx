@@ -241,6 +241,7 @@ const CommunicationPage: React.FC = () => {
                                                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none transition-all"
                                                 value={alertForm.priority}
                                                 onChange={e => setAlertForm({ ...alertForm, priority: e.target.value })}
+                                                aria-label="Alert priority"
                                             >
                                                 <option value="normal">Normal</option>
                                                 <option value="high">High</option>
@@ -268,6 +269,7 @@ const CommunicationPage: React.FC = () => {
                                             className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none transition-all"
                                             value={alertForm.expiresAt}
                                             onChange={e => setAlertForm({ ...alertForm, expiresAt: e.target.value })}
+                                            title="Expires at"
                                         />
                                     </div>
                                 </div>
@@ -314,6 +316,7 @@ const CommunicationPage: React.FC = () => {
                                                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none transition-all"
                                                 value={announcementForm.priority}
                                                 onChange={e => setAnnouncementForm({ ...announcementForm, priority: e.target.value })}
+                                                aria-label="Announcement priority"
                                             >
                                                 <option value="normal">Normal</option>
                                                 <option value="high">High</option>
@@ -329,6 +332,7 @@ const CommunicationPage: React.FC = () => {
                                                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none transition-all"
                                                 value={announcementForm.audienceType}
                                                 onChange={e => setAnnouncementForm({ ...announcementForm, audienceType: e.target.value })}
+                                                aria-label="Audience type"
                                             >
                                                 <option value="college">Entire College</option>
                                                 <option value="department">Specific Department</option>
@@ -340,6 +344,7 @@ const CommunicationPage: React.FC = () => {
                                                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none transition-all"
                                                     value={announcementForm.targetId}
                                                     onChange={e => setAnnouncementForm({ ...announcementForm, targetId: e.target.value })}
+                                                    aria-label="Target department"
                                                 >
                                                     <option value="">Select Department</option>
                                                     {departments.map(dept => (
@@ -369,6 +374,7 @@ const CommunicationPage: React.FC = () => {
                                             className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none transition-all"
                                             value={announcementForm.expiresAt}
                                             onChange={e => setAnnouncementForm({ ...announcementForm, expiresAt: e.target.value })}
+                                            title="Valid until"
                                         />
                                     </div>
                                 </div>

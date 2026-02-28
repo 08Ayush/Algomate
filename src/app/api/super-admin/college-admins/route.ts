@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/shared/database/client';
 import bcrypt from 'bcryptjs';
+import { requireRoles } from '@/lib/auth';
 
 interface AdminWithCollege {
   id: string;
@@ -21,6 +22,9 @@ interface AdminWithCollege {
 // GET - List all college admins
 export async function GET(request: NextRequest) {
   try {
+    const user = requireRoles(request, ['super_admin']);
+    if (user instanceof NextResponse) return user;
+
     console.log('Fetching college admins from database...');
 
     const { data: admins, error } = await supabaseAdmin
@@ -74,6 +78,9 @@ export async function GET(request: NextRequest) {
 // POST - Create new college admin
 export async function POST(request: NextRequest) {
   try {
+    const user = requireRoles(request, ['super_admin']);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
     const {
       first_name,
