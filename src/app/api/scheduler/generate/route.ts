@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
  * This route proxies requests to the FastAPI backend.
  */
 
-const SCHEDULER_API_URL = process.env.SCHEDULER_API_URL || "http://localhost:8000";
+const SCHEDULER_API_URL = process.env.SCHEDULER_API_URL || "http://localhost:8001";
 
 interface GenerateRequest {
   batchId: string;

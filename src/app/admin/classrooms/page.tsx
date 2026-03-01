@@ -12,12 +12,17 @@ import {
     Search,
     RefreshCw,
     Monitor,
-    Wifi,
     Cpu
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
+
+interface Department {
+    id: string;
+    name: string;
+    code: string;
+}
 
 interface Classroom {
     id: string;
@@ -30,12 +35,16 @@ interface Classroom {
     has_ac: boolean;
     has_computers: boolean;
     is_available: boolean;
+    department_id?: string | null;
+    department_name?: string | null;
+    department_code?: string | null;
 }
 
 const ClassroomsPage: React.FC = () => {
     const { showConfirm } = useConfirm();
     const router = useRouter();
     const [classrooms, setClassrooms] = useState<Classroom[]>([]);
+    const [departments, setDepartments] = useState<Department[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [typeFilter, setTypeFilter] = useState('all');
@@ -45,7 +54,7 @@ const ClassroomsPage: React.FC = () => {
 
     const [form, setForm] = useState({
         name: '',
-        building: '',
+        department_id: '',
         floor_number: 1,
         capacity: 30,
         type: 'Lecture Hall',
@@ -57,6 +66,7 @@ const ClassroomsPage: React.FC = () => {
 
     useEffect(() => {
         fetchClassrooms();
+        fetchDepartments();
     }, []);
 
     const getAuthHeaders = () => {
@@ -70,6 +80,30 @@ const ClassroomsPage: React.FC = () => {
             'Authorization': `Bearer ${authToken}`,
             'Content-Type': 'application/json'
         };
+    };
+
+    const fetchDepartments = async () => {
+        try {
+            const userData = localStorage.getItem('user');
+            if (!userData) return;
+            const user = JSON.parse(userData);
+            const headers = getAuthHeaders();
+            if (!headers) return;
+
+            const queryParam = user.college_id ? `?college_id=${user.college_id}` : '';
+            const res = await fetch(`/api/admin/departments${queryParam}`, { headers });
+            if (res.ok) {
+                const data = await res.json();
+                // Handle both array and object responses
+                if (Array.isArray(data)) {
+                    setDepartments(data);
+                } else {
+                    setDepartments(data.departments || data.data || []);
+                }
+            }
+        } catch (error) {
+            console.error('Error loading departments:', error);
+        }
     };
 
     const fetchClassrooms = async () => {
@@ -86,7 +120,6 @@ const ClassroomsPage: React.FC = () => {
 
             if (res.ok) {
                 const data = await res.json();
-                // Check if data is array (direct return) or object with classrooms property
                 if (Array.isArray(data)) {
                     setClassrooms(data);
                 } else {
@@ -112,14 +145,23 @@ const ClassroomsPage: React.FC = () => {
             const headers = getAuthHeaders();
             if (!headers) return;
 
+            const userData = localStorage.getItem('user');
+            const user = userData ? JSON.parse(userData) : null;
+
             const url = editingClassroom
                 ? `/api/admin/classrooms/${editingClassroom.id}`
                 : '/api/admin/classrooms';
 
+            const payload = {
+                ...form,
+                college_id: user?.college_id,
+                department_id: form.department_id || null
+            };
+
             const res = await fetch(url, {
                 method: editingClassroom ? 'PUT' : 'POST',
                 headers,
-                body: JSON.stringify(form)
+                body: JSON.stringify(payload)
             });
 
             if (res.ok) {
@@ -142,7 +184,7 @@ const ClassroomsPage: React.FC = () => {
     const resetForm = () => {
         setForm({
             name: '',
-            building: '',
+            department_id: '',
             floor_number: 1,
             capacity: 30,
             type: 'Lecture Hall',
@@ -157,7 +199,7 @@ const ClassroomsPage: React.FC = () => {
         setEditingClassroom(classroom);
         setForm({
             name: classroom.name,
-            building: classroom.building || '',
+            department_id: classroom.department_id || '',
             floor_number: classroom.floor_number || 1,
             capacity: classroom.capacity,
             type: classroom.type,
@@ -217,7 +259,7 @@ const ClassroomsPage: React.FC = () => {
                         <button onClick={fetchClassrooms} className="flex items-center gap-2 px-4 py-3 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 bg-white">
                             <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
                         </button>
-                        <button onClick={() => { resetForm(); setShowForm(true); }} className="flex items-center gap-2 px-5 py-3 bg-[#4D869C] text-white rounded-xl font-semibold hover:shadow-lg">
+                        <button onClick={() => { resetForm(); setEditingClassroom(null); setShowForm(true); }} className="flex items-center gap-2 px-5 py-3 bg-[#4D869C] text-white rounded-xl font-semibold hover:shadow-lg">
                             <Plus size={18} /> Add Classroom
                         </button>
                     </div>
@@ -260,7 +302,7 @@ const ClassroomsPage: React.FC = () => {
                             <thead className="bg-gray-50">
                                 <tr>
                                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Name</th>
-                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Building</th>
+                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Department</th>
                                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Capacity</th>
                                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Type</th>
                                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Facilities</th>
@@ -271,7 +313,15 @@ const ClassroomsPage: React.FC = () => {
                                 {filteredClassrooms.map((room, i) => (
                                     <motion.tr key={room.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }} className="hover:bg-gray-50">
                                         <td className="px-6 py-4 font-medium text-gray-900">{room.name}</td>
-                                        <td className="px-6 py-4 text-gray-600">{room.building || '-'}</td>
+                                        <td className="px-6 py-4 text-gray-600">
+                                            {room.department_name
+                                                ? <span className="inline-flex items-center gap-1">
+                                                    <span className="font-medium text-gray-800">{room.department_name}</span>
+                                                    {room.department_code && <span className="text-xs text-gray-400">({room.department_code})</span>}
+                                                </span>
+                                                : <span className="text-gray-400 italic text-sm">No Department</span>
+                                            }
+                                        </td>
                                         <td className="px-6 py-4 text-gray-600">{room.capacity}</td>
                                         <td className="px-6 py-4"><span className={`px-3 py-1 rounded-full text-xs font-medium ${getTypeColor(room.type)}`}>{room.type}</span></td>
                                         <td className="px-6 py-4">
@@ -303,14 +353,39 @@ const ClassroomsPage: React.FC = () => {
                             </div>
                             <form onSubmit={handleSubmit} className="p-6 space-y-4">
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Name *</label><input className="w-full px-4 py-2 border rounded-lg" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></div>
-                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Building</label><input className="w-full px-4 py-2 border rounded-lg" value={form.building} onChange={(e) => setForm({ ...form, building: e.target.value })} /></div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                                        <input className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#4D869C] outline-none" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                                        <select
+                                            className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#4D869C] outline-none"
+                                            value={form.department_id}
+                                            onChange={(e) => setForm({ ...form, department_id: e.target.value })}
+                                        >
+                                            <option value="">-- No Department --</option>
+                                            {departments.map(dept => (
+                                                <option key={dept.id} value={dept.id}>
+                                                    {dept.name} ({dept.code})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Capacity</label><input type="number" className="w-full px-4 py-2 border rounded-lg" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: parseInt(e.target.value) })} /></div>
-                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                                        <select className="w-full px-4 py-2 border rounded-lg" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                                            <option>Lecture Hall</option><option>Lab</option><option>Seminar Room</option><option>Tutorial Room</option><option>Auditorium</option>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Capacity</label>
+                                        <input type="number" className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#4D869C] outline-none" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: parseInt(e.target.value) })} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                                        <select className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#4D869C] outline-none" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+                                            <option>Lecture Hall</option>
+                                            <option>Lab</option>
+                                            <option>Seminar Room</option>
+                                            <option>Tutorial Room</option>
+                                            <option>Auditorium</option>
                                         </select>
                                     </div>
                                 </div>

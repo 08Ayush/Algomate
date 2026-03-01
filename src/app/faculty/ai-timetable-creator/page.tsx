@@ -6,9 +6,11 @@ import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
 import TimetableCreatorIntegrated from '@/components/TimetableCreatorIntegrated';
 import { motion } from 'framer-motion';
 import { Bot, Sparkles, Zap } from 'lucide-react';
+import { useSemesterMode } from '@/contexts/SemesterModeContext';
 
 export default function AITimetableCreatorPage() {
   const router = useRouter();
+  const { semesterMode, activeSemesters, modeLabel } = useSemesterMode();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -79,6 +81,20 @@ export default function AITimetableCreatorPage() {
           </div>
         </motion.div>
 
+        {/* Semester Mode Banner */}
+        {semesterMode !== 'all' && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium ${semesterMode === 'odd' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-violet-50 text-violet-700 border border-violet-200'
+              }`}
+          >
+            <span className="w-2 h-2 rounded-full animate-pulse inline-block bg-current"></span>
+            Active mode: <strong className="ml-1">{modeLabel}</strong>
+            <span className="ml-1 text-xs opacity-70">— AI will target semesters {activeSemesters.join(', ')} only.</span>
+          </motion.div>
+        )}
+
         {/* Main Content */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -86,7 +102,7 @@ export default function AITimetableCreatorPage() {
           transition={{ delay: 0.1 }}
           className="bg-white rounded-2xl shadow-lg border border-gray-100"
         >
-          <TimetableCreatorIntegrated user={user} />
+          <TimetableCreatorIntegrated user={user} activeSemesters={semesterMode === 'all' ? undefined : activeSemesters} />
         </motion.div>
       </div>
     </FacultyCreatorLayout>

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
 import { motion } from 'framer-motion';
 import { Zap, Settings, Play, CheckCircle, AlertCircle, Clock, Save, Send, Eye, ChevronDown, ChevronUp } from 'lucide-react';
+import { useSemesterMode } from '@/contexts/SemesterModeContext';
 
 interface Batch {
   id: string;
@@ -60,6 +61,7 @@ const DEFAULT_CONSTRAINTS: Constraint[] = [
 
 export default function HybridSchedulerPage() {
   const router = useRouter();
+  const { semesterMode, activeSemesters, modeLabel } = useSemesterMode();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -108,6 +110,16 @@ export default function HybridSchedulerPage() {
       router.push('/login');
     }
   }, [router]);
+
+  // When mode changes, reset selected batch if it's no longer valid
+  useEffect(() => {
+    if (semesterMode !== 'all' && selectedBatch) {
+      const batch = batches.find(b => b.id === selectedBatch);
+      if (batch && !activeSemesters.includes(batch.semester)) {
+        setSelectedBatch('');
+      }
+    }
+  }, [semesterMode, activeSemesters]);// eslint-disable-line
 
   const fetchBatches = async (departmentId: string, userData?: any) => {
     try {
@@ -207,7 +219,7 @@ export default function HybridSchedulerPage() {
           message: data.progressMessage || 'Processing...',
           metrics: data.status === 'completed' ? {
             strategy: hybridConfig.strategy,
-            execution_time: (pollCount * 5).toFixed(1),
+            execution_time: data.metrics?.total_time?.toFixed(1) || (pollCount * 5).toFixed(1),
             quality_score: data.fitnessScore != null
               ? Math.max(0, Math.min(100, (100 + Number(data.fitnessScore)))).toFixed(1)
               : '0',
@@ -224,14 +236,17 @@ export default function HybridSchedulerPage() {
             });
             if (timetableResponse.ok) {
               const timetableData = await timetableResponse.json();
+              // API returns { success, timetable, scheduledClasses }
+              const classes = timetableData.scheduledClasses || [];
               setGeneratedSchedule({
-                ...timetableData.data || timetableData,
+                ...timetableData.timetable,
+                scheduled_classes: classes,
                 timetable_id: data.timetableId,
                 id: data.timetableId,
                 statistics: {
-                  totalAssignments: timetableData.data?.scheduled_classes?.length || 0,
-                  theoryAssignments: timetableData.data?.scheduled_classes?.filter((s: any) => !s.is_lab_session).length || 0,
-                  labAssignments: timetableData.data?.scheduled_classes?.filter((s: any) => s.is_lab_session).length || 0
+                  totalAssignments: classes.length || 0,
+                  theoryAssignments: classes.filter((s: any) => !s.is_lab).length || 0,
+                  labAssignments: classes.filter((s: any) => s.is_lab).length || 0
                 }
               });
             } else {
@@ -533,7 +548,7 @@ export default function HybridSchedulerPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Target Batch
                     {batches.length > 0 && (
-                      <span className="ml-2 text-xs text-gray-500">({batches.length} available)</span>
+                      <span className="ml-2 text-xs text-gray-500">({(semesterMode === 'all' ? batches : batches.filter(b => activeSemesters.includes(b.semester))).length} available)</span>
                     )}
                   </label>
                   <select
@@ -543,12 +558,19 @@ export default function HybridSchedulerPage() {
                     disabled={batches.length === 0}
                   >
                     <option value="">{batches.length === 0 ? 'No batches available' : 'Select Batch'}</option>
-                    {batches.map(batch => (
+                    {(semesterMode === 'all' ? batches : batches.filter(b => activeSemesters.includes(b.semester))).map(batch => (
                       <option key={batch.id} value={batch.id}>
                         {batch.name} - Semester {batch.semester}
                       </option>
                     ))}
                   </select>
+                  {semesterMode !== 'all' && (
+                    <div className={`mt-2 flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium ${semesterMode === 'odd' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-violet-50 text-violet-700 border border-violet-200'
+                      }`}>
+                      <span className="w-1.5 h-1.5 rounded-full animate-pulse inline-block bg-current"></span>
+                      {modeLabel} — showing Sem {activeSemesters.join(', ')} batches only
+                    </div>
+                  )}
                 </div>
 
                 <div>

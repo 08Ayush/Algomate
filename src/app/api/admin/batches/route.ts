@@ -25,6 +25,12 @@ export const GET = asyncHandler(async (request: NextRequest) => {
   if (isPaginated) cacheKeyParts.push(`p:${page}:l:${limit}`);
   const cacheKey = redisCache.buildKey(cacheKeyParts[0], cacheKeyParts[1], cacheKeyParts[2], cacheKeyParts.slice(3).join(':') || undefined);
 
+  const forceRefresh = searchParams.get('refresh') === '1';
+  if (forceRefresh) {
+    const { invalidateCache } = await import('@/shared/cache/cache-helper');
+    await invalidateCache(cacheKey);
+  }
+
   const result = await withCacheAside(
     { key: cacheKey, ttl: 1800 },
     async () => {
@@ -33,7 +39,8 @@ export const GET = asyncHandler(async (request: NextRequest) => {
         .from('batches')
         .select(`
           *,
-          departments (id, name, code)
+          departments (id, name, code),
+          courses (id, title, code)
         `, { count: 'exact' })
         .eq('college_id', collegeId)
         .eq('is_active', true);

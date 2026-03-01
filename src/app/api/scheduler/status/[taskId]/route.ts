@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
  * Scheduler Status API - Proxy to FastAPI Backend
  */
 
-const SCHEDULER_API_URL = process.env.SCHEDULER_API_URL || "http://localhost:8000";
+const SCHEDULER_API_URL = process.env.SCHEDULER_API_URL || "http://localhost:8001";
 
 interface TaskStatus {
   taskId: string;
@@ -14,6 +14,7 @@ interface TaskStatus {
   progressMessage: string | null;
   timetableId: string | null;
   fitnessScore: number | null;
+  hardConstraintViolations: number;
   metrics: Record<string, unknown> | null;
   createdAt: string | null;
   updatedAt: string | null;

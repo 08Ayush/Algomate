@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Layers, Plus, Edit, Trash2, X, Search, RefreshCw, GraduationCap } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
+import { useSemesterMode } from '@/contexts/SemesterModeContext';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface Department { id: string; name: string; code: string; }
@@ -27,6 +28,7 @@ interface Batch {
 
 const BatchesPage: React.FC = () => {
     const router = useRouter();
+    const { semesterMode, activeSemesters, modeLabel } = useSemesterMode();
     const [batches, setBatches] = useState<Batch[]>([]);
     const [departments, setDepartments] = useState<Department[]>([]);
     const [courses, setCourses] = useState<Course[]>([]);
@@ -51,6 +53,8 @@ const BatchesPage: React.FC = () => {
 
     useEffect(() => { fetchData(); }, []);
 
+    useEffect(() => { setSemesterFilter('all'); }, [semesterMode]);
+
     const getAuthHeaders = () => {
         const userData = localStorage.getItem('user');
         if (!userData) { router.push('/login'); return null; }
@@ -65,7 +69,7 @@ const BatchesPage: React.FC = () => {
             const user = JSON.parse(userData);
             const headers = getAuthHeaders();
             if (!headers) return;
-            const q = user.college_id ? `?college_id=${user.college_id}` : '';
+            const q = user.college_id ? `?college_id=${user.college_id}&refresh=1` : '?refresh=1';
             const [batchRes, deptRes, courseRes] = await Promise.all([
                 fetch(`/api/admin/batches${q}`, { headers }),
                 fetch(`/api/admin/departments${q}`, { headers }),
@@ -111,24 +115,27 @@ const BatchesPage: React.FC = () => {
                     const headers = getAuthHeaders();
                     if (!headers) return;
                     const res = await fetch(`/api/admin/batches?id=${batch.id}`, { method: 'DELETE', headers });
-                    if (res.ok) { 
-                        toast.success('Deleted'); 
-                        setBatches(prev => prev.filter(b => b.id !== batch.id)); 
+                    if (res.ok) {
+                        toast.success('Deleted');
+                        setBatches(prev => prev.filter(b => b.id !== batch.id));
                     }
-                } catch { 
-                    toast.error('Error'); 
+                } catch {
+                    toast.error('Error');
                 }
             }
         });
     };
 
-    const uniqueSemesters = [...new Set(batches.map(b => b.semester))].sort((a, b) => a - b);
+    const uniqueSemesters = [...new Set(batches.map(b => b.semester))]
+        .filter(sem => semesterMode === 'all' || activeSemesters.includes(sem))
+        .sort((a, b) => a - b);
 
     const filteredBatches = batches.filter(b => {
         const matchesSearch = b.name.toLowerCase().includes(searchQuery.toLowerCase()) || b.section.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesDept = departmentFilter === 'all' || b.department_id === departmentFilter;
         const matchesSem = semesterFilter === 'all' || b.semester.toString() === semesterFilter;
-        return matchesSearch && matchesDept && matchesSem;
+        const matchesMode = semesterMode === 'all' || activeSemesters.includes(b.semester);
+        return matchesSearch && matchesDept && matchesSem && matchesMode;
     });
 
     return (
@@ -157,6 +164,14 @@ const BatchesPage: React.FC = () => {
                             {uniqueSemesters.map(sem => <option key={sem} value={sem.toString()}>Semester {sem}</option>)}
                         </select>
                     </div>
+                    {semesterMode !== 'all' && (
+                        <div className={`mt-3 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium ${semesterMode === 'odd' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-violet-50 text-violet-700 border border-violet-200'
+                            }`}>
+                            <span className="w-2 h-2 rounded-full animate-pulse inline-block bg-current"></span>
+                            Active mode: <strong className="ml-1">{modeLabel}</strong>
+                            <span className="ml-1 text-xs opacity-70">— showing semesters {activeSemesters.join(', ')} only.</span>
+                        </div>
+                    )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

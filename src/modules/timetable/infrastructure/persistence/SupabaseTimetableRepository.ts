@@ -264,6 +264,8 @@ export class SupabaseScheduledClassRepository implements IScheduledClassReposito
             row.session_duration || 60,
             row.class_type || 'THEORY',
             row.credit_hour_number || 1,
+            row.is_continuation || false,
+            row.session_number || 1,
             new Date(row.created_at)
         );
     }
@@ -285,11 +287,45 @@ export class SupabaseScheduledClassRepository implements IScheduledClassReposito
     async findByTimetable(timetableId: string): Promise<ScheduledClass[]> {
         const { data, error } = await this.db
             .from('scheduled_classes' as any)
-            .select('*')
+            .select(`
+                *,
+                time_slots!inner (
+                    day,
+                    start_time,
+                    end_time
+                )
+            `)
             .eq('timetable_id', timetableId);
 
         if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+        
+        // Map with time slot data
+        return (data as any[]).map(row => {
+            const dayMap: Record<string, number> = {
+                'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3,
+                'Thursday': 4, 'Friday': 5, 'Saturday': 6
+            };
+            
+            const timeSlot = (row as any).time_slots;
+            return new ScheduledClass(
+                row.id,
+                row.timetable_id,
+                row.subject_id,
+                row.faculty_id,
+                row.classroom_id,
+                row.time_slot_id,
+                timeSlot ? dayMap[timeSlot.day] || 0 : 0,
+                timeSlot?.start_time || '',
+                timeSlot?.end_time || '',
+                row.is_lab || false,
+                row.session_duration || 60,
+                row.class_type || 'THEORY',
+                row.credit_hour_number || 1,
+                row.is_continuation || false,
+                row.session_number || 1,
+                new Date(row.created_at)
+            );
+        });
     }
 
     async create(scheduledClass: Omit<ScheduledClass, 'id' | 'createdAt'>): Promise<ScheduledClass> {
@@ -307,7 +343,9 @@ export class SupabaseScheduledClassRepository implements IScheduledClassReposito
                 is_lab: scheduledClass.isLab,
                 session_duration: scheduledClass.sessionDuration,
                 class_type: scheduledClass.classType,
-                credit_hour_number: scheduledClass.creditHourNumber
+                credit_hour_number: scheduledClass.creditHourNumber,
+                is_continuation: scheduledClass.isContinuation,
+                session_number: scheduledClass.sessionNumber
             })
             .select()
             .single();
@@ -331,7 +369,9 @@ export class SupabaseScheduledClassRepository implements IScheduledClassReposito
                 is_lab: sc.isLab,
                 session_duration: sc.sessionDuration,
                 class_type: sc.classType,
-                credit_hour_number: sc.creditHourNumber
+                credit_hour_number: sc.creditHourNumber,
+                is_continuation: sc.isContinuation,
+                session_number: sc.sessionNumber
             })))
             .select();
 

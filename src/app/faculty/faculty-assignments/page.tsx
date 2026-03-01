@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Users, BookOpen, Save, RefreshCw, CheckCircle, AlertCircle, UserCheck, Building2, Beaker } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
+import { useSemesterMode } from '@/contexts/SemesterModeContext';
 
 interface QualifiedFaculty {
     faculty_id: string;
@@ -69,6 +70,7 @@ interface Assignments {
 
 const FacultyAssignmentsPage: React.FC = () => {
     const router = useRouter();
+    const { semesterMode, activeSemesters, modeLabel } = useSemesterMode();
     const [batches, setBatches] = useState<Batch[]>([]);
     const [selectedBatchId, setSelectedBatchId] = useState<string>('');
     const [batchData, setBatchData] = useState<BatchData | null>(null);
@@ -260,12 +262,22 @@ const FacultyAssignmentsPage: React.FC = () => {
                         className="w-full max-w-md px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none appearance-none bg-white text-gray-900"
                     >
                         <option value="">Choose a batch...</option>
-                        {batches.map(batch => (
-                            <option key={batch.id} value={batch.id}>
-                                {batch.name} - Semester {batch.semester} ({batch.academic_year})
-                            </option>
-                        ))}
+                        {batches
+                            .filter(b => semesterMode === 'all' || activeSemesters.includes(b.semester))
+                            .map(batch => (
+                                <option key={batch.id} value={batch.id}>
+                                    {batch.name} - Semester {batch.semester} ({batch.academic_year})
+                                </option>
+                            ))}
                     </select>
+                    {semesterMode !== 'all' && (
+                        <div className={`mt-3 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium w-fit ${semesterMode === 'odd' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-violet-50 text-violet-700 border border-violet-200'
+                            }`}>
+                            <span className="w-2 h-2 rounded-full animate-pulse inline-block bg-current"></span>
+                            Active mode: <strong className="ml-1">{modeLabel}</strong>
+                            <span className="ml-1 text-xs opacity-70">— Sem {activeSemesters.join(', ')} only.</span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Progress & Stats */}

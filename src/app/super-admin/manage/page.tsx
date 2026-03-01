@@ -247,17 +247,27 @@ const ManagePage: React.FC = () => {
 
           const authToken = Buffer.from(userData).toString('base64');
           const endpoint = type === 'batches' ? `/api/admin/${type}?id=${id}` : `/api/admin/${type}/${id}`;
+          const headers = { 'Authorization': `Bearer ${authToken}` };
 
-          const res = await fetch(endpoint, {
-            method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${authToken}` }
-          });
+          let res = await fetch(endpoint, { method: 'DELETE', headers });
+
+          // If subject has references, ask user to force delete
+          if (res.status === 409 && type === 'subjects') {
+            const data = await res.json();
+            if (data.hasReferences) {
+              const forceConfirm = confirm(
+                `${data.error}\n\nDo you want to force delete this subject and remove all related data?`
+              );
+              if (!forceConfirm) return;
+              res = await fetch(`${endpoint}?force=true`, { method: 'DELETE', headers });
+            }
+          }
 
           if (res.ok) {
             toast.success(`${type.slice(0, -1)} deleted successfully`);
             if (selectedCollege) fetchData(selectedCollege.id);
           } else {
-            const err = await res.json();
+            const err = await res.json().catch(() => ({}));
             toast.error(err.error || 'Failed to delete');
           }
         } catch (e) {

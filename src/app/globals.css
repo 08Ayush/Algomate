@@ -208,6 +208,18 @@
 /* Smooth scroll behavior */
 html {
   scroll-behavior: smooth;
+  zoom: 0.9;
+  /* Scale the entire UI to 90% — matches the site's intended design density */
+}
+
+/**
+ * Sidebar zoom compensation
+ * With zoom:0.9 on html, elements using calc(100vh - Npx) are visually 90% of viewport height.
+ * We compensate by using calc(100vh / 0.9 - Npx) = calc(111.11vh - Npx).
+ * Both CollegeAdminLayout and FacultyCreatorLayout sidebars are `fixed top-[70px]` elements.
+ */
+aside[class*="fixed"] {
+  height: calc(100vh / 0.9 - 70px) !important;
 }
 
 /* Custom scrollbar */

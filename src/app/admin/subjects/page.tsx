@@ -3,9 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Plus, Edit, Trash2, X, Search, RefreshCw } from 'lucide-react';
+import { BookOpen, Plus, Edit, Trash2, X, Search, RefreshCw, Award } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
+import { useSemesterMode } from '@/contexts/SemesterModeContext';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface Department { id: string; name: string; code: string; }
@@ -27,6 +28,7 @@ interface Subject {
 const SubjectsPage: React.FC = () => {
     const { showConfirm } = useConfirm();
     const router = useRouter();
+    const { semesterMode, activeSemesters, modeLabel } = useSemesterMode();
     const [subjects, setSubjects] = useState<Subject[]>([]);
     const [departments, setDepartments] = useState<Department[]>([]);
     const [courses, setCourses] = useState<Course[]>([]);
@@ -44,6 +46,11 @@ const SubjectsPage: React.FC = () => {
     });
 
     useEffect(() => { fetchData(); }, []);
+
+    // When the global semester mode changes, reset individual semester filter to 'all'
+    useEffect(() => {
+        setSemesterFilter('all');
+    }, [semesterMode]);
 
     const getAuthHeaders = () => {
         const userData = localStorage.getItem('user');
@@ -85,7 +92,10 @@ const SubjectsPage: React.FC = () => {
         } catch { toast.error('Error'); } finally { setSubmitting(false); }
     };
 
-    const resetForm = () => setForm({ code: '', name: '', credits_per_week: 4, semester: 1, department_id: '', course_id: '', subject_type: 'THEORY', nep_category: 'CORE', is_active: true });
+    const resetForm = () => {
+        setEditingSubject(null);
+        setForm({ code: '', name: '', credits_per_week: 4, semester: 1, department_id: '', course_id: '', subject_type: 'THEORY', nep_category: 'CORE', is_active: true });
+    };
 
     const handleEdit = (subject: Subject) => {
         setEditingSubject(subject);
@@ -106,25 +116,64 @@ const SubjectsPage: React.FC = () => {
                 try {
                     const headers = getAuthHeaders();
                     if (!headers) return;
-                    const res = await fetch(`/api/admin/subjects/${subject.id}`, { method: 'DELETE', headers });
+                    let res = await fetch(`/api/admin/subjects/${subject.id}`, { method: 'DELETE', headers });
+
+                    // If subject has references, ask user to force delete
+                    if (res.status === 409) {
+                        const data = await res.json();
+                        if (data.hasReferences) {
+                            let confirmMsg = data.error + '\n\n';
+                            if (data.hasLockedMajor) {
+                                confirmMsg += '⚠️ WARNING: This subject has locked MAJOR selections by students (NEP 2020). Force deleting will permanently remove those enrollments.\n\n';
+                            }
+                            confirmMsg += 'Do you want to force delete this subject and remove ALL related data (enrollments, scheduled classes, batch assignments)?';
+                            const forceConfirm = confirm(confirmMsg);
+                            if (!forceConfirm) return;
+                            res = await fetch(`/api/admin/subjects/${subject.id}?force=true`, { method: 'DELETE', headers });
+                        }
+                    }
+
                     if (res.ok) { toast.success('Deleted'); setSubjects(prev => prev.filter(s => s.id !== subject.id)); }
+                    else { const data = await res.json().catch(() => ({})); toast.error(data.error || 'Failed to delete'); }
                 } catch { toast.error('Error'); }
             }
         });
     };
 
-    // Get unique semesters from subjects
-    const uniqueSemesters = [...new Set(subjects.map(s => s.semester).filter(Boolean))].sort((a, b) => (a || 0) - (b || 0));
+    // Get unique semesters from subjects — only those valid in the current mode
+    const uniqueSemesters = [...new Set(subjects.map(s => s.semester).filter(Boolean))]
+        .filter(sem => semesterMode === 'all' || activeSemesters.includes(sem!))
+        .sort((a, b) => (a || 0) - (b || 0));
 
     const filteredSubjects = subjects.filter(s => {
         const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.code.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesDept = departmentFilter === 'all' || s.department_id === departmentFilter;
         const matchesSem = semesterFilter === 'all' || s.semester?.toString() === semesterFilter;
-        return matchesSearch && matchesDept && matchesSem;
+        // Always filter by the active semester mode
+        const matchesMode = semesterMode === 'all' || (s.semester != null && activeSemesters.includes(s.semester));
+        return matchesSearch && matchesDept && matchesSem && matchesMode;
     });
 
     const getTypeColor = (type: string) => {
         switch (type) { case 'LAB': return 'bg-purple-100 text-purple-700'; case 'PRACTICAL': return 'bg-orange-100 text-orange-700'; case 'TUTORIAL': return 'bg-blue-100 text-blue-700'; default: return 'bg-gray-100 text-gray-700'; }
+    };
+
+    const getCategoryColor = (category?: string) => {
+        switch (category) {
+            case 'MAJOR': return 'bg-indigo-100 text-indigo-700';
+            case 'MINOR': return 'bg-teal-100 text-teal-700';
+            case 'MULTIDISCIPLINARY': return 'bg-cyan-100 text-cyan-700';
+            case 'AEC': return 'bg-amber-100 text-amber-700';
+            case 'VAC': return 'bg-lime-100 text-lime-700';
+            case 'CORE': return 'bg-green-100 text-green-700';
+            case 'PEDAGOGY': return 'bg-pink-100 text-pink-700';
+            case 'INTERNSHIP': return 'bg-red-100 text-red-700';
+            case 'Major I': return 'bg-violet-100 text-violet-700';
+            case 'Major II': return 'bg-purple-100 text-purple-700';
+            case 'CORE COMPLETELY': return 'bg-emerald-100 text-emerald-700';
+            case 'CORE PARTIAL': return 'bg-sky-100 text-sky-700';
+            default: return 'bg-gray-100 text-gray-500';
+        }
     };
 
     return (
@@ -153,6 +202,15 @@ const SubjectsPage: React.FC = () => {
                             {uniqueSemesters.map(sem => <option key={sem} value={sem?.toString()}>Semester {sem}</option>)}
                         </select>
                     </div>
+                    {/* Active semester mode banner */}
+                    {semesterMode !== 'all' && (
+                        <div className={`mt-3 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium ${semesterMode === 'odd' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-violet-50 text-violet-700 border border-violet-200'
+                            }`}>
+                            <span className="w-2 h-2 rounded-full animate-pulse inline-block bg-current"></span>
+                            Active mode: <strong className="ml-1">{modeLabel}</strong>
+                            <span className="ml-1 text-xs opacity-70">— showing semesters {activeSemesters.join(', ')} only. Change via header toggle.</span>
+                        </div>
+                    )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -168,6 +226,19 @@ const SubjectsPage: React.FC = () => {
                         <div className="p-3 rounded-xl bg-purple-100"><BookOpen size={24} className="text-purple-600" /></div>
                         <div><p className="text-2xl font-bold text-gray-900">{filteredSubjects.filter(s => s.subject_type === 'LAB').length}</p><p className="text-sm text-gray-500">Labs</p></div>
                     </div>
+                    <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
+                        <div className="p-3 rounded-xl bg-amber-100"><Award size={24} className="text-amber-600" /></div>
+                        <div>
+                            <p className="text-2xl font-bold text-gray-900">
+                                {filteredSubjects.reduce((sum, s) => sum + (s.credits_per_week || 0), 0)}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                                Total Credits
+                                {semesterFilter !== 'all' ? ` · Sem ${semesterFilter}` : ''}
+                                {departmentFilter !== 'all' ? ` · ${departments.find(d => d.id === departmentFilter)?.code || ''}` : ''}
+                            </p>
+                        </div>
+                    </div>
                 </div>
 
                 <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
@@ -178,6 +249,7 @@ const SubjectsPage: React.FC = () => {
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Name</th>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Credits</th>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Type</th>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Category</th>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Department</th>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Actions</th>
                             </tr></thead>
@@ -188,10 +260,16 @@ const SubjectsPage: React.FC = () => {
                                         <td className="px-6 py-4 font-medium text-gray-900">{subject.name}</td>
                                         <td className="px-6 py-4 text-gray-600">{subject.credits_per_week}</td>
                                         <td className="px-6 py-4"><span className={`px-3 py-1 rounded-full text-xs font-medium ${getTypeColor(subject.subject_type)}`}>{subject.subject_type}</span></td>
+                                        <td className="px-6 py-4">
+                                            {subject.nep_category
+                                                ? <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getCategoryColor(subject.nep_category)}`}>{subject.nep_category}</span>
+                                                : <span className="text-gray-400 italic text-xs">—</span>
+                                            }
+                                        </td>
                                         <td className="px-6 py-4"><span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm">{subject.departments?.name || '-'}</span></td>
                                         <td className="px-6 py-4"><div className="flex gap-2">
                                             <button onClick={() => handleEdit(subject)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={16} /></button>
-                                            <button onClick={() => handleDelete(subject.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                                            <button onClick={() => handleDelete(subject)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
                                         </div></td>
                                     </motion.tr>
                                 ))}

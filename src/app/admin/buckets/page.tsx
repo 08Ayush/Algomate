@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { ClipboardList, Plus, Edit, Trash2, X, Search, RefreshCw, BookOpen, Eye, CheckCircle, XCircle, Users, Pen } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
+import { useSemesterMode } from '@/contexts/SemesterModeContext';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface Department { id: string; name: string; code: string; }
@@ -29,6 +30,7 @@ interface Bucket {
 
 const BucketsPage: React.FC = () => {
     const router = useRouter();
+    const { semesterMode, activeSemesters, modeLabel } = useSemesterMode();
     const { showConfirm } = useConfirm();
     const [buckets, setBuckets] = useState<Bucket[]>([]);
     const [batches, setBatches] = useState<Batch[]>([]);
@@ -48,6 +50,8 @@ const BucketsPage: React.FC = () => {
     });
 
     useEffect(() => { fetchData(); }, []);
+
+    useEffect(() => { setSemesterFilter('all'); }, [semesterMode]);
 
     const getAuthHeaders = () => {
         const userData = localStorage.getItem('user');
@@ -204,14 +208,17 @@ const BucketsPage: React.FC = () => {
     };
 
     // Get unique semesters from batches
-    const uniqueSemesters = [...new Set(batches.map(b => b.semester))].sort((a, b) => a - b);
+    const uniqueSemesters = [...new Set(batches.map(b => b.semester))]
+        .filter(sem => semesterMode === 'all' || activeSemesters.includes(sem))
+        .sort((a, b) => a - b);
 
     const filteredBuckets = buckets.filter(b => {
         const matchesSearch = b.bucket_name.toLowerCase().includes(searchQuery.toLowerCase());
         const batch = batches.find(bt => bt.id === b.batch_id);
         const matchesDept = departmentFilter === 'all' || batch?.department_id === departmentFilter;
         const matchesSem = semesterFilter === 'all' || batch?.semester.toString() === semesterFilter;
-        return matchesSearch && matchesDept && matchesSem;
+        const matchesMode = semesterMode === 'all' || (batch?.semester != null && activeSemesters.includes(batch.semester));
+        return matchesSearch && matchesDept && matchesSem && matchesMode;
     });
 
     return (
@@ -240,6 +247,14 @@ const BucketsPage: React.FC = () => {
                             {uniqueSemesters.map(sem => <option key={sem} value={sem.toString()}>Semester {sem}</option>)}
                         </select>
                     </div>
+                    {semesterMode !== 'all' && (
+                        <div className={`mt-3 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium ${semesterMode === 'odd' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-violet-50 text-violet-700 border border-violet-200'
+                            }`}>
+                            <span className="w-2 h-2 rounded-full animate-pulse inline-block bg-current"></span>
+                            Active mode: <strong className="ml-1">{modeLabel}</strong>
+                            <span className="ml-1 text-xs opacity-70">— showing semesters {activeSemesters.join(', ')} only.</span>
+                        </div>
+                    )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">

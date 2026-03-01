@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter, usePathname } from 'next/navigation';
+import { useSemesterMode, SemesterMode } from '@/contexts/SemesterModeContext';
 import {
     LayoutDashboard,
     Calendar,
@@ -46,6 +47,7 @@ interface FacultyCreatorLayoutProps {
 const FacultyCreatorLayout: React.FC<FacultyCreatorLayoutProps> = ({ children, activeTab }) => {
     const router = useRouter();
     const pathname = usePathname();
+    const { semesterMode, setSemesterMode } = useSemesterMode();
 
     const [user, setUser] = useState<any>(null);
     const [department, setDepartment] = useState<{ name: string; code: string } | null>(null);
@@ -200,6 +202,33 @@ const FacultyCreatorLayout: React.FC<FacultyCreatorLayoutProps> = ({ children, a
                 </div>
 
                 <div className="flex items-center gap-6">
+                    {/* Semester Mode Toggle — only for creator/publisher who manage timetables */}
+                    {(isCreator || isPublisher) && (
+                        <div className="flex items-center bg-white/15 rounded-xl p-1 gap-1">
+                            {(['odd', 'even', 'all'] as SemesterMode[]).map((mode) => {
+                                const labels: Record<SemesterMode, string> = {
+                                    odd: 'Odd Sem',
+                                    even: 'Even Sem',
+                                    all: 'All Sem',
+                                };
+                                const isActive = semesterMode === mode;
+                                return (
+                                    <button
+                                        key={mode}
+                                        onClick={() => setSemesterMode(mode)}
+                                        title={mode === 'odd' ? 'Semesters 1, 3, 5, 7' : mode === 'even' ? 'Semesters 2, 4, 6, 8' : 'All 8 Semesters'}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 border-none cursor-pointer ${isActive
+                                                ? 'bg-white text-[#4D869C] shadow-md'
+                                                : 'text-white/80 hover:text-white hover:bg-white/20'
+                                            }`}
+                                    >
+                                        {labels[mode]}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+
                     {/* Notifications */}
                     <div className="relative" ref={notificationRef}>
                         <button

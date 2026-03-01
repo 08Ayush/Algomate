@@ -103,19 +103,37 @@ export default function ViewTimetablePage() {
       }
 
       setTimetable(result.timetable);
-      setClasses(result.scheduledClasses || []);
+      const fetchedClasses = result.scheduledClasses || [];
+      setClasses(fetchedClasses);
 
-      const allTimeSlots = [
-        '09:00-10:00',
-        '10:00-11:00',
-        '11:15-12:15',
-        '12:15-13:15',
-        'LUNCH',
-        '14:15-15:15',
-        '15:15-16:15'
-      ];
+      // --- Dynamically derive unique time slots from actual classes ---
+      // This ensures every scheduled class gets a grid cell, regardless of
+      // which specific time slots the college uses.
+      const LUNCH_START = '13:15'; // Insert lunch column after this time
 
-      setTimeSlots(allTimeSlots);
+      const slotSet = new Set<string>();
+      fetchedClasses.forEach((cls: ScheduledClass) => {
+        if (cls.start_time) {
+          slotSet.add(cls.start_time.substring(0, 5)); // normalise to HH:MM
+        }
+      });
+
+      // Sort chronologically
+      const sortedSlots = Array.from(slotSet).sort();
+
+      // Build final display list, inserting LUNCH marker
+      const displaySlots: string[] = [];
+      let lunchInserted = false;
+      sortedSlots.forEach(startHH => {
+        if (!lunchInserted && startHH >= LUNCH_START) {
+          displaySlots.push('LUNCH');
+          lunchInserted = true;
+        }
+        displaySlots.push(startHH);
+      });
+      if (!lunchInserted) displaySlots.push('LUNCH'); // edge case
+
+      setTimeSlots(displaySlots);
 
     } catch (err: any) {
       console.error('Error fetching timetable:', err);
@@ -125,14 +143,16 @@ export default function ViewTimetablePage() {
     }
   };
 
-  const getClassForSlot = (day: string, timeSlot: string): ScheduledClass | undefined => {
-    const [startTime, endTime] = timeSlot.split('-');
-    const normalizeTime = (time: string) => time.substring(0, 5);
-
+  /**
+   * Find the class scheduled in a given (day, startTime) cell.
+   * startTime is an HH:MM string derived from the dynamic slots array.
+   * We match only on start_time (normalised to HH:MM) because end_time
+   * format differences between DB and hardcoded strings caused misses.
+   */
+  const getClassForSlot = (day: string, startTime: string): ScheduledClass | undefined => {
+    const normalize = (t: string) => (t || '').substring(0, 5);
     return classes.find(
-      cls => cls.day === day &&
-        normalizeTime(cls.start_time) === normalizeTime(startTime) &&
-        normalizeTime(cls.end_time) === normalizeTime(endTime)
+      cls => cls.day === day && normalize(cls.start_time) === normalize(startTime)
     );
   };
 
@@ -213,8 +233,10 @@ export default function ViewTimetablePage() {
         if (slot === 'LUNCH') {
           headers.push('1:15-2:15\nLunch');
         } else {
-          const [start, end] = slot.split('-');
-          headers.push(`${start}\n${end}`);
+          // slot is now an HH:MM start string; derive end from classes
+          const exampleClass = classes.find(c => c.start_time?.startsWith(slot));
+          const endDisp = exampleClass?.end_time?.substring(0, 5) || '?';
+          headers.push(`${slot}\n${endDisp}`);
         }
       });
 
@@ -503,13 +525,16 @@ export default function ViewTimetablePage() {
                         );
                       }
 
-                      const [start, end] = slot.split('-');
+                      // slot is now an HH:MM start time string
+                      // Find an example class at this slot to derive end_time for display
+                      const exampleClass = classes.find(c => c.start_time?.startsWith(slot));
+                      const displayEnd = exampleClass?.end_time?.substring(0, 5) || '?';
                       return (
                         <th key={slot} className="border border-[#4D869C]/30 p-3 text-center font-semibold text-white min-w-[160px]">
                           <div className="flex flex-col items-center">
                             <Clock size={14} className="mb-1 text-white/70" />
-                            <span className="text-sm">{start}</span>
-                            <span className="text-xs text-white/70">to {end}</span>
+                            <span className="text-sm">{slot}</span>
+                            <span className="text-xs text-white/70">to {displayEnd}</span>
                           </div>
                         </th>
                       );
