@@ -12,7 +12,7 @@ const promoteBatchUseCase = new PromoteBatchUseCase(batchRepo);
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = requireAuth(request);
@@ -22,7 +22,8 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const result = await promoteBatchUseCase.execute(params.id);
+    const { id } = await params;
+    const result = await promoteBatchUseCase.execute(id);
     return NextResponse.json(result);
 
   } catch (error: any) {

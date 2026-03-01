@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
     // Fetch data concurrently
     const [subjects, batches] = await Promise.all([
       getQualifiedSubjectsUseCase.execute(user.id),
-      getBatchesUseCase.execute(user.college_id, user.department_id)
+      getBatchesUseCase.execute(user.college_id ?? undefined, user.department_id ?? undefined)
     ]);
 
     return NextResponse.json({

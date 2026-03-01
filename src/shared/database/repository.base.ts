@@ -16,7 +16,7 @@ import type { Database } from './types';
  * }
  * ```
  */
-export abstract class BaseRepository<T extends keyof Database['public']['Tables']> {
+export abstract class BaseRepository<T extends keyof Database['public']['Tables'], E = Database['public']['Tables'][T]['Row']> {
     constructor(
         protected readonly db: SupabaseClient<Database>,
         protected readonly tableName: T
@@ -25,7 +25,7 @@ export abstract class BaseRepository<T extends keyof Database['public']['Tables'
     /**
      * Find a record by ID
      */
-    async findById(id: string): Promise<Database['public']['Tables'][T]['Row'] | null> {
+    async findById(id: string): Promise<E | null> {
         const { data, error } = await this.db
             .from(this.tableName)
             .select('*')
@@ -40,26 +40,26 @@ export abstract class BaseRepository<T extends keyof Database['public']['Tables'
             throw error;
         }
 
-        return data as unknown as Database['public']['Tables'][T]['Row'];
+        return data as unknown as E;
     }
 
     /**
      * Find all records
      */
-    async findAll(): Promise<Database['public']['Tables'][T]['Row'][]> {
+    async findAll(): Promise<E[]> {
         const { data, error } = await this.db
             .from(this.tableName)
             .select('*');
 
         if (error) throw error;
 
-        return data as unknown as Database['public']['Tables'][T]['Row'][];
+        return data as unknown as E[];
     }
 
     /**
-     * Create a new record
+     * Insert a new record (protected helper for subclasses)
      */
-    async create(
+    protected async insertRow(
         data: Database['public']['Tables'][T]['Insert']
     ): Promise<Database['public']['Tables'][T]['Row']> {
         const { data: result, error } = await this.db
@@ -74,9 +74,9 @@ export abstract class BaseRepository<T extends keyof Database['public']['Tables'
     }
 
     /**
-     * Update a record by ID
+     * Update a record by ID (protected helper for subclasses)
      */
-    async update(
+    protected async updateRow(
         id: string,
         data: Database['public']['Tables'][T]['Update']
     ): Promise<Database['public']['Tables'][T]['Row']> {

@@ -14,35 +14,6 @@ const supabaseAdmin = createClient(
   }
 );
 
-// Helper function to get user from Authorization header
-async function getAuthenticatedUser(request: NextRequest) {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  try {
-    const userString = Buffer.from(token, 'base64').toString();
-    const user = JSON.parse(userString);
-
-    const { data: dbUser, error } = await supabaseAdmin
-      .from('users')
-      .select('id, college_id, role, is_active')
-      .eq('id', user.id)
-      .eq('is_active', true)
-      .in('role', ['admin', 'college_admin'])
-      .single();
-
-    if (error || !dbUser) {
-      return null;
-    }
-
-    return dbUser;
-  } catch {
-    return null;
-  }
-}
 
 // PUT - Update subject
 export async function PUT(
@@ -51,7 +22,9 @@ export async function PUT(
 ) {
   try {
     const user = requireAuth(request);
-    if (!user) {
+    if (user instanceof NextResponse) return user;
+
+    if (!['admin', 'college_admin', 'super_admin'].includes(user.role)) {
       return NextResponse.json(
         { error: 'Unauthorized. Only admins can update subjects.' },
         { status: 403 }
@@ -269,7 +242,9 @@ export async function DELETE(
 ) {
   try {
     const user = requireAuth(request);
-    if (!user) {
+    if (user instanceof NextResponse) return user;
+
+    if (!['admin', 'college_admin', 'super_admin'].includes(user.role)) {
       return NextResponse.json(
         { error: 'Unauthorized. Only admins can delete subjects.' },
         { status: 403 }

@@ -19,8 +19,6 @@ export async function POST(
     const user = requireAuth(request);
     if (user instanceof NextResponse) return user;
 
-    const { id } = await params;
-
     const body = await request.json();
     const { is_live, admin_id } = body;
 

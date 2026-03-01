@@ -1,12 +1,12 @@
-import { Notification, ContentType, Priority } from '../entities/Notification';
+import { Notification, NotificationData, ContentType, Priority } from '../entities/Notification';
 
 export interface INotificationRepository {
     // Core CRUD operations
     findById(id: string): Promise<Notification | null>;
     findByUser(userId: string, limit?: number, offset?: number): Promise<Notification[]>;
     findUnreadByUser(userId: string, limit?: number): Promise<Notification[]>;
-    create(notification: Omit<Notification, 'id' | 'createdAt'>): Promise<Notification>;
-    createMany(notifications: Omit<Notification, 'id' | 'createdAt'>[]): Promise<Notification[]>;
+    create(notification: NotificationData): Promise<Notification>;
+    createMany(notifications: NotificationData[]): Promise<Notification[]>;
 
     // Mark as read operations
     markAsRead(id: string): Promise<Notification>;

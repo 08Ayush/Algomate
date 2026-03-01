@@ -1,27 +1,21 @@
 import { createClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-<<<<<<< HEAD
-=======
 import { requireRoles } from '@/lib/auth';
->>>>>>> origin/response-time
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 export async function PATCH(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-<<<<<<< HEAD
-=======
     const user = requireRoles(request, ['super_admin']);
     if (user instanceof NextResponse) return user;
 
->>>>>>> origin/response-time
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
 
     const {
@@ -72,17 +66,14 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-<<<<<<< HEAD
-=======
     const user = requireRoles(request, ['super_admin']);
     if (user instanceof NextResponse) return user;
 
->>>>>>> origin/response-time
-    const { id } = params;
+    const { id } = await params;
 
     const { error } = await supabaseAdmin
       .from('users')

@@ -27,12 +27,7 @@ export async function GET(request: NextRequest) {
   try {
     // Verify authentication
     const user = requireAuth(request);
-    if (!user || !user.user_id) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    if (user instanceof NextResponse) return user;
 
     const { searchParams } = new URL(request.url);
     const batchId = searchParams.get('batchId');
@@ -80,7 +75,7 @@ export async function GET(request: NextRequest) {
       .from('assignment_submissions')
       .select('id, score, percentage, submission_status, submitted_at, assignment_id')
       .in('assignment_id', assignmentIds)
-      .eq('student_id', user.user_id)
+      .eq('student_id', user.id)
       .eq('submission_status', 'SUBMITTED');
 
     // Map submissions to assignments in memory

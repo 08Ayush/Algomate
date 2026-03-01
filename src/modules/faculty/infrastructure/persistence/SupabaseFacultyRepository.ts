@@ -2,10 +2,11 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { IFacultyRepository, IFacultyQualificationRepository } from '../../domain/repositories/IFacultyRepository';
 import { Faculty, FacultyQualification } from '../../domain/entities/Faculty';
 import { BaseRepository, Database } from '@/shared/database';
+import type { UserUpdate } from '@/shared/database/types';
 import { withCacheAside } from '@/shared/cache/cache-helper';
 import { redisCache } from '@/shared/cache/redis-cache';
 
-export class SupabaseFacultyRepository extends BaseRepository<'users'> implements IFacultyRepository {
+export class SupabaseFacultyRepository extends BaseRepository<'users', Faculty> implements IFacultyRepository {
     constructor(db: SupabaseClient<Database>) {
         super(db, 'users');
     }
@@ -59,14 +60,16 @@ export class SupabaseFacultyRepository extends BaseRepository<'users'> implement
     }
 
     async create(faculty: Omit<Faculty, 'id' | 'createdAt' | 'updatedAt'>): Promise<Faculty> {
-        const { data, error } = await this.db
+        const updatePayload: UserUpdate = {
+            department_id: faculty.departmentId,
+            faculty_type: faculty.facultyType as UserUpdate['faculty_type'],
+            specialization: faculty.specialization,
+            experience: faculty.experience,
+        };
+
+        const { data, error } = await (this.db as any)
             .from('users')
-            .update({
-                department_id: faculty.departmentId,
-                faculty_type: faculty.facultyType,
-                specialization: faculty.specialization,
-                experience: faculty.experience
-            })
+            .update(updatePayload)
             .eq('id', faculty.userId)
             .select()
             .single();
@@ -76,19 +79,12 @@ export class SupabaseFacultyRepository extends BaseRepository<'users'> implement
     }
 
     async update(id: string, data: Partial<Faculty>): Promise<Faculty> {
-        const updateData: any = {};
-        if (data.facultyType) updateData.faculty_type = data.facultyType;
+        const updateData: UserUpdate = {};
+        if (data.facultyType) updateData.faculty_type = data.facultyType as UserUpdate['faculty_type'];
         if (data.specialization !== undefined) updateData.specialization = data.specialization;
         if (data.experience !== undefined) updateData.experience = data.experience;
 
-        const { data: result, error } = await this.db
-            .from('users')
-            .update(updateData)
-            .eq('id', id)
-            .select()
-            .single();
-
-        if (error) throw error;
+        const result = await this.updateRow(id, updateData);
         return this.mapToEntity(result);
     }
 
@@ -173,7 +169,7 @@ export class SupabaseFacultyQualificationRepository implements IFacultyQualifica
                 subject_id: qualification.subjectId,
                 qualification_level: qualification.qualificationLevel,
                 years_of_experience: qualification.yearsOfExperience
-            })
+            } as any)
             .select()
             .single();
 

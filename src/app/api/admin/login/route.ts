@@ -70,12 +70,11 @@ export async function POST(request: NextRequest) {
         token: token,
         last_login: new Date().toISOString()
       })
-      .eq('id', user.id)
-      .then(({ error: updateError }) => {
-        if (updateError) {
-          console.error('Failed to update user token:', updateError);
-        }
-      });
+      .eq('id', user.id);
+
+    if (updateError) {
+      console.error('Failed to update user token:', updateError);
+    }
 
     // Return user data and token immediately
     const responseData = {

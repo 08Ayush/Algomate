@@ -25,7 +25,7 @@ export function handleError(error: any): NextResponse {
     if (error instanceof ZodError) {
         const errors: Record<string, string[]> = {};
 
-        error.errors.forEach((err) => {
+        error.issues.forEach((err: any) => {
             const path = err.path.join('.');
             if (!errors[path]) {
                 errors[path] = [];

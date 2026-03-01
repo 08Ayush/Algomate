@@ -18,13 +18,14 @@ const deleteBucketUseCase = new DeleteElectiveBucketUseCase(bucketRepo);
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = requireAuth(request);
     if (user instanceof NextResponse) return user; // Auth failed
 
-    const bucket = await bucketRepo.findById(params.id);
+    const { id } = await params;
+    const bucket = await bucketRepo.findById(id);
     if (!bucket) {
       return NextResponse.json({ error: 'Bucket not found' }, { status: 404 });
     }
@@ -33,7 +34,7 @@ export async function GET(
     const { data: subjects } = await supabase
       .from('subjects')
       .select('*')
-      .eq('course_group_id', params.id);
+      .eq('course_group_id', id);
 
     return NextResponse.json({
       ...bucket.toJSON(),
@@ -47,16 +48,17 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = requireAuth(request);
     if (user instanceof NextResponse) return user; // Auth failed
 
+    const { id } = await params;
     const body = await request.json();
     const dto = UpdateElectiveBucketDtoSchema.parse(body);
 
-    const result = await updateBucketUseCase.execute(params.id, dto);
+    const result = await updateBucketUseCase.execute(id, dto);
     return NextResponse.json(result);
 
   } catch (error: any) {
@@ -68,13 +70,14 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = requireAuth(request);
     if (user instanceof NextResponse) return user; // Auth failed
 
-    const result = await deleteBucketUseCase.execute(params.id);
+    const { id } = await params;
+    const result = await deleteBucketUseCase.execute(id);
     return NextResponse.json(result);
 
   } catch (error: any) {

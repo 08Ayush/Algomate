@@ -1,5 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { IBatchRepository } from '../../domain/repositories/IBatchRepository';
+import { IBatchRepository, CreateBatchData } from '../../domain/repositories/IBatchRepository';
 import { Batch } from '../../domain/entities/Batch';
 
 export class SupabaseBatchRepository implements IBatchRepository {
@@ -41,7 +41,7 @@ export class SupabaseBatchRepository implements IBatchRepository {
         return (data || []).map(row => Batch.fromDatabase(row));
     }
 
-    async create(batch: Omit<Batch, 'id' | 'createdAt' | 'updatedAt'>): Promise<Batch> {
+    async create(batch: CreateBatchData): Promise<Batch> {
         const { data, error } = await this.db
             .from('batches')
             .insert({

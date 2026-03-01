@@ -13,12 +13,7 @@ export async function POST(request: NextRequest) {
   try {
     // Verify authentication
     const user = requireAuth(request);
-    if (!user || !user.user_id) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    if (user instanceof NextResponse) return user;
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -60,7 +55,7 @@ export async function POST(request: NextRequest) {
         college_id: user.college_id,
         subject_id: subjectId || null,
         batch_id: batchId,
-        created_by: user.user_id,
+        created_by: user.id,
         title,
         description,
         type,
@@ -137,8 +132,10 @@ export async function POST(request: NextRequest) {
         highest_score: 0,
         lowest_score: 0,
         avg_time_taken: 0,
+      })
+      .then(({ error: analyticsError }) => {
+        if (analyticsError) console.error('Analytics initialization error:', analyticsError);
       });
-
 
     // Fetch subject name if available
     let subjectName = 'General';
@@ -150,56 +147,47 @@ export async function POST(request: NextRequest) {
         .single();
       subjectName = subject?.name || 'General';
     }
-  })
-      .then(({ error: analyticsError }) => {
-    if (analyticsError) console.error('Analytics initialization error:', analyticsError);
-  });
 
-  // Step 4: Send notifications to students (if published and notifyStudents is true)
-  if (!isDraft && notifyStudents && scheduledEnd) {
-    const creatorName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Faculty';
-    const subjectName = subjectResult?.data?.name || 'General';
+    // Step 4: Send notifications to students (if published and notifyStudents is true)
+    if (!isDraft && notifyStudents && scheduledEnd) {
+      const creatorName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Faculty';
+      const subjectName = subjectResult?.data?.name || 'General';
 
-    await notifyAssignmentCreated({
-      assignmentId: assignment.id,
-      assignmentTitle: title,
-      batchId: batchId,
-      subjectName,
-      dueDate: new Date(scheduledEnd),
-      creatorId: user.user_id,
-      creatorName,
-      notifyStudents: true
+      await notifyAssignmentCreated({
+        assignmentId: assignment.id,
+        assignmentTitle: title,
+        batchId: batchId,
+        subjectName,
+        dueDate: new Date(scheduledEnd),
+        creatorId: user.id,
+        creatorName,
+        notifyStudents: true
+      });
+
+      console.log('✅ Assignment notification sent to students');
+    }
+
+    return NextResponse.json({
+      success: true,
+      assignment_id: assignment.id,
+      message: isDraft ? 'Assignment saved as draft' : 'Assignment created successfully',
+      notificationsSent: !isDraft && notifyStudents
     });
 
-    console.log('✅ Assignment notification sent to students');
+  } catch (error: any) {
+    console.error('Assignment creation error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Internal server error: ' + error.message },
+      { status: 500 }
+    );
   }
-
-  return NextResponse.json({
-    success: true,
-    assignment_id: assignment.id,
-    message: isDraft ? 'Assignment saved as draft' : 'Assignment created successfully',
-    notificationsSent: !isDraft && notifyStudents
-  });
-
-} catch (error: any) {
-  console.error('Assignment creation error:', error);
-  return NextResponse.json(
-    { success: false, error: 'Internal server error: ' + error.message },
-    { status: 500 }
-  );
-}
 }
 
 export async function GET(request: NextRequest) {
   try {
     // Verify authentication
     const user = requireAuth(request);
-    if (!user || !user.user_id) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    if (user instanceof NextResponse) return user;
 
     const { page, limit, isPaginated } = getPaginationParams(request);
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -217,7 +205,7 @@ export async function GET(request: NextRequest) {
 
     // Only faculty members see only their created assignments
     if (user.role === 'faculty') {
-      query = query.eq('created_by', user.user_id);
+      query = query.eq('created_by', user.id);
     }
 
     // Default sort

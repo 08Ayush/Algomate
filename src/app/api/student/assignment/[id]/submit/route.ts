@@ -32,12 +32,7 @@ export async function POST(
     const { id: assignmentId } = await params;
 
     const user = requireAuth(request);
-    if (!user || !user.user_id) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    if (user instanceof NextResponse) return user;
 
     const body = await request.json();
     const { answers, time_taken, violations } = body;
@@ -112,7 +107,7 @@ export async function POST(
       .from('assignment_submissions')
       .insert({
         assignment_id: assignmentId,
-        student_id: user.user_id,
+        student_id: user.id,
         batch_id: assignment.batch_id,
         submission_status: 'SUBMITTED',
         started_at: new Date().toISOString(),
@@ -169,7 +164,7 @@ export async function POST(
         await notifyProctoringViolation({
           assignmentId,
           assignmentTitle: assignment.title,
-          studentId: user.user_id,
+          studentId: user.id,
           studentName,
           facultyId: assignment.created_by,
           violationCount: violations
@@ -185,7 +180,7 @@ export async function POST(
         await notifyAssignmentSubmitted({
           assignmentId,
           assignmentTitle: assignment.title,
-          studentId: user.user_id,
+          studentId: user.id,
           studentName,
           facultyId: assignment.created_by
         });

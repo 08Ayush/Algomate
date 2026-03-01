@@ -36,12 +36,7 @@ export async function POST(
         const { id: assignmentId, submissionId } = await params;
 
         const user = requireAuth(request);
-        if (!user || !user.user_id) {
-            return NextResponse.json(
-                { success: false, error: 'Unauthorized' },
-                { status: 401 }
-            );
-        }
+        if (user instanceof NextResponse) return user;
 
         // Only faculty and admins can grade
         if (!['super_admin', 'college_admin', 'admin', 'faculty'].includes(user.role)) {
@@ -102,7 +97,7 @@ export async function POST(
 
         // Verify assignment belongs to user's college or they are the creator
         const assignment = submission.assignments;
-        if (assignment.college_id !== user.college_id && assignment.created_by !== user.user_id) {
+        if (assignment.college_id !== user.college_id && assignment.created_by !== user.id) {
             return NextResponse.json(
                 { success: false, error: 'Access denied' },
                 { status: 403 }
@@ -129,7 +124,7 @@ export async function POST(
                 obtained_marks: score,
                 feedback: feedback || null,
                 graded_at: new Date().toISOString(),
-                graded_by: user.user_id,
+                graded_by: user.id,
                 status: 'GRADED',
                 is_passed: isPassed
             })
@@ -176,7 +171,7 @@ export async function POST(
                 assignmentId,
                 assignmentTitle: assignment.title,
                 studentId: submission.student_id,
-                graderId: user.user_id,
+                graderId: user.id,
                 graderName,
                 grade: `${score}/${assignment.total_marks} (${grade})`,
                 feedback: feedback ? feedback.substring(0, 100) : undefined
@@ -261,12 +256,7 @@ export async function GET(
         const { id: assignmentId, submissionId } = await params;
 
         const user = requireAuth(request);
-        if (!user || !user.user_id) {
-            return NextResponse.json(
-                { success: false, error: 'Unauthorized' },
-                { status: 401 }
-            );
-        }
+        if (user instanceof NextResponse) return user;
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -299,7 +289,7 @@ export async function GET(
         }
 
         // Students can only see their own grades
-        if (user.role === 'student' && submission.student_id !== user.user_id) {
+        if (user.role === 'student' && submission.student_id !== user.id) {
             return NextResponse.json(
                 { success: false, error: 'Access denied' },
                 { status: 403 }

@@ -5,7 +5,8 @@ export const GenerateTimetableDtoSchema = z.object({
     batch_id: z.string().uuid(),
     semester: z.number().int().min(1).max(8),
     academic_year: z.string(),
-    created_by: z.string().uuid()
+    created_by: z.string().uuid(),
+    college_id: z.string().uuid().optional()
 });
 
 export type GenerateTimetableDto = z.infer<typeof GenerateTimetableDtoSchema>;

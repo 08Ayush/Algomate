@@ -46,14 +46,14 @@ async function getAuthenticatedUser(request: NextRequest) {
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Get authenticated user
     const user = requireAuth(request);
     if (user instanceof NextResponse) return user;
 
-    const id = params.id;
+    const { id } = await params;
     const body = await request.json();
 
     // Validate required fields
@@ -171,14 +171,14 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Get authenticated user
     const user = requireAuth(request);
     if (user instanceof NextResponse) return user;
 
-    const id = params.id;
+    const { id } = await params;
 
     // Check if classroom exists and belongs to user's college
     const { data: existingClassroom } = await supabaseAdmin

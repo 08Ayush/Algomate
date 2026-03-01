@@ -1,14 +1,11 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { IStudentRepository, IBatchRepository } from '../../domain/repositories/IStudentRepository';
+import { IStudentRepository, IBatchRepository, CreateStudentData, CreateBatchData } from '../../domain/repositories/IStudentRepository';
 import { Student, Batch } from '../../domain/entities/Student';
-import { BaseRepository, Database } from '@/shared/database';
+import { Database } from '@/shared/database';
 import { withCacheAside } from '@/shared/cache/cache-helper';
-import { redisCache } from '@/shared/cache/redis-cache';
 
-export class SupabaseStudentRepository extends BaseRepository<'users'> implements IStudentRepository {
-    constructor(db: SupabaseClient<Database>) {
-        super(db, 'users');
-    }
+export class SupabaseStudentRepository implements IStudentRepository {
+    constructor(private readonly db: SupabaseClient<Database>) { }
 
     private mapToEntity(row: any): Student {
         return new Student(
@@ -56,8 +53,8 @@ export class SupabaseStudentRepository extends BaseRepository<'users'> implement
         });
     }
 
-    async create(student: Omit<Student, 'id' | 'createdAt' | 'updatedAt'>): Promise<Student> {
-        const { data, error } = await this.db
+    async create(student: CreateStudentData): Promise<Student> {
+        const { data, error } = await (this.db as any)
             .from('users')
             .update({
                 roll_number: student.rollNumber,
@@ -76,7 +73,7 @@ export class SupabaseStudentRepository extends BaseRepository<'users'> implement
         if (data.rollNumber) updateData.roll_number = data.rollNumber;
         if (data.enrollmentYear) updateData.enrollment_year = data.enrollmentYear;
 
-        const { data: result, error } = await this.db
+        const { data: result, error } = await (this.db as any)
             .from('users')
             .update(updateData)
             .eq('id', id)
@@ -88,7 +85,13 @@ export class SupabaseStudentRepository extends BaseRepository<'users'> implement
     }
 
     async delete(id: string): Promise<boolean> {
-        return super.delete(id);
+        const { error } = await this.db
+            .from('users')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+        return true;
     }
 
     async countByBatch(batchId: string): Promise<number> {
@@ -120,7 +123,7 @@ export class SupabaseBatchRepository implements IBatchRepository {
     async findById(id: string): Promise<Batch | null> {
         return withCacheAside({ key: `batch:id:${id}`, ttl: 3600 }, async () => {
             const { data, error } = await this.db
-                .from('batches' as any)
+                .from('batches')
                 .select('*')
                 .eq('id', id)
                 .single();
@@ -136,7 +139,7 @@ export class SupabaseBatchRepository implements IBatchRepository {
     async findByDepartment(departmentId: string): Promise<Batch[]> {
         return withCacheAside({ key: `batches:dept:${departmentId}`, ttl: 3600 }, async () => {
             const { data, error } = await this.db
-                .from('batches' as any)
+                .from('batches')
                 .select('*')
                 .eq('department_id', departmentId);
 
@@ -145,9 +148,9 @@ export class SupabaseBatchRepository implements IBatchRepository {
         });
     }
 
-    async create(batch: Omit<Batch, 'id' | 'createdAt' | 'updatedAt'>): Promise<Batch> {
-        const { data, error } = await this.db
-            .from('batches' as any)
+    async create(batch: CreateBatchData): Promise<Batch> {
+        const { data, error } = await (this.db as any)
+            .from('batches')
             .insert({
                 name: batch.name,
                 department_id: batch.departmentId,
@@ -167,8 +170,8 @@ export class SupabaseBatchRepository implements IBatchRepository {
         if (data.year) updateData.year = data.year;
         if (data.semester) updateData.semester = data.semester;
 
-        const { data: result, error } = await this.db
-            .from('batches' as any)
+        const { data: result, error } = await (this.db as any)
+            .from('batches')
             .update(updateData)
             .eq('id', id)
             .select()
@@ -180,7 +183,7 @@ export class SupabaseBatchRepository implements IBatchRepository {
 
     async delete(id: string): Promise<boolean> {
         const { error } = await this.db
-            .from('batches' as any)
+            .from('batches')
             .delete()
             .eq('id', id);
 

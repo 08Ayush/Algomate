@@ -9,10 +9,8 @@ export type { SuccessResponse, ErrorResponse } from './response';
 
 export {
     getPaginationParams,
-    createPaginatedResult,
-    getOffset,
-    getRange,
-    DEFAULT_PAGINATION
+    createPaginatedResponse,
+    getPaginationRange,
 } from './pagination';
 export type { PaginationParams, PaginatedResult } from './pagination';
 

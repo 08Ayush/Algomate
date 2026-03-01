@@ -17,10 +17,8 @@ export * from './middleware/validation';
 export {
     ApiResponse,
     getPaginationParams,
-    createPaginatedResult,
-    getOffset,
-    getRange,
-    DEFAULT_PAGINATION,
+    createPaginatedResponse,
+    getPaginationRange,
     toISOString,
     formatDate,
     formatDateTime,

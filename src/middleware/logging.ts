@@ -37,7 +37,7 @@ export async function requestLoggingMiddleware(request: NextRequest) {
     const duration = Date.now() - start;
 
     logger.logApiRequest(method, url, 0, duration, {
-        ip: request.ip || request.headers.get('x-forwarded-for'),
+        ip: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip'),
         userAgent: request.headers.get('user-agent'),
         stage: 'middleware_pass'
     });

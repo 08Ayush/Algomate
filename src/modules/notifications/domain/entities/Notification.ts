@@ -47,6 +47,29 @@ export type ContentType =
 
 export type Priority = 'low' | 'normal' | 'high' | 'urgent';
 
+/**
+ * Plain data shape for creating a Notification (no methods).
+ * Use this instead of Omit<Notification, 'id' | 'createdAt'> in repository signatures
+ * to avoid requiring class methods (toJSON, isExpired, isHighPriority) on plain objects.
+ */
+export interface NotificationData {
+    userId: string;
+    title: string;
+    message: string;
+    type: NotificationType;
+    isRead: boolean;
+    batchId?: string;
+    departmentId?: string;
+    timetableId?: string;
+    senderId?: string;
+    contentType?: ContentType;
+    contentId?: string;
+    priority?: Priority;
+    actionUrl?: string;
+    expiresAt?: Date;
+    readAt?: Date;
+}
+
 export class Notification {
     constructor(
         public readonly id: string,

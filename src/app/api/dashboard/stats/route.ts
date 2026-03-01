@@ -43,8 +43,8 @@ export async function GET(request: NextRequest) {
 
     const result = await getStatsUseCase.execute(
       user.id,
-      user.department_id,
-      user.faculty_type,
+      user.department_id || '',
+      user.faculty_type || '',
       { includeStats: true, includeRecent: false }
     );
 

@@ -127,12 +127,9 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-<<<<<<< HEAD
-=======
     const user = requireAuth(request);
     if (user instanceof NextResponse) return user;
 
->>>>>>> origin/response-time
     const searchParams = request.nextUrl.searchParams;
     const batch_id = searchParams.get('batch_id');
 

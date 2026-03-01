@@ -61,10 +61,7 @@ interface Notification {
 
 export function NotificationBell() {
   const router = useRouter();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {

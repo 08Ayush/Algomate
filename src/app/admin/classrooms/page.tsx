@@ -335,7 +335,7 @@ const ClassroomsPage: React.FC = () => {
                                         <td className="px-6 py-4">
                                             <div className="flex gap-2">
                                                 <button onClick={() => handleEdit(room)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={16} /></button>
-                                                <button onClick={() => handleDelete(room.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                                                <button onClick={() => handleDelete(room)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
                                             </div>
                                         </td>
                                     </motion.tr>

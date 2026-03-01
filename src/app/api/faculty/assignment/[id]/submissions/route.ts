@@ -24,18 +24,13 @@ function getAuthenticatedUser(request: NextRequest) {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = requireAuth(request);
-    if (!user || !user.user_id) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    if (user instanceof NextResponse) return user;
 
-    const assignmentId = params.id;
+    const { id: assignmentId } = await params;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Fetch assignment details and verify ownership
@@ -43,7 +38,7 @@ export async function GET(
       .from('assignments')
       .select('*, batches(name, semester, section), subjects(name, code)')
       .eq('id', assignmentId)
-      .eq('created_by', user.user_id)
+      .eq('created_by', user.id)
       .single();
 
     if (assignmentError || !assignment) {

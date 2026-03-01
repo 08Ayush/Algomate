@@ -6,7 +6,7 @@
  */
 
 // User Table Types
-export interface UserRow {
+export type UserRow = {
     id: string;
     email: string;
     password_hash: string;
@@ -17,7 +17,11 @@ export interface UserRow {
     college_uid: string;
     department_id: string | null;
     faculty_type: 'creator' | 'publisher' | 'general' | 'guest' | null;
+    specialization: string | null;
+    experience: number | null;
     student_id: string | null;
+    roll_number: string | null;
+    enrollment_year: number | null;
     course_id: string | null;
     current_semester: number | null;
     admission_year: number | null;
@@ -27,36 +31,50 @@ export interface UserRow {
     last_login: string | null;
     created_at: string;
     updated_at: string;
-}
+};
 
-export interface UserInsert extends Omit<UserRow, 'id' | 'created_at'> { }
-export interface UserUpdate extends Partial<UserInsert> { }
+export type UserInsert = Omit<UserRow, 'id' | 'created_at'>;
+export type UserUpdate = Partial<UserInsert>;
 
 // College Table Types
-export interface CollegeRow {
+export type CollegeRow = {
     id: string;
     name: string;
     code: string;
     address: string;
     created_at: string;
     updated_at: string;
-}
+};
 
-export interface CollegeInsert extends Omit<CollegeRow, 'id' | 'created_at' | 'updated_at'> { }
-export interface CollegeUpdate extends Partial<CollegeInsert> { }
+export type CollegeInsert = Omit<CollegeRow, 'id' | 'created_at' | 'updated_at'>;
+export type CollegeUpdate = Partial<CollegeInsert>;
 
 // Department Table Types
-export interface DepartmentRow {
+export type DepartmentRow = {
     id: string;
     name: string;
     code: string;
     college_id: string;
     created_at: string;
     updated_at: string;
-}
+};
 
-export interface DepartmentInsert extends Omit<DepartmentRow, 'id' | 'created_at' | 'updated_at'> { }
-export interface DepartmentUpdate extends Partial<DepartmentInsert> { }
+export type DepartmentInsert = Omit<DepartmentRow, 'id' | 'created_at' | 'updated_at'>;
+export type DepartmentUpdate = Partial<DepartmentInsert>;
+
+// Batch Table Types
+export type BatchRow = {
+    id: string;
+    name: string;
+    department_id: string;
+    year: number;
+    semester: number;
+    created_at: string;
+    updated_at: string;
+};
+
+export type BatchInsert = Omit<BatchRow, 'id' | 'created_at' | 'updated_at'>;
+export type BatchUpdate = Partial<BatchInsert>;
 
 // Main database type definition
 export type Database = {
@@ -76,6 +94,11 @@ export type Database = {
                 Row: DepartmentRow;
                 Insert: DepartmentInsert;
                 Update: DepartmentUpdate;
+            };
+            batches: {
+                Row: BatchRow;
+                Insert: BatchInsert;
+                Update: BatchUpdate;
             };
             // Add more tables as needed
         };

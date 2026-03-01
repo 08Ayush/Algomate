@@ -271,7 +271,7 @@ const DepartmentsPage: React.FC = () => {
                                                     <Edit size={16} />
                                                 </button>
                                                 <button
-                                                    onClick={() => handleDelete(dept.id)}
+                                                    onClick={() => handleDelete(dept)}
                                                     className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                                 >
                                                     <Trash2 size={16} />

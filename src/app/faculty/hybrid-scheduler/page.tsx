@@ -40,13 +40,7 @@ interface Constraint {
   enabled: boolean;
 }
 
-interface GenerationTask {
-  status: 'idle' | 'running' | 'completed' | 'failed';
-  phase: string;
-  progress: number;
-  message: string;
-  metrics?: any;
-}
+
 
 const DEFAULT_CONSTRAINTS: Constraint[] = [
   { id: 'HC001', type: 'HARD', category: 'FACULTY', name: 'No Faculty Double Booking', description: 'Faculty cannot teach multiple classes at the same time', weight: 10000, enabled: true },

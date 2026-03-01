@@ -41,8 +41,9 @@ async function getAuthenticatedUser(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
-    if (!user || !['admin', 'publisher'].includes(user.role)) {
+    if (!['admin', 'publisher'].includes(user.role)) {
       return NextResponse.json(
         { error: 'Unauthorized. Only admin or publisher can send urgent updates' },
         { status: 403 }

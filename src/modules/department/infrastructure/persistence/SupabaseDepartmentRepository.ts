@@ -94,7 +94,7 @@ export class SupabaseDepartmentRepository implements IDepartmentRepository {
 
         updateData.updated_at = new Date().toISOString();
 
-        const { data: row, error } = await this.db
+        const { data: row, error } = await (this.db as any)
             .from('departments')
             .update(updateData)
             .eq('id', id)

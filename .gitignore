@@ -1,6 +1,14 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# ============================================================
+# ACADEMIC CAMPASS 2025 — .gitignore
+# ============================================================
 
-# dependencies
+# ─── Next.js ────────────────────────────────────────────────
+/.next/
+/out/
+/build
+next-env.d.ts
+
+# ─── Node ────────────────────────────────────────────────────
 /node_modules
 /.pnp
 .pnp.*
@@ -10,67 +18,16 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
+# ─── Environment / Secrets ───────────────────────────────────
+.env
+.env.*
+!.env.example
 
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-/mds/
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files (can opt-in for committing if needed)
-.env*
-
-# venv files
-/venv/
-
-#requiremnet.txt 
-/requirements.txt
-
-# vercel
-.vercel
-
-# typescript
+# ─── TypeScript build info ───────────────────────────────────
 *.tsbuildinfo
-next-env.d.ts
 
-# Reference folder (not to be pushed)
-/refrance/
-/referal/pages/
-
-# Scripts with credentials (security)
-/scripts/fix-batches-permissions.js
-
-# IDE/Editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS generated files
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Logs
-logs
+# ─── Logs ────────────────────────────────────────────────────
+/logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -78,85 +35,73 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Runtime data
-pids
-*.pid
-*.seed
-*.pid.lock
+# ─── Python ──────────────────────────────────────────────────
+/venv/
+__pycache__/
+*.py[cod]
+/requirements.txt
 
-# Coverage directory used by tools like istanbul
-coverage/
+# ─── Testing / Coverage ──────────────────────────────────────
+/coverage/
 *.lcov
-
-# nyc test coverage
 .nyc_output
 
-# Optional npm cache directory
-.npm
-
-# Optional eslint cache
+# ─── Cache ───────────────────────────────────────────────────
+.cache
+.parcel-cache
 .eslintcache
-
-# Optional stylelint cache
 .stylelintcache
-
-# Microbundle cache
 .rpt2_cache/
 .rts2_cache_cjs/
 .rts2_cache_es/
 .rts2_cache_umd/
 
-# Optional REPL history
-.node_repl_history
+# ─── OS files ────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.AppleDouble
+.LSOverride
+*~
 
-# Output of 'npm pack'
+# ─── IDE / Editor ────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ─── Runtime data ────────────────────────────────────────────
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# ─── Misc ────────────────────────────────────────────────────
+*.pem
 *.tgz
-
-# Yarn Integrity file
-.yarn-integrity
-
-# parcel-bundler cache (https://parceljs.org/)
-.cache
-.parcel-cache
-
-# Temporary folders
-tmp/
-temp/
-
-# Local database files
 *.db
 *.sqlite
 *.sqlite3
-
-# Backup files
 *.bak
 *.backup
-
-# Archive files
 *.zip
 *.tar.gz
 *.rar
+.npm
+.node_repl_history
+.yarn-integrity
+tmp/
+temp/
 
-# Windows specific files
-Thumbs.db
-ehthumbs.db
-
-# macOS specific files
-.AppleDouble
-.LSOverride
-
-# Linux specific files
-*~
-
-# Supabase
+# ─── Supabase ────────────────────────────────────────────────
 .supabase
 
-# Database migration files (if needed)
-migrations/
+# ─── Vercel ──────────────────────────────────────────────────
+.vercel
 
-# Local environment configurations
-.env
-.env.example
-.env.local.example
 
-/NEW UI PAGES/
+

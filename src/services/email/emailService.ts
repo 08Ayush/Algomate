@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
 
 interface SendEmailOptions {
-  to: string;
+  to: string | string[];
   subject: string;
   template: string;
   data: Record<string, unknown>;

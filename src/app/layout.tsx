@@ -2,10 +2,7 @@ import type { Metadata } from "next";
 // import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "../contexts/ThemeContext";
-<<<<<<< HEAD
 import { SemesterModeProvider } from "../contexts/SemesterModeContext";
-=======
->>>>>>> origin/response-time
 import { ConfirmDialogProvider } from "../components/ui/ConfirmDialog";
 
 // const geistSans = Geist({
@@ -35,12 +32,9 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <ThemeProvider>
-<<<<<<< HEAD
           <SemesterModeProvider>
             {children}
           </SemesterModeProvider>
-=======
->>>>>>> origin/response-time
           <ConfirmDialogProvider>
             {children}
           </ConfirmDialogProvider>

@@ -47,14 +47,14 @@ async function getAuthenticatedUser(request: NextRequest) {
 // PUT - Update faculty
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Get authenticated user
     const user = requireAuth(request);
     if (user instanceof NextResponse) return user;
 
-    const id = params.id;
+    const { id } = await params;
     const {
       first_name,
       last_name,
@@ -204,14 +204,14 @@ export async function PUT(
 // DELETE - Delete faculty
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Get authenticated user
     const user = requireAuth(request);
     if (user instanceof NextResponse) return user;
 
-    const id = params.id;
+    const { id } = await params;
 
     // Check if faculty exists and belongs to user's college
     const { data: existingFaculty } = await supabaseAdmin

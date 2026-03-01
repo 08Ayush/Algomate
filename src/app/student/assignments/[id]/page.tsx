@@ -279,7 +279,8 @@ export default function AssignmentPage() {
         } finally {
           setIsSubmitting(false);
         }
-      });
+      }
+    });
   };
 
   const isQuestionAnswered = (questionId: string) => {

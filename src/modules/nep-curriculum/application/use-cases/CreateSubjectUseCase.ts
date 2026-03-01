@@ -11,7 +11,22 @@ export class CreateSubjectUseCase {
             credits: dto.credits,
             category: dto.category,
             semester: dto.semester,
-            departmentId: dto.department_id
+            departmentId: dto.department_id,
+            domain: null,
+            toJSON() {
+                return {
+                    id: '',
+                    name: this.name,
+                    code: this.code,
+                    credits: this.credits,
+                    category: this.category,
+                    semester: this.semester,
+                    department_id: this.departmentId,
+                    domain: this.domain,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                };
+            }
         });
         return subject.toJSON();
     }

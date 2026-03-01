@@ -230,13 +230,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify subject exists and belongs to user's college
-    const { data: subjectCheck, error: subjectError } = await supabaseAdmin
-      .from('subjects')
-      .select('id, name, code, college_id')
-      .eq('id', subject_id)
-      .eq('college_id', user.college_id)
-      .maybeSingle();
-
     if (subjectError || !subjectCheck) {
       console.error('❌ Subject not found:', subject_id, subjectError);
       return NextResponse.json({
@@ -248,13 +241,6 @@ export async function POST(request: NextRequest) {
     console.log('✅ Validation passed - Faculty:', facultyCheck.first_name, facultyCheck.last_name, '| Subject:', subjectCheck.name);
 
     // Check if qualification already exists
-    const { data: existing } = await supabaseAdmin
-      .from('faculty_qualified_subjects')
-      .select('id')
-      .eq('faculty_id', faculty_id)
-      .eq('subject_id', subject_id)
-      .maybeSingle();
-
     if (existing) {
       return NextResponse.json({
         success: false,

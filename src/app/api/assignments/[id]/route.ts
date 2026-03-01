@@ -40,12 +40,7 @@ export async function GET(
     try {
         const { id } = await params;
         const user = requireAuth(request);
-        if (!user || !user.user_id) {
-            return NextResponse.json(
-                { success: false, error: 'Unauthorized' },
-                { status: 401 }
-            );
-        }
+        if (user instanceof NextResponse) return user;
 
         const supabase = getSupabase();
 
@@ -127,12 +122,7 @@ export async function PUT(
     try {
         const { id } = await params;
         const user = requireAuth(request);
-        if (!user || !user.user_id) {
-            return NextResponse.json(
-                { success: false, error: 'Unauthorized' },
-                { status: 401 }
-            );
-        }
+        if (user instanceof NextResponse) return user;
 
         const supabase = getSupabase();
 
@@ -151,7 +141,7 @@ export async function PUT(
         }
 
         // Check permission - must be creator or same college admin
-        if (existingAssignment.created_by !== user.user_id && existingAssignment.college_id !== user.college_id) {
+        if (existingAssignment.created_by !== user.id && existingAssignment.college_id !== user.college_id) {
             return NextResponse.json(
                 { success: false, error: 'Access denied' },
                 { status: 403 }
@@ -266,12 +256,7 @@ export async function DELETE(
     try {
         const { id } = await params;
         const user = requireAuth(request);
-        if (!user || !user.user_id) {
-            return NextResponse.json(
-                { success: false, error: 'Unauthorized' },
-                { status: 401 }
-            );
-        }
+        if (user instanceof NextResponse) return user;
 
         const supabase = getSupabase();
 
@@ -290,7 +275,7 @@ export async function DELETE(
         }
 
         // Check permission - must be creator or college admin
-        if (existingAssignment.created_by !== user.user_id &&
+        if (existingAssignment.created_by !== user.id &&
             (existingAssignment.college_id !== user.college_id || !['admin', 'college_admin'].includes(user.role))) {
             return NextResponse.json(
                 { success: false, error: 'Access denied' },

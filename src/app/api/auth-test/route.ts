@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
       success: true,
       user: {
         id: user.id,
-        name: user.name,
+        name: `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Unknown',
         email: user.email,
         role: user.role,
         college_id: user.college_id

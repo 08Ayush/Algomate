@@ -1,6 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { INotificationRepository } from '../../domain/repositories/INotificationRepository';
-import { Notification, NotificationType, ContentType, Priority } from '../../domain/entities/Notification';
+import { Notification, NotificationData, NotificationType, ContentType, Priority } from '../../domain/entities/Notification';
 import { Database } from '@/shared/database';
 
 export class SupabaseNotificationRepository implements INotificationRepository {
@@ -70,7 +70,7 @@ export class SupabaseNotificationRepository implements INotificationRepository {
         return data.map(row => this.mapToEntity(row));
     }
 
-    async create(notification: Omit<Notification, 'id' | 'createdAt'>): Promise<Notification> {
+    async create(notification: NotificationData): Promise<Notification> {
         const { data, error } = await this.db
             .from('notifications' as any)
             .insert({
@@ -96,7 +96,7 @@ export class SupabaseNotificationRepository implements INotificationRepository {
         return this.mapToEntity(data);
     }
 
-    async createMany(notifications: Omit<Notification, 'id' | 'createdAt'>[]): Promise<Notification[]> {
+    async createMany(notifications: NotificationData[]): Promise<Notification[]> {
         const { data, error } = await this.db
             .from('notifications' as any)
             .insert(notifications.map(n => ({

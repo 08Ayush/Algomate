@@ -21,10 +21,6 @@ export async function POST(request: NextRequest) {
     const authService = new AuthService();
     const useCase = new LoginUseCase(repository, authService);
 
-<<<<<<< HEAD
-    // Execute logic
-=======
->>>>>>> origin/response-time
     const result = await useCase.execute({
       collegeUid: body.collegeUid,
       password: body.password

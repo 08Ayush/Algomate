@@ -25,18 +25,13 @@ function getAuthenticatedUser(request: NextRequest) {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = requireAuth(request);
-    if (!user || !user.user_id) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    if (user instanceof NextResponse) return user;
 
-    const assignmentId = params.id;
+    const { id: assignmentId } = await params;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Fetch assignment details
@@ -59,7 +54,7 @@ export async function GET(
       .from('assignment_submissions')
       .select('id, score, percentage, submission_status, submitted_at')
       .eq('assignment_id', assignmentId)
-      .eq('student_id', user.user_id)
+      .eq('student_id', user.id)
       .eq('submission_status', 'SUBMITTED')
       .single();
 

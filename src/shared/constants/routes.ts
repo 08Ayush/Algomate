@@ -166,7 +166,7 @@ export function isPublicRoute(path: string): boolean {
         FRONTEND_ROUTES.REGISTER,
         FRONTEND_ROUTES.FORGOT_PASSWORD
     ];
-    return publicRoutes.includes(path);
+    return (publicRoutes as string[]).includes(path);
 }
 
 /**

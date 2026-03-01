@@ -98,8 +98,8 @@ export class SupabaseEventRepository implements IEventRepository {
     }
 
     async create(event: Omit<Event, 'id' | 'createdAt' | 'updatedAt'>): Promise<Event> {
-        const { data, error } = await this.db
-            .from('events' as any)
+        const { data, error } = await (this.db as any)
+            .from('events')
             .insert({
                 title: event.title,
                 description: event.description,

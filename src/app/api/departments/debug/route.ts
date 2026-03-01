@@ -1,0 +1,2 @@
+// Debug route placeholder
+export { };

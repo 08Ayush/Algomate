@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const result = await reviewQueueUseCase.execute(user.department_id, user.faculty_type);
+    const result = await reviewQueueUseCase.execute(user.department_id, user.faculty_type ?? '');
     return NextResponse.json(result);
 
   } catch (error: any) {

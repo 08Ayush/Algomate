@@ -48,12 +48,20 @@ export const GET = asyncHandler(async (request: NextRequest) => {
     }
   );
 
-  const paginated = createPaginatedResponse(result.classrooms, result.total, page, limit);
+  if (isPaginated && page && limit) {
+    const paginated = createPaginatedResponse(result.classrooms, result.total, page, limit);
+
+    return NextResponse.json({
+      success: true,
+      classrooms: paginated.data,
+      meta: paginated.meta
+    });
+  }
 
   return NextResponse.json({
     success: true,
-    classrooms: paginated.data,
-    meta: paginated.meta
+    classrooms: result.classrooms,
+    meta: { total: result.total }
   });
 });
 

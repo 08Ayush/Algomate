@@ -12,7 +12,7 @@ import { redisCache } from '@/shared/cache/redis-cache';
  * Implements IUserRepository using Supabase
  */
 export class SupabaseUserRepository implements IUserRepository {
-    constructor(private readonly db: SupabaseClient<Database>) { }
+    constructor(private readonly db: SupabaseClient<any>) { }
 
     /**
      * Map database row to User entity
@@ -199,7 +199,7 @@ export class SupabaseUserRepository implements IUserRepository {
                 current_semester: user.currentSemester,
                 admission_year: user.admissionYear,
                 is_active: user.isActive
-            } as any)
+            })
             .select()
             .single();
 

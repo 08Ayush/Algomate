@@ -48,12 +48,13 @@ async function getAuthenticatedUser(request: NextRequest) {
 // PUT - Update existing course
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = requireAuth(request);
     if (user instanceof NextResponse) return user;
 
+    const { id } = await params;
     const { title, code, nature_of_course, intake, duration_years } = await request.json();
 
     if (!title || !code) {
@@ -67,7 +68,7 @@ export async function PUT(
     const { data: existingCourse } = await supabaseAdmin
       .from('courses')
       .select('id, college_id')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (!existingCourse || existingCourse.college_id !== user.college_id) {
@@ -83,7 +84,7 @@ export async function PUT(
       .select('id')
       .eq('code', code)
       .eq('college_id', user.college_id)
-      .neq('id', params.id)
+      .neq('id', id)
       .single();
 
     if (duplicateCourse) {
@@ -104,7 +105,7 @@ export async function PUT(
         duration_years: duration_years || null,
         updated_at: new Date().toISOString()
       })
-      .eq('id', params.id)
+      .eq('id', id)
       .select()
       .single();
 
@@ -133,17 +134,19 @@ export async function PUT(
 // DELETE - Delete course
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = requireAuth(request);
     if (user instanceof NextResponse) return user;
 
+    const { id } = await params;
+
     // Verify the course belongs to the user's college
     const { data: existingCourse } = await supabaseAdmin
       .from('courses')
       .select('id, college_id, code')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (!existingCourse || existingCourse.college_id !== user.college_id) {
@@ -157,7 +160,7 @@ export async function DELETE(
     const { data: relatedSubjects } = await supabaseAdmin
       .from('subjects')
       .select('id')
-      .eq('course_id', params.id)
+      .eq('course_id', id)
       .limit(1);
 
     if (relatedSubjects && relatedSubjects.length > 0) {
@@ -171,7 +174,7 @@ export async function DELETE(
     const { error } = await supabaseAdmin
       .from('courses')
       .delete()
-      .eq('id', params.id);
+      .eq('id', id);
 
     if (error) {
       console.error('Course deletion error:', error);

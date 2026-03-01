@@ -10,7 +10,7 @@ export const RegisterDtoSchema = z.object({
     firstName: z.string().min(1, 'First name is required'),
     lastName: z.string().min(1, 'Last name is required'),
     department_id: z.string().uuid('Invalid department ID'),
-    role: z.nativeEnum(UserRole, { errorMap: () => ({ message: 'Invalid role' }) }),
+    role: z.nativeEnum(UserRole, { error: 'Invalid role' }),
     // Allow partial validation for faculty_type if role depends on it, but Zod makes it tricky.
     // Making it optional here, validation logic in UseCase or refined schema can handle strictness.
     faculty_type: z.nativeEnum(FacultyType).optional()

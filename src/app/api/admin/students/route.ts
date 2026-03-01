@@ -20,7 +20,7 @@ export const GET = asyncHandler(
     }
 
     const supabase = createClient();
-    const cacheKey = redisCache.buildKey(targetCollegeId, 'students', 'list');
+    const cacheKey = redisCache.buildKey(targetCollegeId ?? '', 'students', 'list');
     const forceRefresh = searchParams.get('refresh') === '1';
     if (forceRefresh) {
       await invalidateCache(cacheKey);
@@ -144,7 +144,7 @@ export const POST = asyncHandler(
 
     if (error) throw error;
 
-    const cacheKey = redisCache.buildKey(user.college_id, 'students', 'list');
+    const cacheKey = redisCache.buildKey(user.college_id ?? '', 'students', 'list');
     await invalidateCache(cacheKey);
 
     return NextResponse.json({ success: true, student: newStudent }, { status: 201 });

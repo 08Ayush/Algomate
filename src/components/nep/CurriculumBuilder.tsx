@@ -1,22 +1,22 @@
-'use client';
+// 'use client';
 
-import React, { useState, useEffect } from 'react';
-import {
-  DndContext,
-  DragEndEvent,
-  DragOverlay,
-  DragStartEvent,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  closestCenter,
-  useDroppable,
-} from '@dnd-kit/core';
-import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { Trash2 } from 'lucide-react';
-import { useConfirm } from '@/components/ui/ConfirmDialog';
+// import React, { useState, useEffect } from 'react';
+// import {
+//   DndContext,
+//   DragEndEvent,
+//   DragOverlay,
+//   DragStartEvent,
+//   PointerSensor,
+//   useSensor,
+//   useSensors,
+//   closestCenter,
+//   useDroppable,
+// } from '@dnd-kit/core';
+// import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+// import { useSortable } from '@dnd-kit/sortable';
+// import { CSS } from '@dnd-kit/utilities';
+// import { Trash2 } from 'lucide-react';
+// import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 
 // // Types
@@ -941,6 +941,7 @@ import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-ki
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Trash2 } from 'lucide-react';
+import { useConfirm } from '../ui/ConfirmDialog';
 
 
 // Types
@@ -1030,8 +1031,8 @@ function DroppableBucket({
     <div
       ref={setNodeRef}
       className={`border-2 border-dashed rounded-lg p-4 mb-4 transition-colors ${isOver
-          ? 'bg-blue-50 border-blue-400 border-solid'
-          : 'bg-gray-50 border-gray-300'
+        ? 'bg-blue-50 border-blue-400 border-solid'
+        : 'bg-gray-50 border-gray-300'
         }`}
     >
       <div className="flex justify-between items-center mb-3">
@@ -1793,10 +1794,7 @@ export default function CurriculumBuilder({
                       type="checkbox"
                       checked={bucket.is_common_slot}
                       onChange={() => handleToggleCommonSlot(bucket.id)}
-<<<<<<< HEAD
-=======
                       title="Common Time Slot"
->>>>>>> origin/response-time
                       className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
                     <span className="font-medium text-gray-700">Common Time Slot</span>

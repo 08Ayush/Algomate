@@ -3,7 +3,7 @@ import { ICollegeRepository } from '../../domain/repositories/ICollegeRepository
 import { College } from '../../domain/entities/College';
 import { BaseRepository, Database } from '@/shared/database';
 
-export class SupabaseCollegeRepository extends BaseRepository<'colleges'> implements ICollegeRepository {
+export class SupabaseCollegeRepository extends BaseRepository<'colleges', College> implements ICollegeRepository {
     constructor(db: SupabaseClient<Database>) {
         super(db, 'colleges');
     }
@@ -44,8 +44,8 @@ export class SupabaseCollegeRepository extends BaseRepository<'colleges'> implem
         return this.mapToEntity(data);
     }
 
-    async create(college: Omit<College, 'id' | 'createdAt' | 'updatedAt'>): Promise<College> {
-        const row = await super.create({
+    async create(college: Pick<College, 'name' | 'code' | 'address'>): Promise<College> {
+        const row = await this.insertRow({
             name: college.name,
             code: college.code,
             address: college.address
@@ -60,7 +60,7 @@ export class SupabaseCollegeRepository extends BaseRepository<'colleges'> implem
         if (data.code) updateData.code = data.code;
         if (data.address) updateData.address = data.address;
 
-        const row = await super.update(id, updateData);
+        const row = await this.updateRow(id, updateData);
         return this.mapToEntity(row);
     }
 

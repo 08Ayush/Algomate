@@ -54,7 +54,7 @@ function validateEnv(): Env {
     } catch (error) {
         if (error instanceof z.ZodError) {
             console.error('❌ Invalid environment variables:');
-            error.errors.forEach((err) => {
+            error.issues.forEach((err) => {
                 console.error(`  - ${err.path.join('.')}: ${err.message}`);
             });
             throw new Error('Invalid environment variables. Please check your .env file.');

@@ -14,8 +14,10 @@ export async function GET(
 ) {
   try {
     const user = requireRoles(request, ['super_admin']);
+    if (user instanceof NextResponse) return user;
     const { id } = await params;
 
+    const { data: demoRequest, error } = await supabase
       .from('demo_requests')
       .select('*')
       .eq('id', id)

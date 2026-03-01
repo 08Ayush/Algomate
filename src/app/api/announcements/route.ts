@@ -15,12 +15,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 export async function POST(request: NextRequest) {
     try {
         const user = requireAuth(request);
-        if (!user || !user.id) {
-            return NextResponse.json(
-                { success: false, error: 'Unauthorized' },
-                { status: 401 }
-            );
-        }
+        if (user instanceof NextResponse) return user;
 
         // Only admins and faculty can create announcements
         if (!['super_admin', 'college_admin', 'admin', 'faculty'].includes(user.role)) {
@@ -140,12 +135,7 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
     try {
         const user = requireAuth(request);
-        if (!user || !user.id) {
-            return NextResponse.json(
-                { success: false, error: 'Unauthorized' },
-                { status: 401 }
-            );
-        }
+        if (user instanceof NextResponse) return user;
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
         const { searchParams } = new URL(request.url);

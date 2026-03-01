@@ -12,9 +12,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 export async function GET(request: NextRequest) {
     try {
         const user = requireAuth(request);
-        if (!user || !user.id) {
-            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-        }
+        if (user instanceof NextResponse) return user;
 
         const { data: userData, error } = await supabase
             .from('users')
@@ -36,9 +34,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     try {
         const user = requireAuth(request);
-        if (!user || !user.id) {
-            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-        }
+        if (user instanceof NextResponse) return user;
 
         const body = await request.json();
         const {

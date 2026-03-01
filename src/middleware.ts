@@ -1,17 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server';
-<<<<<<< HEAD
 import { updateSession } from '@/shared/database/middleware';
-=======
->>>>>>> origin/response-time
 import { rateLimitMiddleware } from '@/shared/rate-limit/middleware';
 import { requestIdMiddleware, HEADER_REQUEST_ID } from '@/middleware/request-id';
 import { requestLoggingMiddleware } from '@/middleware/logging';
 import { securityHeadersMiddleware } from '@/middleware/security-headers';
 import { corsMiddleware } from '@/middleware/cors';
-<<<<<<< HEAD
-=======
 import { authenticateAndCache, HEADER_AUTH_USER } from '@/lib/auth';
->>>>>>> origin/response-time
 
 export async function middleware(request: NextRequest) {
     // 1. Request ID (Always run, useful for tracing)
@@ -39,16 +33,10 @@ export async function middleware(request: NextRequest) {
         }
     }
 
-<<<<<<< HEAD
     // 5. Supabase Auth Middleware & Session (The main handler)
     // This creates the actual "next" response that we will build upon
-    const response = await updateSession(request);
+    const supabaseResponse = await updateSession(request);
 
-    // 6. Merge Headers from all middleware steps
-
-    // Merge Request ID headers
-    requestIdResponse.headers.forEach((value, key) => {
-=======
     // 5. Authenticate user and inject into REQUEST headers
     // ---------------------------------------------------------------
     // CRITICAL: In Next.js middleware, to pass data forward to API route
@@ -80,34 +68,24 @@ export async function middleware(request: NextRequest) {
         },
     });
 
+    // Copy cookies from supabase response (if any were set by updateSession)
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+        response.cookies.set(cookie.name, cookie.value);
+    });
+
     // 7. Merge Response Headers from all middleware steps
 
     // Merge Request ID headers
     requestIdResponse.headers.forEach((value: string, key: string) => {
->>>>>>> origin/response-time
         response.headers.set(key, value);
     });
 
     // Merge CORS headers
-<<<<<<< HEAD
-    corsResponse.headers.forEach((value, key) => {
-=======
     corsResponse.headers.forEach((value: string, key: string) => {
->>>>>>> origin/response-time
         response.headers.set(key, value);
     });
 
     // Merge Rate Limit headers
-<<<<<<< HEAD
-    rateLimitResponse.headers.forEach((value, key) => {
-        response.headers.set(key, value);
-    });
-
-    // 7. Apply Security Headers (Helmet-like)
-    // We apply this to the final response
-    const securityResponse = securityHeadersMiddleware(request);
-    securityResponse.headers.forEach((value, key) => {
-=======
     rateLimitResponse.headers.forEach((value: string, key: string) => {
         response.headers.set(key, value);
     });
@@ -116,7 +94,6 @@ export async function middleware(request: NextRequest) {
     // We apply this to the final response
     const securityResponse = securityHeadersMiddleware(request);
     securityResponse.headers.forEach((value: string, key: string) => {
->>>>>>> origin/response-time
         response.headers.set(key, value);
     });
 

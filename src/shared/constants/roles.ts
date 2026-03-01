@@ -141,7 +141,7 @@ export const FACULTY_TYPE_PERMISSIONS = {
  * @returns True if role has the permission
  */
 export function hasRolePermission(role: UserRole, permission: string): boolean {
-    return ROLE_PERMISSIONS[role].includes(permission as any);
+    return (ROLE_PERMISSIONS[role] as readonly string[]).includes(permission);
 }
 
 /**
@@ -155,7 +155,7 @@ export function hasFacultyTypePermission(
     facultyType: FacultyType,
     permission: string
 ): boolean {
-    return FACULTY_TYPE_PERMISSIONS[facultyType].includes(permission as any);
+    return (FACULTY_TYPE_PERMISSIONS[facultyType] as readonly string[]).includes(permission);
 }
 
 /**

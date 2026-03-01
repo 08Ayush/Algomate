@@ -111,6 +111,6 @@ export class SaveStudentSelectionUseCase {
             semester: request.semester,
             academicYear: request.academicYear,
             selectionType
-        });
+        } as any);
     }
 }

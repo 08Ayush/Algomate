@@ -17,10 +17,7 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
-<<<<<<< HEAD
-=======
     "forceConsistentCasingInFileNames": true,
->>>>>>> origin/response-time
     "plugins": [
       {
         "name": "next"
