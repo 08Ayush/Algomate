@@ -7,6 +7,7 @@ import { GetStudentSelectionsUseCase } from '@/modules/nep-curriculum/applicatio
 import { SaveStudentSelectionUseCase } from '@/modules/nep-curriculum/application/use-cases/SaveStudentSelectionUseCase';
 import { DeleteStudentSelectionUseCase } from '@/modules/nep-curriculum/application/use-cases/DeleteStudentSelectionUseCase';
 import { handleError } from '@/shared/utils/response';
+import { requireAuth } from '@/lib/auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -15,6 +16,9 @@ const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 // GET - Fetch student's course selections
 export async function GET(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const { searchParams } = new URL(request.url);
     const studentId = searchParams.get('studentId');
     const semester = searchParams.get('semester');
@@ -47,6 +51,9 @@ export async function GET(request: NextRequest) {
 // POST - Add new course selection
 export async function POST(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
     const { student_id, subject_id, semester, academic_year } = body;
 
@@ -115,6 +122,9 @@ export async function POST(request: NextRequest) {
 // DELETE - Remove course selection
 export async function DELETE(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
     const { student_id, subject_id } = body;
 

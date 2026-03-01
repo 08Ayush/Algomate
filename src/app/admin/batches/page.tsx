@@ -231,17 +231,17 @@ const BatchesPage: React.FC = () => {
                                     </select>
                                 </div>
                                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Course</label>
-                                    <select className="w-full px-4 py-2 border rounded-lg" value={form.course_id} onChange={(e) => setForm({ ...form, course_id: e.target.value })}>
+                                    <select className="w-full px-4 py-2 border rounded-lg" value={form.course_id} onChange={(e) => setForm({ ...form, course_id: e.target.value })} aria-label="Course">
                                         <option value="">Select</option>{courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
                                     </select>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Semester</label><input type="number" min="1" max="8" className="w-full px-4 py-2 border rounded-lg" value={form.semester} onChange={(e) => setForm({ ...form, semester: parseInt(e.target.value) })} /></div>
-                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Section</label><input className="w-full px-4 py-2 border rounded-lg" value={form.section} onChange={(e) => setForm({ ...form, section: e.target.value })} /></div>
+                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Semester</label><input type="number" min="1" max="8" className="w-full px-4 py-2 border rounded-lg" value={form.semester} onChange={(e) => setForm({ ...form, semester: parseInt(e.target.value) })} placeholder="Semester" /></div>
+                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Section</label><input className="w-full px-4 py-2 border rounded-lg" value={form.section} onChange={(e) => setForm({ ...form, section: e.target.value })} placeholder="Section" /></div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Expected Strength</label><input type="number" className="w-full px-4 py-2 border rounded-lg" value={form.expected_strength} onChange={(e) => setForm({ ...form, expected_strength: parseInt(e.target.value) })} /></div>
-                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Academic Year</label><input className="w-full px-4 py-2 border rounded-lg" value={form.academic_year} onChange={(e) => setForm({ ...form, academic_year: e.target.value })} /></div>
+                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Expected Strength</label><input type="number" className="w-full px-4 py-2 border rounded-lg" value={form.expected_strength} onChange={(e) => setForm({ ...form, expected_strength: parseInt(e.target.value) })} placeholder="Expected strength" /></div>
+                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Academic Year</label><input className="w-full px-4 py-2 border rounded-lg" value={form.academic_year} onChange={(e) => setForm({ ...form, academic_year: e.target.value })} placeholder="Academic year" /></div>
                                 </div>
                                 <div className="flex justify-end gap-3 pt-4">
                                     <button type="button" onClick={() => setShowForm(false)} className="px-6 py-2.5 text-gray-600 hover:bg-gray-100 rounded-xl">Cancel</button>

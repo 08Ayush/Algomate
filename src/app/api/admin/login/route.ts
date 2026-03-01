@@ -70,17 +70,14 @@ export async function POST(request: NextRequest) {
         token: token,
         last_login: new Date().toISOString()
       })
-      .eq('id', user.id);
+      .eq('id', user.id)
+      .then(({ error: updateError }) => {
+        if (updateError) {
+          console.error('Failed to update user token:', updateError);
+        }
+      });
 
-    if (updateError) {
-      console.error('Failed to update user token:', updateError);
-      return NextResponse.json(
-        { error: 'Failed to create session' },
-        { status: 500 }
-      );
-    }
-
-    // Return user data and token
+    // Return user data and token immediately
     const responseData = {
       user: {
         id: user.id,

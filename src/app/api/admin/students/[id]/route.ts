@@ -1,28 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/shared/database/server';
 import bcrypt from 'bcryptjs';
+import { requireAuth } from '@/lib/auth';
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const { id } = await params;
-
-    // Get auth header
-    const authHeader = request.headers.get('authorization');
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Decode the base64 token
-    const token = authHeader.substring(7);
-    const decodedUser = JSON.parse(Buffer.from(token, 'base64').toString());
-
-    if (!decodedUser.college_id) {
-      return NextResponse.json({ error: 'College ID not found' }, { status: 400 });
-    }
 
     const body = await request.json();
     const { first_name, last_name, email, student_id, phone, password, current_semester, admission_year, course_id, department_id, is_active } = body;
@@ -59,7 +48,7 @@ export async function PUT(
       .from('users')
       .update(updateData)
       .eq('id', id)
-      .eq('college_id', decodedUser.college_id)
+      .eq('college_id', user.college_id)
       .eq('role', 'student')
       .select()
       .single();
@@ -86,22 +75,10 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const { id } = await params;
-
-    // Get auth header
-    const authHeader = request.headers.get('authorization');
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Decode the base64 token
-    const token = authHeader.substring(7);
-    const decodedUser = JSON.parse(Buffer.from(token, 'base64').toString());
-
-    if (!decodedUser.college_id) {
-      return NextResponse.json({ error: 'College ID not found' }, { status: 400 });
-    }
 
     const supabase = createClient();
 
@@ -110,7 +87,7 @@ export async function DELETE(
       .from('users')
       .delete()
       .eq('id', id)
-      .eq('college_id', decodedUser.college_id)
+      .eq('college_id', user.college_id)
       .eq('role', 'student');
 
     if (error) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth } from '@/lib/auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,9 +9,12 @@ const supabase = createClient(
 
 export async function GET(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const { searchParams } = new URL(request.url);
     const bucketId = searchParams.get('bucketId');
-    
+
     if (!bucketId) {
       return NextResponse.json({ error: 'Bucket ID is required' }, { status: 400 });
     }
@@ -39,7 +43,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch subjects' }, { status: 500 });
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       subjects: subjects || [],
       count: subjects?.length || 0
     });

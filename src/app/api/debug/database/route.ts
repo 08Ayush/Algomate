@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/shared/database/client';
+import { requireAuth } from '@/lib/auth';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     // Get all users (without passwords for security)
     const { data: users, error: usersError } = await supabase
       .from('users')
@@ -48,7 +52,7 @@ export async function GET() {
 
   } catch (error: any) {
     console.error('Database status error:', error);
-    
+
     return NextResponse.json(
       { error: error.message || 'Failed to get database status' },
       { status: 500 }

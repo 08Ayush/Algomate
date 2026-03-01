@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -9,6 +10,9 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // List Hybrid Generated Timetables
 export async function GET(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const searchParams = request.nextUrl.searchParams;
     const department_id = searchParams.get('department_id');
     const status = searchParams.get('status'); // pending_approval, approved, rejected
@@ -47,7 +51,7 @@ export async function GET(request: NextRequest) {
         .from('batches')
         .select('id')
         .eq('department_id', department_id);
-      
+
       const batchIds = batches?.map(b => b.id) || [];
       if (batchIds.length > 0) {
         query = query.in('batch_id', batchIds);
@@ -71,11 +75,11 @@ export async function GET(request: NextRequest) {
 
     // Format response
     const formattedTimetables = timetables?.map((tt: any) => {
-      const theoryClasses = tt.scheduled_classes?.filter((c: any) => 
+      const theoryClasses = tt.scheduled_classes?.filter((c: any) =>
         c.class_type === 'THEORY' || c.class_type === 'TUTORIAL'
       ).length || 0;
-      
-      const labClasses = tt.scheduled_classes?.filter((c: any) => 
+
+      const labClasses = tt.scheduled_classes?.filter((c: any) =>
         c.class_type === 'LAB' || c.class_type === 'PRACTICAL'
       ).length || 0;
 

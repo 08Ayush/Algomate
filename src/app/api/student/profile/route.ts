@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/shared/database/server';
 import { asyncHandler } from '@/shared/middleware/error-handler';
+import { requireAuth } from '@/lib/auth';
 
 export const GET = asyncHandler(async (request: NextRequest) => {
+  const user = requireAuth(request);
+  if (user instanceof NextResponse) return user;
+
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get('userId');
 
@@ -145,6 +149,9 @@ export const GET = asyncHandler(async (request: NextRequest) => {
 });
 
 export const PATCH = asyncHandler(async (request: NextRequest) => {
+  const user = requireAuth(request);
+  if (user instanceof NextResponse) return user;
+
   const body = await request.json();
   const { userId, first_name, last_name, phone } = body;
 

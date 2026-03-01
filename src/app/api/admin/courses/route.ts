@@ -6,7 +6,7 @@ import {
   SupabaseCourseRepository,
   CreateCourseDtoSchema
 } from '@/modules/course';
-import { authenticate } from '@/shared/middleware/auth';
+import { requireAuth } from '@/lib/auth';
 import { asyncHandler } from '@/shared/middleware/error-handler';
 import { getPaginationParams, createPaginatedResponse } from '@/shared/utils/pagination';
 
@@ -17,10 +17,8 @@ const createCourseUseCase = new CreateCourseUseCase(courseRepo);
 
 export const GET = asyncHandler(async (request: NextRequest) => {
   try {
-    const user = await authenticate(request);
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user; // Auth failed
 
     const { page, limit, isPaginated } = getPaginationParams(request);
     const { searchParams } = new URL(request.url);
@@ -79,8 +77,10 @@ export const GET = asyncHandler(async (request: NextRequest) => {
 
 export const POST = asyncHandler(async (request: NextRequest) => {
   try {
-    const user = await authenticate(request);
-    if (!user || !['admin', 'college_admin', 'super_admin'].includes(user.role)) {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
+    if (!['admin', 'college_admin', 'super_admin'].includes(user.role)) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 

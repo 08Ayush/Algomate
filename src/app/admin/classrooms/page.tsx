@@ -12,6 +12,7 @@ import {
     Search,
     RefreshCw,
     Monitor,
+    Wifi,
     Cpu
 } from 'lucide-react';
 import toast from 'react-hot-toast';

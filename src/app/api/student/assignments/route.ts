@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -25,7 +26,7 @@ function getAuthenticatedUser(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     // Verify authentication
-    const user = getAuthenticatedUser(request);
+    const user = requireAuth(request);
     if (!user || !user.user_id) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },

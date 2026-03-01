@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -9,23 +10,26 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // Hybrid Timetable Generation using CP-SAT + GA algorithm
 export async function POST(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
-    const { 
-      batch_id, 
-      semester, 
+    const {
+      batch_id,
+      semester,
       department_id,
       college_id,
-      academic_year, 
+      academic_year,
       created_by,
       hybrid_config,
       constraints,
       enabled_constraint_ids // IDs of constraints selected in UI
     } = body;
 
-    console.log('🔬 Hybrid Algorithm Generation Request:', { 
-      batch_id, 
-      semester, 
-      department_id, 
+    console.log('🔬 Hybrid Algorithm Generation Request:', {
+      batch_id,
+      semester,
+      department_id,
       college_id,
       academic_year,
       created_by,
@@ -53,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     // PHASE 1: DATA COLLECTION using algorithm helper views
     console.log('📊 Phase 1: Collecting algorithm data from helper views...');
-    
+
     // Get batch information
     const { data: batchInfo, error: batchError } = await supabase
       .from('batches')
@@ -97,7 +101,7 @@ export async function POST(request: NextRequest) {
 
     console.log('👥 Faculty data retrieved:', {
       total_faculty: facultyData?.length || 0,
-      faculty_with_qualifications: facultyData?.filter(f => 
+      faculty_with_qualifications: facultyData?.filter(f =>
         f.faculty_qualified_subjects && f.faculty_qualified_subjects.length > 0
       ).length || 0
     });
@@ -135,10 +139,10 @@ export async function POST(request: NextRequest) {
 
     // Log qualified faculty for each subject
     subjectsData?.forEach(subject => {
-      const qualifiedFaculty = facultyData?.filter(f => 
+      const qualifiedFaculty = facultyData?.filter(f =>
         f.faculty_qualified_subjects?.some((qs: any) => qs.subject_id === subject.id)
       ) || [];
-      
+
       if (qualifiedFaculty.length > 0) {
         console.log(`  - ${subject.name}: ${qualifiedFaculty.length} qualified faculty`);
       } else {
@@ -212,16 +216,16 @@ export async function POST(request: NextRequest) {
       .eq('generated_timetables.academic_year', academic_year)
       .eq('batches.department_id', department_id)  // Same department only!
       .in('generated_timetables.status', ['published', 'pending_approval']);
-    
+
     // Build a map of occupied classrooms: "day-time" -> Set of classroom IDs
     const existingClassroomOccupancy = new Map<string, Set<string>>();
-    
+
     // Get the IDs of classrooms in this department for filtering
     const departmentClassroomIds = new Set(classrooms?.map(c => c.id) || []);
-    
+
     if (existingTimetables && existingTimetables.length > 0) {
       console.log(`📋 Found ${existingTimetables.length} existing scheduled classes in same department`);
-      
+
       let filteredCount = 0;
       existingTimetables.forEach((scheduled: any) => {
         if (scheduled.time_slots && scheduled.classroom_id) {
@@ -230,7 +234,7 @@ export async function POST(request: NextRequest) {
             const day = scheduled.time_slots.day;
             const time = scheduled.time_slots.start_time.substring(0, 5); // "09:00:00" -> "09:00"
             const key = `${day}-${time}`;
-            
+
             if (!existingClassroomOccupancy.has(key)) {
               existingClassroomOccupancy.set(key, new Set());
             }
@@ -239,12 +243,12 @@ export async function POST(request: NextRequest) {
           }
         }
       });
-      
+
       console.log(`📊 Tracking ${filteredCount} classroom conflicts in department ${department_id}`);
-      
+
       // Log sample conflicts
       const sampleConflicts = Array.from(existingClassroomOccupancy.entries()).slice(0, 3);
-      console.log('📊 Sample existing conflicts:', sampleConflicts.map(([key, classrooms]) => 
+      console.log('📊 Sample existing conflicts:', sampleConflicts.map(([key, classrooms]) =>
         `${key}: ${classrooms.size} classrooms occupied`
       ));
     } else {
@@ -257,10 +261,10 @@ export async function POST(request: NextRequest) {
     console.log('🎯 Constraints:', constraints.length, 'enabled');
 
     // Separate classrooms and labs
-    const regularClassrooms = classrooms?.filter(c => 
+    const regularClassrooms = classrooms?.filter(c =>
       c.type === 'Lecture Hall' || c.type === 'Tutorial Room' || c.type === 'Seminar Room'
     ) || [];
-    const labs = classrooms?.filter(c => 
+    const labs = classrooms?.filter(c =>
       c.type === 'Lab'
     ) || [];
 
@@ -361,10 +365,10 @@ export async function POST(request: NextRequest) {
       score += Math.min(classroomUsage * 2, 20);
 
       // SC005: Consecutive Classes (prefer consecutive slots for same faculty)
-      const previousSlot = schedule.find(s => 
-        s.day === day && 
+      const previousSlot = schedule.find(s =>
+        s.day === day &&
         s.faculty_id === faculty.id &&
-        timeSlotsPerDay.indexOf(timeSlotsPerDay.find(ts => ts.time === s.time)!) === 
+        timeSlotsPerDay.indexOf(timeSlotsPerDay.find(ts => ts.time === s.time)!) ===
         timeSlotsPerDay.indexOf(timeSlot) - 1
       );
       if (previousSlot) score += 15;
@@ -374,33 +378,33 @@ export async function POST(request: NextRequest) {
 
     // PHASE 1: INTELLIGENT COMPLETE TIMETABLE GENERATION
     console.log('📅 Phase 1: Intelligent Complete Timetable Generation...');
-    
+
     // Calculate total available slots
     const totalSlots = days.length * timeSlotsPerDay.length;
     console.log(`🎯 Target: Fill ${totalSlots} slots (${days.length} days × ${timeSlotsPerDay.length} slots/day)`);
-    
+
     // Tracking structures
     const scheduledSlots = new Set<string>(); // "day-timeIndex"
     const facultyDaySlots = new Map<string, Set<number>>(); // "facultyId-day" -> Set of time indices
     const subjectScheduledCount = new Map<string, number>(); // subjectId -> count
     const classroomOccupancy = new Map<string, Set<string>>(); // "day-timeIndex" -> Set of occupied classroom IDs
-    
+
     // Helper: Check if slot is already taken
     const isSlotTaken = (day: string, timeIndex: number): boolean => {
       return scheduledSlots.has(`${day}-${timeIndex}`);
     };
-    
+
     // Helper: Check if faculty has continuous theory slots
     const hasContinuousTheorySlot = (facultyId: string, day: string, timeIndex: number, subjectType: string): boolean => {
       if (subjectType !== 'THEORY' && subjectType !== 'TUTORIAL') return false;
-      
+
       const key = `${facultyId}-${day}`;
       const slots = facultyDaySlots.get(key) || new Set();
-      
+
       // Check if previous OR next slot has same faculty teaching theory
       return slots.has(timeIndex - 1) || slots.has(timeIndex + 1);
     };
-    
+
     // Helper: Find continuous 2-slot window for labs
     const findContinuousLabSlots = (day: string): number[] => {
       for (let i = 0; i < timeSlotsPerDay.length - 1; i++) {
@@ -410,9 +414,9 @@ export async function POST(request: NextRequest) {
       }
       return [];
     };
-    
+
     // Helper: Find next available slot for theory
-    const findNextTheorySlot = (facultyId: string, subjectType: string): {day: string, timeIndex: number} | null => {
+    const findNextTheorySlot = (facultyId: string, subjectType: string): { day: string, timeIndex: number } | null => {
       for (let d = 0; d < days.length; d++) {
         const day = days[d];
         for (let t = 0; t < timeSlotsPerDay.length; t++) {
@@ -423,44 +427,44 @@ export async function POST(request: NextRequest) {
       }
       return null;
     };
-    
+
     // Helper: Find available classroom for a specific day+time slot
     const findAvailableClassroom = (day: string, timeIndex: number, isLabClass: boolean): any | null => {
       const occupancyKey = `${day}-${timeIndex}`;
       const timeSlot = timeSlotsPerDay[timeIndex];
       const dayTimeKey = `${day}-${timeSlot?.time}`; // e.g., "Monday-09:00"
-      
+
       // Initialize occupancy set for current timetable if not exists
       if (!classroomOccupancy.has(occupancyKey)) {
         classroomOccupancy.set(occupancyKey, new Set());
       }
-      
+
       const occupiedClassrooms = classroomOccupancy.get(occupancyKey)!;
-      
+
       // ALSO check existing timetables for classroom conflicts
       const existingOccupied = existingClassroomOccupancy.get(dayTimeKey) || new Set();
-      
+
       // Combine both sets to get ALL occupied classrooms
       const allOccupiedClassrooms = new Set([...occupiedClassrooms, ...existingOccupied]);
-      
+
       // Select appropriate classroom pool
-      const availableClassroomPool = isLabClass 
-        ? (labs && labs.length > 0 ? labs : classrooms) 
+      const availableClassroomPool = isLabClass
+        ? (labs && labs.length > 0 ? labs : classrooms)
         : (regularClassrooms && regularClassrooms.length > 0 ? regularClassrooms : classrooms);
-      
+
       if (!availableClassroomPool || availableClassroomPool.length === 0) {
         console.warn(`⚠️ No classrooms available for ${isLabClass ? 'lab' : 'regular'} class at ${day}-${timeIndex}`);
         return null;
       }
-      
+
       // Log current state
       const occupiedNames = Array.from(allOccupiedClassrooms).map(id => {
         const room = classrooms?.find(c => c.id === id);
         return room?.name || id.substring(0, 8);
       });
-      
+
       console.log(`🔍 [${day} ${timeSlot?.time}] Finding ${isLabClass ? 'lab' : 'classroom'}: ${allOccupiedClassrooms.size}/${availableClassroomPool.length} occupied ${occupiedNames.length > 0 ? `(${occupiedNames.join(', ')})` : ''}`);
-      
+
       // Find first available classroom from appropriate pool
       for (const classroom of availableClassroomPool) {
         if (!allOccupiedClassrooms.has(classroom.id)) {
@@ -470,12 +474,12 @@ export async function POST(request: NextRequest) {
           return classroom;
         }
       }
-      
+
       // All classrooms occupied - use first one anyway (conflict unavoidable)
       console.warn(`⚠️ All ${isLabClass ? 'lab' : 'regular'} classrooms occupied at ${day}-${timeIndex}, assigning ${availableClassroomPool[0]?.name} with conflict`);
       return availableClassroomPool[0];
     };
-    
+
     // Helper: Add scheduled class (automatically assigns available classroom unless provided)
     const addScheduledClass = (
       day: string,
@@ -488,7 +492,7 @@ export async function POST(request: NextRequest) {
       providedClassroom: any = null // Optional: use for lab continuations
     ) => {
       const timeSlot = timeSlotsPerDay[timeIndex];
-      
+
       // Use provided classroom (for continuations) or find available one
       let classroom = providedClassroom;
       if (!classroom) {
@@ -501,7 +505,7 @@ export async function POST(request: NextRequest) {
         }
         classroomOccupancy.get(occupancyKey)!.add(classroom.id);
       }
-      
+
       schedule.push({
         id: `schedule-${scheduleIndex++}`,
         day: day,
@@ -521,38 +525,38 @@ export async function POST(request: NextRequest) {
         is_continuation: isContinuation,
         session_number: sessionNumber
       });
-      
+
       scheduledSlots.add(`${day}-${timeIndex}`);
-      
+
       const facultyKey = `${faculty.id}-${day}`;
       if (!facultyDaySlots.has(facultyKey)) {
         facultyDaySlots.set(facultyKey, new Set());
       }
       facultyDaySlots.get(facultyKey)!.add(timeIndex);
-      
+
       // Return the classroom for continuations
       return classroom;
     };
-    
+
     // STEP 1: Schedule all LAB sessions (2-hour continuous blocks)
     // CONSTRAINT: Maximum 1 lab per day (distribute across different days)
     console.log('🔬 Step 1: Scheduling LAB sessions (continuous 2-hour slots)...');
     console.log('📋 Constraint: Maximum 1 lab per day, distributed across week');
-    
-    const labSubjects = sortedSubjects.filter(s => 
+
+    const labSubjects = sortedSubjects.filter(s =>
       s.subject_type === 'LAB' || s.subject_type === 'PRACTICAL'
     );
-    
+
     // Track which days already have labs scheduled (max 1 lab per day)
     const labScheduledDays = new Set<string>();
-    
+
     // Helper: Check if day already has a lab
     const hasLabOnDay = (day: string): boolean => {
       return labScheduledDays.has(day);
     };
-    
+
     // Helper: Find next available day without lab
-    const findNextDayWithoutLab = (startDayIndex: number): {day: string, index: number} | null => {
+    const findNextDayWithoutLab = (startDayIndex: number): { day: string, index: number } | null => {
       for (let offset = 0; offset < days.length; offset++) {
         const dayIndex = (startDayIndex + offset) % days.length;
         const day = days[dayIndex];
@@ -562,144 +566,144 @@ export async function POST(request: NextRequest) {
       }
       return null;
     };
-    
+
     for (const subject of labSubjects) {
       const requiredHours = subject.credits_per_week || 2;
       const sessionsNeeded = Math.ceil(requiredHours / 2);
-      
-      const qualifiedFaculty = facultyData?.filter(f => 
+
+      const qualifiedFaculty = facultyData?.filter(f =>
         f.faculty_qualified_subjects?.some((qs: any) => qs.subject_id === subject.id)
       ).sort((a, b) => {
         const aProf = a.faculty_qualified_subjects?.find((qs: any) => qs.subject_id === subject.id)?.proficiency_level || 0;
         const bProf = b.faculty_qualified_subjects?.find((qs: any) => qs.subject_id === subject.id)?.proficiency_level || 0;
         return bProf - aProf;
       }) || [];
-      
+
       if (qualifiedFaculty.length === 0) {
         console.warn(`⚠️ No qualified faculty for LAB: ${subject.code}`);
         continue;
       }
-      
+
       const faculty = qualifiedFaculty[0];
-      
+
       let sessionsScheduled = 0;
       let startDayIndex = 0; // Start searching from Monday
-      
+
       // Schedule lab sessions on different days (max 1 lab per day)
       while (sessionsScheduled < sessionsNeeded) {
         // Find next day without lab
         const nextDayInfo = findNextDayWithoutLab(startDayIndex);
-        
+
         if (!nextDayInfo) {
           console.warn(`⚠️ ${subject.code}: No more days available for labs (${sessionsScheduled}/${sessionsNeeded} scheduled)`);
           break;
         }
-        
+
         const { day, index: dayIndex } = nextDayInfo;
         const continuousSlots = findContinuousLabSlots(day);
-        
+
         if (continuousSlots.length === 2) {
           const [slot1, slot2] = continuousSlots;
-          
+
           // Schedule main lab session (displays in first slot) - classroom auto-assigned
           const assignedLab = addScheduledClass(day, slot1, subject, faculty, true, false, sessionsScheduled + 1);
-          
+
           // Schedule continuation (displays in second slot) - SAME classroom
           addScheduledClass(day, slot2, subject, faculty, true, true, sessionsScheduled + 1, assignedLab);
-          
+
           // Mark this day as having a lab (max 1 lab per day)
           labScheduledDays.add(day);
-          
+
           sessionsScheduled++;
           subjectScheduledCount.set(subject.id, (subjectScheduledCount.get(subject.id) || 0) + 1);
-          
+
           console.log(`  ✅ ${subject.code} LAB: ${day} slots ${slot1}-${slot2} (2 hours) - Session ${sessionsScheduled}/${sessionsNeeded}`);
-          
+
           // Move to next day for next lab session
           startDayIndex = dayIndex + 1;
         } else {
           console.warn(`⚠️ ${subject.code}: No continuous slots on ${day}`);
           startDayIndex = dayIndex + 1;
-          
+
           // If we've checked all days without finding slots, break
           if (startDayIndex >= days.length) {
             break;
           }
         }
       }
-      
+
       if (sessionsScheduled < sessionsNeeded) {
         console.warn(`⚠️ ${subject.code}: Scheduled ${sessionsScheduled}/${sessionsNeeded} lab sessions`);
       }
     }
-    
+
     console.log(`✅ LAB scheduling: ${schedule.filter(s => s.is_lab && !s.is_continuation).length} sessions, Slots: ${scheduledSlots.size}/${totalSlots}`);
-    
+
     // STEP 2: Fill remaining slots with THEORY subjects
     console.log('📚 Step 2: Filling remaining slots with THEORY lectures...');
-    
-    const theorySubjects = sortedSubjects.filter(s => 
+
+    const theorySubjects = sortedSubjects.filter(s =>
       s.subject_type === 'THEORY' || s.subject_type === 'TUTORIAL'
     );
-    
+
     const remainingSlots = totalSlots - scheduledSlots.size;
     console.log(`  📊 Remaining: ${remainingSlots}, Theory subjects: ${theorySubjects.length}`);
-    
+
     if (theorySubjects.length > 0) {
       const baseSlotsPerSubject = Math.floor(remainingSlots / theorySubjects.length);
       const extraSlots = remainingSlots % theorySubjects.length;
-      
+
       const targetSlots = new Map<string, number>();
       theorySubjects.forEach((subject, index) => {
         targetSlots.set(subject.id, baseSlotsPerSubject + (index < extraSlots ? 1 : 0));
       });
-      
+
       let attempts = 0;
       let subjectIndex = 0;
-      
+
       while (scheduledSlots.size < totalSlots && attempts < totalSlots * 2) {
         attempts++;
-        
+
         const subject = theorySubjects[subjectIndex % theorySubjects.length];
         const currentCount = subjectScheduledCount.get(subject.id) || 0;
         const targetCount = targetSlots.get(subject.id) || 0;
-        
+
         if (currentCount >= targetCount && scheduledSlots.size < totalSlots - theorySubjects.length) {
           subjectIndex++;
           continue;
         }
-        
-        const qualifiedFaculty = facultyData?.filter(f => 
+
+        const qualifiedFaculty = facultyData?.filter(f =>
           f.faculty_qualified_subjects?.some((qs: any) => qs.subject_id === subject.id)
         ).sort((a, b) => {
           const aProf = a.faculty_qualified_subjects?.find((qs: any) => qs.subject_id === subject.id)?.proficiency_level || 0;
           const bProf = b.faculty_qualified_subjects?.find((qs: any) => qs.subject_id === subject.id)?.proficiency_level || 0;
           return bProf - aProf;
         }) || [];
-        
+
         if (qualifiedFaculty.length === 0) {
           subjectIndex++;
           continue;
         }
-        
+
         const faculty = qualifiedFaculty[0];
-        
+
         const nextSlot = findNextTheorySlot(faculty.id, subject.subject_type);
-        
+
         if (!nextSlot) {
           subjectIndex++;
           continue;
         }
-        
+
         const { day, timeIndex } = nextSlot;
-        
+
         // Classroom will be auto-assigned based on availability at this day+time
         addScheduledClass(day, timeIndex, subject, faculty, false, false, currentCount + 1);
-        
+
         subjectScheduledCount.set(subject.id, currentCount + 1);
         subjectIndex++;
       }
-      
+
       if (scheduledSlots.size < totalSlots) {
         console.warn(`⚠️ Filled ${scheduledSlots.size}/${totalSlots} slots (constraints may be too strict)`);
       } else {
@@ -708,7 +712,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`✅ Phase 1 complete: ${schedule.length} classes, ${scheduledSlots.size}/${totalSlots} slots filled`);
-    
+
     // Log distribution
     sortedSubjects.forEach(subject => {
       const count = subjectScheduledCount.get(subject.id) || 0;
@@ -723,7 +727,7 @@ export async function POST(request: NextRequest) {
     const deduplicatedPhase1 = schedule.filter(item => {
       // Skip continuation classes for dedup check
       if (item.is_continuation) return true;
-      
+
       const slotKey = `${item.day}-${item.time}`;
       if (seenPhase1Slots.has(slotKey)) {
         console.warn(`⚠️ Phase 1 duplicate removed: ${slotKey} - ${item.subject_name}`);
@@ -732,7 +736,7 @@ export async function POST(request: NextRequest) {
       seenPhase1Slots.add(slotKey);
       return true;
     });
-    
+
     if (schedule.length !== deduplicatedPhase1.length) {
       console.warn(`🔄 Phase 1 deduplication: ${schedule.length} -> ${deduplicatedPhase1.length} entries`);
       schedule = deduplicatedPhase1;
@@ -740,12 +744,12 @@ export async function POST(request: NextRequest) {
 
     // PHASE 2: GENETIC ALGORITHM OPTIMIZATION (if needed)
     const targetClasses = days.length * timeSlotsPerDay.length; // e.g., 6 days * 6 slots = 36
-    
+
     if (schedule.length < targetClasses && hybrid_config.strategy !== 'sequential') {
       console.log(`📅 Phase 2: GA Optimization to fill remaining slots (target: ${targetClasses})...`);
-      
+
       // Fill remaining slots with repeated theory subjects
-      const theorySubjects = sortedSubjects.filter(s => 
+      const theorySubjects = sortedSubjects.filter(s =>
         s.subject_type === 'THEORY' || s.subject_type === 'TUTORIAL'
       );
 
@@ -770,7 +774,7 @@ export async function POST(request: NextRequest) {
           let bestScore = -Infinity;
 
           for (const subject of theorySubjects) {
-            const qualifiedFaculty = facultyData?.filter(f => 
+            const qualifiedFaculty = facultyData?.filter(f =>
               f.faculty_qualified_subjects?.some((qs: any) => qs.subject_id === subject.id)
             ) || [];
 
@@ -789,10 +793,10 @@ export async function POST(request: NextRequest) {
 
           if (bestAssignment) {
             const { subject, faculty } = bestAssignment;
-            
+
             // Find available classroom for this day+time using our occupancy tracker
             const classroom = findAvailableClassroom(day, slotIdx, false);
-            
+
             schedule.push({
               id: `schedule-${scheduleIndex++}`,
               subject_id: subject.id,
@@ -827,7 +831,7 @@ export async function POST(request: NextRequest) {
     const finalSchedule = schedule.filter(item => {
       // Keep continuation classes as they're in different time slots
       if (item.is_continuation) return true;
-      
+
       const slotKey = `${item.day}-${item.time}`;
       if (finalSeenSlots.has(slotKey)) {
         console.warn(`⚠️ Final duplicate removed: ${slotKey} - ${item.subject_name}`);
@@ -836,7 +840,7 @@ export async function POST(request: NextRequest) {
       finalSeenSlots.add(slotKey);
       return true;
     });
-    
+
     if (schedule.length !== finalSchedule.length) {
       console.warn(`🔄 Final deduplication: ${schedule.length} -> ${finalSchedule.length} entries`);
       schedule = finalSchedule;
@@ -844,7 +848,7 @@ export async function POST(request: NextRequest) {
 
     // Calculate execution metrics
     const executionTime = (Date.now() - startTime) / 1000;
-    
+
     // Calculate statistics
     const statistics = {
       totalSubjects: subjectsData.length,

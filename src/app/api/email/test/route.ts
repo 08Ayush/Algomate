@@ -1,19 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { emailService } from '@/services/email/emailService';
 
 export async function POST(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const { to } = await request.json();
 
     console.log('🧪 Testing email configuration...');
 
     // Verify SMTP connection first
     const isConnected = await emailService.verifyConnection();
-    
+
     if (!isConnected) {
       return NextResponse.json(
-        { 
-          success: false, 
+        {
+          success: false,
           error: 'SMTP connection failed. Please check your email configuration.',
           configured: false
         },
@@ -42,10 +46,10 @@ export async function POST(request: NextRequest) {
       });
     } else {
       return NextResponse.json(
-        { 
-          success: false, 
+        {
+          success: false,
           error: result.error,
-          configured: true 
+          configured: true
         },
         { status: 500 }
       );
@@ -53,10 +57,10 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('❌ Test email API error:', error);
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: error.message,
-        configured: false 
+        configured: false
       },
       { status: 500 }
     );
@@ -65,6 +69,9 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const isConfigured = !!(
       process.env.SMTP_HOST &&
       process.env.SMTP_USER &&
@@ -84,8 +91,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       configured: true,
       connected: isConnected,
-      message: isConnected 
-        ? 'Email service is configured and connected' 
+      message: isConnected
+        ? 'Email service is configured and connected'
         : 'Email service is configured but connection failed',
       config: {
         host: process.env.SMTP_HOST,
@@ -97,10 +104,10 @@ export async function GET(request: NextRequest) {
     });
   } catch (error: any) {
     return NextResponse.json(
-      { 
-        configured: false, 
+      {
+        configured: false,
         connected: false,
-        error: error.message 
+        error: error.message
       },
       { status: 500 }
     );

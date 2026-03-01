@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
 
 // Create server-side supabase client with service role key
@@ -49,7 +50,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getAuthenticatedUser(request);
+    const user = requireAuth(request);
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized. Only admins can update subjects.' },
@@ -147,7 +148,6 @@ export async function PUT(
 
     if (updateError) {
       console.error('Subject update error:', updateError);
-
       return NextResponse.json(
         { error: 'Failed to update subject' },
         { status: 500 }
@@ -268,7 +268,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getAuthenticatedUser(request);
+    const user = requireAuth(request);
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized. Only admins can delete subjects.' },

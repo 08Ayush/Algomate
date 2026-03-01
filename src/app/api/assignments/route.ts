@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
 import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
 import { notifyAssignmentCreated } from '@/lib/notificationService';
@@ -7,27 +8,11 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 // Helper function to decode and verify user from token
-function getAuthenticatedUser(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
-  }
-
-  try {
-    const token = authHeader.substring(7);
-    const decoded = JSON.parse(Buffer.from(token, 'base64').toString());
-    return decoded;
-  } catch (error) {
-    console.error('Token decode error:', error);
-    return null;
-  }
-}
 
 export async function POST(request: NextRequest) {
   try {
     // Verify authentication
-    const user = getAuthenticatedUser(request);
+    const user = requireAuth(request);
     if (!user || !user.user_id) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
@@ -129,14 +114,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Step 3: Get student count for batch and initialize analytics
-    const { count: studentCount } = await supabase
-      .from('student_batch_enrollment')
-      .select('*', { count: 'exact', head: true })
-      .eq('batch_id', batchId)
-      .eq('is_active', true);
+    // Step 3: Get student count + subject name + initialize analytics in parallel
+    const [{ count: studentCount }, subjectResult] = await Promise.all([
+      supabase
+        .from('student_batch_enrollment')
+        .select('id', { count: 'exact', head: true })
+        .eq('batch_id', batchId)
+        .eq('is_active', true),
+      subjectId
+        ? supabase.from('subjects').select('name').eq('id', subjectId).single()
+        : Promise.resolve({ data: null })
+    ]);
 
-    const { error: analyticsError } = await supabase
+    // Initialize analytics (non-blocking, don't await error)
+    supabase
       .from('assignment_analytics')
       .insert({
         assignment_id: assignment.id,
@@ -148,60 +139,61 @@ export async function POST(request: NextRequest) {
         avg_time_taken: 0,
       });
 
-    if (analyticsError) {
-      console.error('Analytics initialization error:', analyticsError);
-      // Non-critical error, continue
+
+    // Fetch subject name if available
+    let subjectName = 'General';
+    if (subjectId) {
+      const { data: subject } = await supabase
+        .from('subjects')
+        .select('name')
+        .eq('id', subjectId)
+        .single();
+      subjectName = subject?.name || 'General';
     }
+  })
+      .then(({ error: analyticsError }) => {
+    if (analyticsError) console.error('Analytics initialization error:', analyticsError);
+  });
 
-    // Step 4: Send notifications to students (if published and notifyStudents is true)
-    if (!isDraft && notifyStudents && scheduledEnd) {
-      const creatorName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Faculty';
+  // Step 4: Send notifications to students (if published and notifyStudents is true)
+  if (!isDraft && notifyStudents && scheduledEnd) {
+    const creatorName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Faculty';
+    const subjectName = subjectResult?.data?.name || 'General';
 
-      // Fetch subject name if available
-      let subjectName = 'General';
-      if (subjectId) {
-        const { data: subject } = await supabase
-          .from('subjects')
-          .select('name')
-          .eq('id', subjectId)
-          .single();
-        subjectName = subject?.name || 'General';
-      }
-
-      await notifyAssignmentCreated({
-        assignmentId: assignment.id,
-        assignmentTitle: title,
-        batchId: batchId,
-        subjectName,
-        dueDate: new Date(scheduledEnd),
-        creatorId: user.user_id,
-        creatorName,
-        notifyStudents: true
-      });
-
-      console.log('✅ Assignment notification sent to students');
-    }
-
-    return NextResponse.json({
-      success: true,
-      assignment_id: assignment.id,
-      message: isDraft ? 'Assignment saved as draft' : 'Assignment created successfully',
-      notificationsSent: !isDraft && notifyStudents
+    await notifyAssignmentCreated({
+      assignmentId: assignment.id,
+      assignmentTitle: title,
+      batchId: batchId,
+      subjectName,
+      dueDate: new Date(scheduledEnd),
+      creatorId: user.user_id,
+      creatorName,
+      notifyStudents: true
     });
 
-  } catch (error: any) {
-    console.error('Assignment creation error:', error);
-    return NextResponse.json(
-      { success: false, error: 'Internal server error: ' + error.message },
-      { status: 500 }
-    );
+    console.log('✅ Assignment notification sent to students');
   }
+
+  return NextResponse.json({
+    success: true,
+    assignment_id: assignment.id,
+    message: isDraft ? 'Assignment saved as draft' : 'Assignment created successfully',
+    notificationsSent: !isDraft && notifyStudents
+  });
+
+} catch (error: any) {
+  console.error('Assignment creation error:', error);
+  return NextResponse.json(
+    { success: false, error: 'Internal server error: ' + error.message },
+    { status: 500 }
+  );
+}
 }
 
 export async function GET(request: NextRequest) {
   try {
     // Verify authentication
-    const user = getAuthenticatedUser(request);
+    const user = requireAuth(request);
     if (!user || !user.user_id) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },

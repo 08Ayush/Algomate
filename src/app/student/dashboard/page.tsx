@@ -391,17 +391,17 @@ export default function StudentDashboard() {
                   {/* Event Type and Status Badges */}
                   <div className="flex items-center justify-between mb-4">
                     <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${event.event_type === 'workshop' ? 'bg-blue-100 text-blue-700' :
-                        event.event_type === 'seminar' ? 'bg-purple-100 text-purple-700' :
-                          event.event_type === 'cultural' ? 'bg-pink-100 text-pink-700' :
-                            event.event_type === 'sports' ? 'bg-orange-100 text-orange-700' :
-                              event.event_type === 'academic' ? 'bg-green-100 text-green-700' :
-                                'bg-gray-100 text-gray-600'
+                      event.event_type === 'seminar' ? 'bg-purple-100 text-purple-700' :
+                        event.event_type === 'cultural' ? 'bg-pink-100 text-pink-700' :
+                          event.event_type === 'sports' ? 'bg-orange-100 text-orange-700' :
+                            event.event_type === 'academic' ? 'bg-green-100 text-green-700' :
+                              'bg-gray-100 text-gray-600'
                       }`}>
                       {event.event_type || 'event'}
                     </span>
                     <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${event.status === 'published' ? 'bg-green-100 text-green-700' :
-                        event.status === 'draft' ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-gray-100 text-gray-600'
+                      event.status === 'draft' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-gray-100 text-gray-600'
                       }`}>
                       {event.status || 'upcoming'}
                     </span>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { notifySystemAlert } from '@/lib/notificationService';
-import { authenticate } from '@/shared/middleware/auth';
+import { requireAuth } from '@/lib/auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -10,10 +10,8 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 export async function POST(request: NextRequest) {
     try {
         // 1. Authenticate (Admin only)
-        const user = await authenticate(request);
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized. Please login.', success: false }, { status: 401 });
-        }
+        const user = requireAuth(request);
+        if (user instanceof NextResponse) return user; // Auth failed
 
         const allowedRoles = ['admin', 'platform_admin', 'college_admin', 'hod', 'super_admin'];
         if (!allowedRoles.includes(user.role || '')) {

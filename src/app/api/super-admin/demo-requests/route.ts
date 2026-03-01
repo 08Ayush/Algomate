@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireRoles } from '@/lib/auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -9,6 +10,9 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 // GET - Fetch all demo requests (Super Admin only)
 export async function GET(request: NextRequest) {
   try {
+    const user = requireRoles(request, ['super_admin']);
+    if (user instanceof NextResponse) return user;
+
     // Get status filter from query params
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
@@ -45,6 +49,9 @@ export async function GET(request: NextRequest) {
 // POST - Create a new demo request (used by the public demo form)
 export async function POST(request: NextRequest) {
   try {
+    const user = requireRoles(request, ['super_admin']);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
 
     const {
@@ -68,8 +75,8 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Validate required fields
-    if (!institution_name || !institution_type || !student_count || 
-        !contact_name || !email || !phone || !city || !state) {
+    if (!institution_name || !institution_type || !student_count ||
+      !contact_name || !email || !phone || !city || !state) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }

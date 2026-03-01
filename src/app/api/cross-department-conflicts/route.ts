@@ -4,8 +4,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { 
-  checkConflictsBeforePublish, 
+import { requireAuth } from '@/lib/auth';
+import {
+  checkConflictsBeforePublish,
   storeConflicts,
   getUnresolvedConflicts,
   resolveConflicts
@@ -17,6 +18,9 @@ import {
  */
 export async function GET(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const searchParams = request.nextUrl.searchParams;
     const timetableId = searchParams.get('timetable_id');
 
@@ -52,6 +56,9 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
     const { timetable_id, store_conflicts = true } = body;
 
@@ -95,6 +102,9 @@ export async function POST(request: NextRequest) {
  */
 export async function PATCH(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
     const { conflict_ids } = body;
 

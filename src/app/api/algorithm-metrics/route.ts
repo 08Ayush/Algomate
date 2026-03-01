@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import {
   recordAlgorithmMetrics,
   getTimetableMetrics,
@@ -13,6 +14,9 @@ import {
 
 export async function GET(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action');
 
@@ -107,6 +111,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
 
     const {

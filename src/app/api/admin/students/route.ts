@@ -4,34 +4,18 @@ import { createClient } from '@/shared/database/server';
 import bcrypt from 'bcryptjs';
 import { withCacheAside, invalidateCache } from '@/shared/cache/cache-helper';
 import { redisCache } from '@/shared/cache/redis-cache';
+import { requireAuth } from '@/lib/auth';
 
 export const GET = asyncHandler(
   async (request: NextRequest): Promise<NextResponse<any>> => {
-    // Get auth header
-    const authHeader = request.headers.get('authorization');
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Decode the base64 token securely
-    const token = authHeader.substring(7);
-    let decodedUser;
-    try {
-      decodedUser = JSON.parse(Buffer.from(token, 'base64').toString());
-    } catch (e) {
-      return NextResponse.json({ success: false, error: 'Invalid token format' }, { status: 401 });
-    }
-
-    if (!decodedUser || !decodedUser.college_id) {
-      return NextResponse.json({ success: false, error: 'College ID not found in token' }, { status: 401 });
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     const { searchParams } = new URL(request.url);
     const queryCollegeId = searchParams.get('college_id');
-    let targetCollegeId = decodedUser.college_id;
+    let targetCollegeId = user.college_id;
 
-    if (decodedUser.role === 'super_admin' && queryCollegeId) {
+    if (user.role === 'super_admin' && queryCollegeId) {
       targetCollegeId = queryCollegeId;
     }
 
@@ -99,6 +83,7 @@ export const GET = asyncHandler(
           batch_id: batchByStudent[s.id]?.batch_id || null,
           batch: batchByStudent[s.id] || null
         }));
+        return data || [];
       }
     );
 
@@ -108,23 +93,8 @@ export const GET = asyncHandler(
 
 export const POST = asyncHandler(
   async (request: NextRequest): Promise<NextResponse<any>> => {
-    const authHeader = request.headers.get('authorization');
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.substring(7);
-    let decodedUser;
-    try {
-      decodedUser = JSON.parse(Buffer.from(token, 'base64').toString());
-    } catch (e) {
-      return NextResponse.json({ success: false, error: 'Invalid token format' }, { status: 401 });
-    }
-
-    if (!decodedUser || !decodedUser.college_id) {
-      return NextResponse.json({ success: false, error: 'College ID not found' }, { status: 400 });
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     const body = await request.json();
     const { first_name, last_name, email, student_id, phone, password, current_semester, admission_year, course_id, department_id, is_active } = body;
@@ -137,7 +107,7 @@ export const POST = asyncHandler(
     const { data: existingStudents } = await supabase
       .from('users')
       .select('college_uid')
-      .eq('college_id', decodedUser.college_id)
+      .eq('college_id', user.college_id)
       .eq('role', 'student')
       .order('college_uid', { ascending: false })
       .limit(1);
@@ -166,7 +136,7 @@ export const POST = asyncHandler(
         course_id: course_id || null,
         department_id: department_id || null,
         role: 'student',
-        college_id: decodedUser.college_id,
+        college_id: user.college_id,
         is_active: is_active !== undefined ? is_active : true
       })
       .select()
@@ -174,7 +144,7 @@ export const POST = asyncHandler(
 
     if (error) throw error;
 
-    const cacheKey = redisCache.buildKey(decodedUser.college_id, 'students', 'list');
+    const cacheKey = redisCache.buildKey(user.college_id, 'students', 'list');
     await invalidateCache(cacheKey);
 
     return NextResponse.json({ success: true, student: newStudent }, { status: 201 });

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth } from '@/lib/auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,6 +9,9 @@ const supabase = createClient(
 
 export async function GET(request: NextRequest) {
   try {
+    const authCheck = requireAuth(request);
+    if (authCheck instanceof NextResponse) return authCheck;
+
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
     const courseId = searchParams.get('courseId');
@@ -136,31 +140,31 @@ export async function GET(request: NextRequest) {
           (buckets || []).map(async (bucket) => {
             console.log(`🔍 Fetching subjects for bucket: ${bucket.bucket_name} (ID: ${bucket.id})`);
             console.log(`   Query params: course_group_id=${bucket.id}, college_id=${user.college_id}, is_active=true`);
-            
+
             // First, check if ANY subjects exist with this course_group_id (without college filter)
             const { data: allSubjectsForBucket, error: checkError } = await supabase
               .from('subjects')
               .select('id, code, name, college_id, course_group_id, is_active')
               .eq('course_group_id', bucket.id);
-            
+
             console.log(`   📊 Total subjects with course_group_id=${bucket.id}: ${allSubjectsForBucket?.length || 0}`);
             if (allSubjectsForBucket && allSubjectsForBucket.length > 0) {
               console.log(`   📝 Sample subject:`, allSubjectsForBucket[0]);
             }
-            
+
             // Try WITHOUT college_id filter first to see if subjects exist
             const { data: subjectsWithoutFilter, error: testError } = await supabase
               .from('subjects')
               .select('id, code, name, college_id, is_active')
               .eq('course_group_id', bucket.id);
-            
+
             console.log(`   🧪 Test query (no filters): ${subjectsWithoutFilter?.length || 0} subjects found`);
             if (subjectsWithoutFilter && subjectsWithoutFilter.length > 0) {
               console.log(`      Sample: ${subjectsWithoutFilter[0].code} - college_id: ${subjectsWithoutFilter[0].college_id}, is_active: ${subjectsWithoutFilter[0].is_active}`);
               console.log(`      Faculty college_id: ${user.college_id}`);
               console.log(`      Match: ${subjectsWithoutFilter[0].college_id === user.college_id}`);
             }
-            
+
             const { data: subjects, error: subjectsError } = await supabase
               .from('subjects')
               .select(`
@@ -207,7 +211,7 @@ export async function GET(request: NextRequest) {
         );
 
         const bucketsCount = bucketsWithSubjects.length;
-        
+
         return {
           ...batch,
           buckets: bucketsWithSubjects,

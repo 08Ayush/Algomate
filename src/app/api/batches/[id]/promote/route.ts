@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { PromoteBatchUseCase, SupabaseBatchRepository } from '@/modules/batch';
-import { authenticate } from '@/shared/middleware/auth';
+import { requireAuth } from '@/lib/auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,8 +15,10 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await authenticate(request);
-    if (!user || (user.role !== 'college_admin' && user.role !== 'admin')) {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
+    if (user.role !== 'college_admin' && user.role !== 'admin') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

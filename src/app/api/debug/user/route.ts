@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/shared/database/client';
+import { requireAuth } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const searchParams = request.nextUrl.searchParams;
     const email = searchParams.get('email');
-    
+
     if (!email) {
       return NextResponse.json(
         { error: 'Email parameter is required' },
@@ -52,7 +56,7 @@ export async function GET(request: NextRequest) {
 
   } catch (error: any) {
     console.error('Debug API error:', error);
-    
+
     return NextResponse.json(
       { error: error.message || 'Debug failed' },
       { status: 500 }

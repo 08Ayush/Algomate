@@ -68,7 +68,7 @@ const StudentsPage: React.FC = () => {
             const user = JSON.parse(userData);
             const headers = getAuthHeaders();
             if (!headers) return;
-            const q = user.college_id ? `?college_id=${user.college_id}&limit=1000&refresh=1` : '?limit=1000&refresh=1';
+            const q = user.college_id ? `?college_id=${user.college_id}&limit=1000` : '?limit=1000';
             const [studentRes, deptRes, courseRes, batchRes] = await Promise.all([
                 fetch(`/api/admin/students${q}`, { headers }),
                 fetch(`/api/admin/departments${q}`, { headers }),
@@ -241,8 +241,8 @@ const StudentsPage: React.FC = () => {
                                         <td className="px-6 py-4"><span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm font-medium">{student.batch?.name ? `${student.batch.name} (${student.batch.section})` : '-'}</span></td>
                                         <td className="px-6 py-4"><span className={`px-3 py-1 rounded-full text-xs font-bold ${student.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{student.is_active ? 'Active' : 'Inactive'}</span></td>
                                         <td className="px-6 py-4"><div className="flex gap-2">
-                                            <button onClick={() => handleEdit(student)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={16} /></button>
-                                            <button onClick={() => handleDelete(student)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                                            <button onClick={() => handleEdit(student)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit"><Edit size={16} /></button>
+                                            <button onClick={() => handleDelete(student)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Delete"><Trash2 size={16} /></button>
                                         </div></td>
                                     </motion.tr>
                                 ))}
@@ -279,12 +279,12 @@ const StudentsPage: React.FC = () => {
                                     </select>
                                 </div>
                                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Course</label>
-                                    <select className="w-full px-4 py-2 border rounded-lg" value={form.course_id} onChange={(e) => setForm({ ...form, course_id: e.target.value })}>
+                                    <select className="w-full px-4 py-2 border rounded-lg" value={form.course_id} onChange={(e) => setForm({ ...form, course_id: e.target.value })} aria-label="Course">
                                         <option value="">Select</option>{courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
                                     </select>
                                 </div>
                                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Batch</label>
-                                    <select className="w-full px-4 py-2 border rounded-lg" value={form.batch_id} onChange={(e) => setForm({ ...form, batch_id: e.target.value })}>
+                                    <select className="w-full px-4 py-2 border rounded-lg" value={form.batch_id} onChange={(e) => setForm({ ...form, batch_id: e.target.value })} aria-label="Batch">
                                         <option value="">Select Batch/Section</option>
                                         {batches.map(b => (
                                             <option key={b.id} value={b.id}>

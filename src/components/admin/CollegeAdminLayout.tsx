@@ -191,8 +191,8 @@ const CollegeAdminLayout: React.FC<CollegeAdminLayoutProps> = ({ children, activ
                                     onClick={() => setSemesterMode(mode)}
                                     title={mode === 'odd' ? 'Semesters 1, 3, 5, 7' : mode === 'even' ? 'Semesters 2, 4, 6, 8' : 'All 8 Semesters'}
                                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 border-none cursor-pointer ${isActive
-                                            ? 'bg-white text-[#4D869C] shadow-md'
-                                            : 'text-white/80 hover:text-white hover:bg-white/20'
+                                        ? 'bg-white text-[#4D869C] shadow-md'
+                                        : 'text-white/80 hover:text-white hover:bg-white/20'
                                         }`}
                                 >
                                     {labels[mode]}

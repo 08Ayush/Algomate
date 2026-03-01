@@ -91,10 +91,10 @@ export default function NEPCurriculumPage() {
       }
 
       setUser(parsedUser);
-      
+
       // Fetch courses for this college
       await fetchCourses(parsedUser.college_id);
-      
+
       setLoading(false);
     } catch (error) {
       console.error('Error checking authentication:', error);
@@ -120,7 +120,7 @@ export default function NEPCurriculumPage() {
   return (
     <div className="min-h-screen bg-gray-100">
       <Header />
-      
+
       <div className="pt-20 pb-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           {/* Back Button and Page Header */}
@@ -152,54 +152,56 @@ export default function NEPCurriculumPage() {
           {/* Course and Semester Selector */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">"
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Select Course / Program
-              </label>
-              <select
-                value={selectedCourse}
-                onChange={(e) => {
-                  setSelectedCourse(e.target.value);
-                  // Reset semester to 1 when course changes
-                  setSelectedSemester(1);
-                }}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                {courses.length === 0 ? (
-                  <option value="">No courses available</option>
-                ) : (
-                  courses.map((course) => (
-                    <option key={course.id} value={course.id}>
-                      {course.title} ({course.code})
-                    </option>
-                  ))
-                )}
-              </select>
-              <p className="text-xs text-gray-500 mt-1">
-                Select the program for which you want to create curriculum
-              </p>
-            </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Course / Program
+                </label>
+                <select
+                  value={selectedCourse}
+                  onChange={(e) => {
+                    setSelectedCourse(e.target.value);
+                    // Reset semester to 1 when course changes
+                    setSelectedSemester(1);
+                  }}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  aria-label="Select course"
+                >
+                  {courses.length === 0 ? (
+                    <option value="">No courses available</option>
+                  ) : (
+                    courses.map((course) => (
+                      <option key={course.id} value={course.id}>
+                        {course.title} ({course.code})
+                      </option>
+                    ))
+                  )}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Select the program for which you want to create curriculum
+                </p>
+              </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Select Semester
-              </label>
-              <select
-                value={selectedSemester}
-                onChange={(e) => setSelectedSemester(parseInt(e.target.value))}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                {semesters.map((sem) => (
-                  <option key={sem} value={sem}>
-                    Semester {sem}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-500 mt-1">
-                Subjects will be filtered based on the selected semester
-              </p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Semester
+                </label>
+                <select
+                  value={selectedSemester}
+                  onChange={(e) => setSelectedSemester(parseInt(e.target.value))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  aria-label="Select semester"
+                >
+                  {semesters.map((sem) => (
+                    <option key={sem} value={sem}>
+                      Semester {sem}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Subjects will be filtered based on the selected semester
+                </p>
+              </div>
             </div>
-          </div>
           </div>
 
           {/* Curriculum Builder */}
@@ -214,25 +216,25 @@ export default function NEPCurriculumPage() {
           {/* Help Section */}
           <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-6">
             <h3 className="font-bold text-blue-900 mb-3 text-lg">📚 How to use the NEP Bucket Builder:</h3>
-          <ol className="list-decimal list-inside space-y-2 text-blue-800">
-            <li><strong>Select Course & Semester:</strong> Choose the program (ITEP/B.Ed/M.Ed) and semester from the dropdowns above</li>
-            <li><strong>Create Elective Buckets:</strong> Enter a bucket name (e.g., "Major Pool", "Minor Pool") and click "Create Bucket" - saves immediately!</li>
-            <li><strong>Drag & Drop Subjects:</strong> Drag subjects from the available list on the left into the appropriate bucket on the right - auto-saved!</li>
-            <li><strong>Configure Common Time Slot:</strong> Toggle this option if all subjects in the bucket should run simultaneously - updates instantly!</li>
-            <li><strong>Set Selection Limits:</strong> Define minimum and maximum number of subjects students can choose - saved automatically!</li>
-            <li><strong>Delete Buckets:</strong> Click the "Delete" button on any bucket to permanently remove it and return subjects to available pool</li>
-          </ol>
-          <div className="mt-4 p-4 bg-white rounded-lg border border-blue-300">
-            <h4 className="font-semibold text-blue-900 mb-2">📌 Important Notes:</h4>
-            <ul className="list-disc list-inside space-y-1 text-sm text-blue-700">
-              <li><strong>✓ Auto-Save:</strong> All changes (create, update, delete) are saved immediately to the database</li>
-              <li>Subjects are filtered based on your college, selected course, and semester</li>
-              <li>Only College Admins can access this page</li>
-              <li>Changes are specific to the selected course and semester combination</li>
-              <li>Use this to implement NEP 2020 Choice-Based Credit System (CBCS)</li>
-              <li>Deleted buckets cannot be recovered - confirm before deleting!</li>
-            </ul>
-          </div>
+            <ol className="list-decimal list-inside space-y-2 text-blue-800">
+              <li><strong>Select Course & Semester:</strong> Choose the program (ITEP/B.Ed/M.Ed) and semester from the dropdowns above</li>
+              <li><strong>Create Elective Buckets:</strong> Enter a bucket name (e.g., "Major Pool", "Minor Pool") and click "Create Bucket" - saves immediately!</li>
+              <li><strong>Drag & Drop Subjects:</strong> Drag subjects from the available list on the left into the appropriate bucket on the right - auto-saved!</li>
+              <li><strong>Configure Common Time Slot:</strong> Toggle this option if all subjects in the bucket should run simultaneously - updates instantly!</li>
+              <li><strong>Set Selection Limits:</strong> Define minimum and maximum number of subjects students can choose - saved automatically!</li>
+              <li><strong>Delete Buckets:</strong> Click the "Delete" button on any bucket to permanently remove it and return subjects to available pool</li>
+            </ol>
+            <div className="mt-4 p-4 bg-white rounded-lg border border-blue-300">
+              <h4 className="font-semibold text-blue-900 mb-2">📌 Important Notes:</h4>
+              <ul className="list-disc list-inside space-y-1 text-sm text-blue-700">
+                <li><strong>✓ Auto-Save:</strong> All changes (create, update, delete) are saved immediately to the database</li>
+                <li>Subjects are filtered based on your college, selected course, and semester</li>
+                <li>Only College Admins can access this page</li>
+                <li>Changes are specific to the selected course and semester combination</li>
+                <li>Use this to implement NEP 2020 Choice-Based Credit System (CBCS)</li>
+                <li>Deleted buckets cannot be recovered - confirm before deleting!</li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>

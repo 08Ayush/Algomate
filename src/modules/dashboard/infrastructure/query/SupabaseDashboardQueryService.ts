@@ -154,19 +154,12 @@ export class SupabaseDashboardQueryService implements IDashboardQueryService {
     async getPendingReviewCount(userId: string, departmentId: string, facultyType: string): Promise<number> {
         if (facultyType !== 'publisher' || !departmentId) return 0;
 
-        const { data: batches } = await this.supabase
-            .from('batches')
-            .select('id')
-            .eq('department_id', departmentId);
-
-        const batchIds = batches?.map((b: any) => b.id) || [];
-        if (batchIds.length === 0) return 0;
-
+        // Single query with !inner join instead of N+1 (fetch batch IDs then count)
         const { count } = await this.supabase
             .from('generated_timetables')
-            .select('*', { count: 'exact', head: true })
+            .select('id, batches!inner(department_id)', { count: 'exact', head: true })
             .eq('status', 'pending_approval')
-            .in('batch_id', batchIds);
+            .eq('batches.department_id', departmentId);
 
         return count || 0;
     }

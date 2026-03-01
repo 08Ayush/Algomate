@@ -960,6 +960,10 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
           <select
             value={selectedSemester}
             onChange={(e) => setSelectedSemester(Number(e.target.value))}
+<<<<<<< HEAD
+=======
+            aria-label="Select semester"
+>>>>>>> origin/response-time
             className="px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           >
             {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
@@ -1095,6 +1099,10 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
                       const classroom = filteredClassrooms.find(c => c.id === e.target.value);
                       setSelectedClassroom(classroom || null);
                     }}
+<<<<<<< HEAD
+=======
+                    aria-label="Select classroom"
+>>>>>>> origin/response-time
                     className="px-3 py-1 border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
                   >
                     <option value="">Select classroom...</option>

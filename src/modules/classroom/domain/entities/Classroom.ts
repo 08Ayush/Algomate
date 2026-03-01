@@ -4,10 +4,8 @@ export class Classroom {
         public readonly name: string,
         public readonly collegeId: string,
         public readonly departmentId: string | null,
-        public readonly departmentName: string | null,
-        public readonly departmentCode: string | null,
         public readonly capacity: number,
-        public readonly type: string,
+        public readonly type: string, // Changed to string to be flexible
         public readonly hasProjector: boolean,
         public readonly hasComputers: boolean,
         public readonly hasAc: boolean,
@@ -23,8 +21,6 @@ export class Classroom {
             name: this.name,
             college_id: this.collegeId,
             department_id: this.departmentId,
-            department_name: this.departmentName,
-            department_code: this.departmentCode,
             capacity: this.capacity,
             type: this.type,
             has_projector: this.hasProjector,
@@ -38,22 +34,18 @@ export class Classroom {
     }
 
     static fromDatabase(data: any): Classroom {
-        // Supabase join returns related data as a nested object
-        const dept = data.departments || null;
         return new Classroom(
             data.id,
             data.name,
             data.college_id,
             data.department_id,
-            dept ? dept.name : null,
-            dept ? dept.code : null,
             data.capacity,
             data.type || 'Lecture Hall',
             data.has_projector || false,
             data.has_computers || false,
             data.has_ac || false,
             data.is_available !== undefined ? data.is_available : true,
-            data.is_active !== undefined ? data.is_active : true,
+            data.is_active !== undefined ? data.is_active : true, // Default to true if missing
             new Date(data.created_at),
             new Date(data.updated_at)
         );

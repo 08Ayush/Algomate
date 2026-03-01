@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth } from '@/lib/auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,6 +9,9 @@ const supabase = createClient(
 
 export async function GET(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const { searchParams } = new URL(request.url);
     const courseId = searchParams.get('courseId');
     const semester = searchParams.get('semester');
@@ -27,8 +31,7 @@ export async function GET(request: NextRequest) {
       .from('generated_timetables')
       .select('id, title, status, batch_id, batches(id, name, course_id)')
       .limit(5);
-    
-    console.log('🔍 Debug: Sample timetables in DB:', allTimetables);
+
     console.log('🔍 Debug: Any errors?', debugError);
 
     // Build query for published timetables
@@ -43,7 +46,7 @@ export async function GET(request: NextRequest) {
         created_at,
         approved_at,
         batch_id,
-        batches (
+        batches!inner (
           id,
           name,
           section,
@@ -53,6 +56,7 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('status', 'published')
+      .eq('batches.course_id', courseId)
       .order('approved_at', { ascending: false, nullsFirst: false })
       .order('updated_at', { ascending: false });
 
@@ -66,7 +70,20 @@ export async function GET(request: NextRequest) {
       query = query.eq('batch_id', batchId);
     }
 
-    const { data: timetables, error: timetableError } = await query;
+    // Fetch timetables and batches in parallel
+    const [
+      { data: timetables, error: timetableError },
+      { data: batchesData, error: batchesError }
+    ] = await Promise.all([
+      query,
+      supabase
+        .from('batches')
+        .select('id, name, section, semester, academic_year')
+        .eq('course_id', courseId)
+        .eq('is_active', true)
+        .order('semester', { ascending: true })
+        .order('section', { ascending: true })
+    ]);
 
     if (timetableError) {
       console.error('❌ Error fetching timetables:', timetableError);
@@ -76,34 +93,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log(`📊 Found ${timetables?.length || 0} published timetables (before filtering)`);
-    console.log('📊 Timetables:', timetables?.map(t => ({ id: t.id, title: t.title, batch_id: t.batch_id, course_id: t.batches?.course_id })));
-
-    // Filter timetables by course (through batch)
-    const filteredTimetables = timetables?.filter(
-      (tt: any) => tt.batches?.course_id === courseId
-    ) || [];
-
-    console.log(`✅ ${filteredTimetables.length} timetables match courseId: ${courseId}`);
-
-    // Get all batches for the course
-    const { data: batchesData, error: batchesError } = await supabase
-      .from('batches')
-      .select('id, name, section, semester, academic_year')
-      .eq('course_id', courseId)
-      .eq('is_active', true)
-      .order('semester', { ascending: true })
-      .order('section', { ascending: true });
-
     if (batchesError) {
       console.error('❌ Error fetching batches:', batchesError);
-    } else {
-      console.log(`📦 Found ${batchesData?.length || 0} active batches for courseId: ${courseId}`);
     }
 
     return NextResponse.json({
       success: true,
-      timetables: filteredTimetables,
+      timetables: timetables || [],
       batches: batchesData || [],
     });
   } catch (error) {

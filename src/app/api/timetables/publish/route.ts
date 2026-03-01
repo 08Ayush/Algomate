@@ -7,7 +7,7 @@ import {
   SubmitForApprovalUseCase,
   SupabaseTimetableRepository
 } from '@/modules/timetable';
-import { authenticate } from '@/shared/middleware/auth';
+import { requireAuth } from '@/lib/auth';
 import {
   notifyTimetableSubmittedForApproval,
   notifyTimetableApproved,
@@ -27,13 +27,8 @@ const submitUseCase = new SubmitForApprovalUseCase(timetableRepo);
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await authenticate(request);
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized', success: false },
-        { status: 401 }
-      );
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user; // Auth failed
 
     const body = await request.json();
     const {

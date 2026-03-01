@@ -1,5 +1,31 @@
 import pino from 'pino';
 
+// ---------------------------------------------------------------------------
+// Build a pino-pretty destination stream **synchronously** in development.
+// The default `transport: { target: 'pino-pretty' }` spins up a WORKER THREAD.
+// If that worker crashes (e.g. rapid error floods), every subsequent
+// `this.logger.*()` call throws "the worker has exited" — an uncaught
+// exception that kills the server.
+//
+// Using `pino-pretty`'s `PinoPretty()` as a synchronous stream avoids the
+// worker entirely while keeping colourised dev output.
+// ---------------------------------------------------------------------------
+function buildDevStream(): pino.DestinationStream | undefined {
+    if (process.env.NODE_ENV !== 'development') return undefined;
+    try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const PinoPretty = require('pino-pretty');
+        return PinoPretty({
+            colorize: true,
+            translateTime: 'SYS:standard',
+            ignore: 'pid,hostname',
+        });
+    } catch {
+        // pino-pretty not installed — fall back to plain JSON
+        return undefined;
+    }
+}
+
 /**
  * Structured Logger Service using Pino
  * Provides consistent logging across the application
@@ -9,28 +35,33 @@ export class Logger {
     private static instance: Logger;
 
     private constructor() {
-        this.logger = pino({
-            level: process.env.LOG_LEVEL || 'info',
-            transport:
-                process.env.NODE_ENV === 'development'
-                    ? {
-                        target: 'pino-pretty',
-                        options: {
-                            colorize: true,
-                            translateTime: 'SYS:standard',
-                            ignore: 'pid,hostname',
-                        },
-                    }
-                    : undefined,
-            formatters: {
-                level: (label) => {
-                    return { level: label };
+        const devStream = buildDevStream();
+        // pino defaults to stdout when no destination is provided.
+        // In Edge/middleware runtime, pino/browser.js is used which lacks
+        // pino.destination() — so we must NOT call it. Only pass the stream
+        // when we actually have one (i.e. pino-pretty in Node.js dev mode).
+        this.logger = devStream
+            ? pino(
+                {
+                    level: process.env.LOG_LEVEL || 'info',
+                    formatters: {
+                        level: (label) => ({ level: label }),
+                    },
+                    base: {
+                        env: process.env.NODE_ENV,
+                    },
                 },
-            },
-            base: {
-                env: process.env.NODE_ENV,
-            },
-        });
+                devStream,
+            )
+            : pino({
+                level: process.env.LOG_LEVEL || 'info',
+                formatters: {
+                    level: (label) => ({ level: label }),
+                },
+                base: {
+                    env: process.env.NODE_ENV,
+                },
+            });
     }
 
     static getInstance(): Logger {
@@ -51,21 +82,34 @@ export class Logger {
      * Debug level log
      */
     debug(message: string, context?: object): void {
-        this.logger.debug(context || {}, message);
+        try {
+            this.logger.debug(context || {}, message);
+        } catch {
+            // pino-pretty worker may have exited; fall back to console
+            console.debug('[DEBUG]', message, context || {});
+        }
     }
 
     /**
      * Info level log
      */
     info(message: string, context?: object): void {
-        this.logger.info(context || {}, message);
+        try {
+            this.logger.info(context || {}, message);
+        } catch {
+            console.info('[INFO]', message, context || {});
+        }
     }
 
     /**
      * Warning level log
      */
     warn(message: string, context?: object): void {
-        this.logger.warn(context || {}, message);
+        try {
+            this.logger.warn(context || {}, message);
+        } catch {
+            console.warn('[WARN]', message, context || {});
+        }
     }
 
     /**
@@ -82,7 +126,15 @@ export class Logger {
                 }
                 : undefined,
         };
-        this.logger.error(errorContext, message);
+        try {
+            this.logger.error(errorContext, message);
+        } catch {
+            // Guard against 'the worker has exited' thrown by pino-pretty
+            // transport when its worker thread crashes (e.g. due to repeated
+            // error floods). Using console.error ensures the error is still
+            // visible without crashing the calling handler.
+            console.error('[ERROR]', message, errorContext);
+        }
     }
 
     /**
@@ -99,7 +151,11 @@ export class Logger {
                 }
                 : undefined,
         };
-        this.logger.fatal(errorContext, message);
+        try {
+            this.logger.fatal(errorContext, message);
+        } catch {
+            console.error('[FATAL]', message, errorContext);
+        }
     }
 
     /**

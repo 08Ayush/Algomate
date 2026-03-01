@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 
 // Define types for recommendations
 interface Course {
@@ -82,6 +83,9 @@ const mockCareers: CareerPath[] = [
 
 export async function POST(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
     const { subjects, interests, careerGoals, currentGrade } = body;
 

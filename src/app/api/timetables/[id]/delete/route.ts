@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { DeleteTimetableUseCase, SupabaseTimetableRepository } from '@/modules/timetable';
-import { authenticate } from '@/shared/middleware/auth';
+import { requireAuth } from '@/lib/auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,13 +15,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await authenticate(request);
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized. Please log in.' },
-        { status: 401 }
-      );
-    }
+    // Auth handled by middleware - just get user from headers (FAST!)
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user; // Auth failed
 
     // Await params in Next.js 15+
     const { id } = await params;

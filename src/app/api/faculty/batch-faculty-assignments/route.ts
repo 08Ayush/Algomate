@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth } from '@/lib/auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -45,6 +46,9 @@ interface BatchSubjectWithFaculty {
 // GET - Fetch batch subjects with assignment info and qualified faculty
 export async function GET(request: NextRequest) {
     try {
+        const user = requireAuth(request);
+        if (user instanceof NextResponse) return user;
+
         const { searchParams } = new URL(request.url);
         const batchId = searchParams.get('batch_id');
 
@@ -315,6 +319,9 @@ export async function GET(request: NextRequest) {
 // PUT - Update faculty and lab assignments for batch subjects
 export async function PUT(request: NextRequest) {
     try {
+        const user = requireAuth(request);
+        if (user instanceof NextResponse) return user;
+
         const body = await request.json();
         const { assignments } = body;
 

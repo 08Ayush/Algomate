@@ -265,7 +265,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 //       const authToken = Buffer.from(userData).toString('base64');
 //       console.log('Auth token created:', authToken.substring(0, 20) + '...');
-      
+
 //       // Build query params
 //       const params = new URLSearchParams({
 //         courseId: course,
@@ -274,7 +274,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog';
 //       if (department) {
 //         params.append('departmentId', department);
 //       }
-      
+
 //       const response = await fetch(`/api/nep/subjects?${params.toString()}`, {
 //         headers: {
 //           'Authorization': `Bearer ${authToken}`,
@@ -285,7 +285,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog';
 //       if (!response.ok) {
 //         const errorData = await response.json().catch(() => ({}));
 //         console.error('API Error Response:', errorData);
-        
+
 //         if (response.status === 401) {
 //           if (errorData.code === 'AUTH_REQUIRED') {
 //             setError(errorData.message || 'Authentication required. Please log in again.');
@@ -294,7 +294,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog';
 //           }
 //           return;
 //         }
-        
+
 //         throw new Error(errorData.error || errorData.message || 'Failed to fetch subjects');
 //       }
 
@@ -320,7 +320,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog';
 //       }
 
 //       const authToken = Buffer.from(userData).toString('base64');
-      
+
 //       // Build query params
 //       const params = new URLSearchParams({
 //         courseId: course,
@@ -329,7 +329,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog';
 //       if (department) {
 //         params.append('departmentId', department);
 //       }
-      
+
 //       const response = await fetch(`/api/nep/buckets?${params.toString()}`, {
 //         headers: {
 //           'Authorization': `Bearer ${authToken}`,
@@ -340,7 +340,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog';
 //       if (!response.ok) {
 //         const errorData = await response.json().catch(() => ({}));
 //         console.error('API Error Response:', errorData);
-        
+
 //         if (response.status === 401) {
 //           if (errorData.code === 'AUTH_REQUIRED') {
 //             setError(errorData.message || 'Authentication required. Please log in again.');
@@ -349,7 +349,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog';
 //           }
 //           return;
 //         }
-        
+
 //         throw new Error(errorData.error || errorData.message || 'Failed to fetch buckets');
 //       }
 
@@ -396,7 +396,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog';
 //       if (targetBucket) {
 //         // Check if subject is already in this bucket
 //         const alreadyInBucket = targetBucket.subjects.some((s) => s.id === activeId);
-        
+
 //         if (!alreadyInBucket) {
 //           // Update local state immediately for responsiveness
 //           setBuckets((prev) =>
@@ -510,7 +510,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog';
 //     if (!bucket) return;
 
 //     const newValue = !bucket.is_common_slot;
-    
+
 //     // Update local state immediately for responsiveness
 //     setBuckets((prev) =>
 //       prev.map((b) => (b.id === bucketId ? { ...b, is_common_slot: newValue } : b))
@@ -629,11 +629,11 @@ import { useConfirm } from '@/components/ui/ConfirmDialog';
 //       }
 
 //       const result = await response.json();
-      
+
 //       // Update local state - return subjects to available list and remove bucket
 //       setAvailableSubjects((prev) => [...prev, ...bucket.subjects]);
 //       setBuckets((prev) => prev.filter((b) => b.id !== bucketId));
-      
+
 //       alert(`Bucket deleted successfully! ${result.subjectsReset || 0} subject(s) returned to available pool.`);
 //     } catch (error) {
 //       console.error('Error deleting bucket:', error);
@@ -674,7 +674,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog';
 //       }
 
 //       const result = await response.json();
-      
+
 //       // Add the newly created bucket to state with real ID from database
 //       const newBucket: Bucket = {
 //         id: result.bucket.id,
@@ -687,7 +687,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 //       setBuckets((prev) => [...prev, newBucket]);
 //       setNewBucketName('');
-      
+
 //       alert('Bucket created successfully!');
 //     } catch (error) {
 //       console.error('Error creating bucket:', error);
@@ -801,7 +801,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog';
 //         {/* Left: Available Subjects */}
 //         <div className="col-span-1">
 //           <h2 className="text-2xl font-bold mb-4">Available Subjects</h2>
-          
+
 //           {/* Credit Filter Buttons */}
 //           <div className="mb-4">
 //             <p className="text-sm font-medium text-gray-700 mb-2">Filter by Credits:</p>
@@ -834,7 +834,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog';
 //               })}
 //             </div>
 //           </div>
-          
+
 //           <div className="bg-white border border-gray-200 rounded-lg p-4 max-h-[600px] overflow-y-auto">
 //             <SortableContext items={filteredSubjects.map(s => s.id)} strategy={verticalListSortingStrategy}>
 //               {filteredSubjects.map((subject) => (
@@ -1027,13 +1027,12 @@ function DroppableBucket({
   const totalCredits = bucket.subjects.reduce((sum, subject) => sum + subject.credit_value, 0);
 
   return (
-    <div 
-      ref={setNodeRef} 
-      className={`border-2 border-dashed rounded-lg p-4 mb-4 transition-colors ${
-        isOver 
-          ? 'bg-blue-50 border-blue-400 border-solid' 
+    <div
+      ref={setNodeRef}
+      className={`border-2 border-dashed rounded-lg p-4 mb-4 transition-colors ${isOver
+          ? 'bg-blue-50 border-blue-400 border-solid'
           : 'bg-gray-50 border-gray-300'
-      }`}
+        }`}
     >
       <div className="flex justify-between items-center mb-3">
         <div>
@@ -1191,7 +1190,7 @@ export default function CurriculumBuilder({
 
       const authToken = Buffer.from(userData).toString('base64');
       console.log('Auth token created:', authToken.substring(0, 20) + '...');
-      
+
       // Build query params
       const params = new URLSearchParams({
         courseId: course,
@@ -1200,7 +1199,7 @@ export default function CurriculumBuilder({
       if (department) {
         params.append('departmentId', department);
       }
-      
+
       const response = await fetch(`/api/nep/subjects?${params.toString()}`, {
         headers: {
           'Authorization': `Bearer ${authToken}`,
@@ -1211,7 +1210,7 @@ export default function CurriculumBuilder({
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         console.error('API Error Response:', errorData);
-        
+
         if (response.status === 401) {
           if (errorData.code === 'AUTH_REQUIRED') {
             setError(errorData.message || 'Authentication required. Please log in again.');
@@ -1220,7 +1219,7 @@ export default function CurriculumBuilder({
           }
           return;
         }
-        
+
         throw new Error(errorData.error || errorData.message || 'Failed to fetch subjects');
       }
 
@@ -1246,7 +1245,7 @@ export default function CurriculumBuilder({
       }
 
       const authToken = Buffer.from(userData).toString('base64');
-      
+
       // Build query params
       const params = new URLSearchParams({
         courseId: course,
@@ -1255,7 +1254,7 @@ export default function CurriculumBuilder({
       if (department) {
         params.append('departmentId', department);
       }
-      
+
       const response = await fetch(`/api/nep/buckets?${params.toString()}`, {
         headers: {
           'Authorization': `Bearer ${authToken}`,
@@ -1266,7 +1265,7 @@ export default function CurriculumBuilder({
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         console.error('API Error Response:', errorData);
-        
+
         if (response.status === 401) {
           if (errorData.code === 'AUTH_REQUIRED') {
             setError(errorData.message || 'Authentication required. Please log in again.');
@@ -1275,7 +1274,7 @@ export default function CurriculumBuilder({
           }
           return;
         }
-        
+
         throw new Error(errorData.error || errorData.message || 'Failed to fetch buckets');
       }
 
@@ -1322,7 +1321,7 @@ export default function CurriculumBuilder({
       if (targetBucket) {
         // Check if subject is already in this bucket
         const alreadyInBucket = targetBucket.subjects.some((s) => s.id === activeId);
-        
+
         if (!alreadyInBucket) {
           // Update local state immediately for responsiveness
           setBuckets((prev) =>
@@ -1436,7 +1435,7 @@ export default function CurriculumBuilder({
     if (!bucket) return;
 
     const newValue = !bucket.is_common_slot;
-    
+
     // Update local state immediately for responsiveness
     setBuckets((prev) =>
       prev.map((b) => (b.id === bucketId ? { ...b, is_common_slot: newValue } : b))
@@ -1552,11 +1551,11 @@ export default function CurriculumBuilder({
           }
 
           const result = await response.json();
-          
+
           // Update local state - return subjects to available list and remove bucket
           setAvailableSubjects((prev) => [...prev, ...bucket.subjects]);
           setBuckets((prev) => prev.filter((b) => b.id !== bucketId));
-          
+
           alert(`Bucket deleted successfully! ${result.subjectsReset || 0} subject(s) returned to available pool.`);
         } catch (error) {
           console.error('Error deleting bucket:', error);
@@ -1600,7 +1599,7 @@ export default function CurriculumBuilder({
       }
 
       const result = await response.json();
-      
+
       // Add the newly created bucket to state with real ID from database
       const newBucket: Bucket = {
         id: result.bucket.id,
@@ -1614,7 +1613,7 @@ export default function CurriculumBuilder({
       setBuckets((prev) => [...prev, newBucket]);
       setNewBucketName('');
 
-      
+
       alert('Bucket created successfully!');
     } catch (error) {
       console.error('Error creating bucket:', error);
@@ -1794,6 +1793,10 @@ export default function CurriculumBuilder({
                       type="checkbox"
                       checked={bucket.is_common_slot}
                       onChange={() => handleToggleCommonSlot(bucket.id)}
+<<<<<<< HEAD
+=======
+                      title="Common Time Slot"
+>>>>>>> origin/response-time
                       className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
                     <span className="font-medium text-gray-700">Common Time Slot</span>

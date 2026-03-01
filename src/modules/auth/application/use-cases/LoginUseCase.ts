@@ -18,8 +18,9 @@ export class LoginUseCase {
      * Execute login
      */
     async execute(dto: LoginDto): Promise<LoginResult> {
-        // Find user by college UID
-        const user = await this.userRepository.findByCollegeUid(dto.collegeUid);
+        // Find user by college UID - DIRECT (Skip cache for login performance)
+        // Avoids ~76ms Redis latency overhead on login
+        const user = await this.userRepository.findByCollegeUidDirect(dto.collegeUid);
 
         if (!user) {
             throw new UnauthorizedError('Invalid College UID or password');
@@ -45,14 +46,11 @@ export class LoginUseCase {
             faculty_type: user.facultyType
         });
 
-        // Save token and last login to database (Critical for session validation)
-        try {
-            await this.userRepository.updateLastLogin(user.id, token);
-        } catch (error: any) {
-            // Graceful degradation: If the database is missing the 'token' column (PGRST204),
-            // or has other issues, we log it but do NOT block the user from logging in.
-            console.warn('⚠️ Shared: Failed to persist session to database. User is logged in but session is not tracked.', error.message);
-        }
+        // Save token and last login to database (Non-blocking - background)
+        // Don't await this to avoid blocking login response
+        this.userRepository.updateLastLogin(user.id, token).catch((error: any) => {
+            console.warn('⚠️ Failed to persist session to database. User is logged in but session is not tracked.', error.message);
+        });
 
         // Return result with extended user data
         const result = {

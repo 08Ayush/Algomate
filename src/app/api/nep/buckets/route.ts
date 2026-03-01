@@ -4,7 +4,7 @@ import { SupabaseElectiveBucketRepository } from '../../../../modules/elective/i
 import { GetBucketsForBatchUseCase } from '../../../../modules/elective/application/use-cases/GetBucketsForBatchUseCase';
 import { CreateElectiveBucketUseCase } from '../../../../modules/elective/application/use-cases/CreateElectiveBucketUseCase';
 import { CreateElectiveBucketDtoSchema } from '../../../../modules/elective/application/dto/ElectiveBucketDto';
-import { authenticate } from '../../../../shared/middleware/auth';
+import { requireAuth } from '@/lib/auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,10 +16,8 @@ const createBucketUseCase = new CreateElectiveBucketUseCase(bucketRepo);
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await authenticate(request);
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user; // Auth failed
 
     const { searchParams } = new URL(request.url);
     const batchId = searchParams.get('batchId');
@@ -182,10 +180,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await authenticate(request);
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user; // Auth failed
 
     const body = await request.json();
 

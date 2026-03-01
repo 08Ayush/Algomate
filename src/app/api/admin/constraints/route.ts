@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -23,7 +24,7 @@ import { getPaginationParams, getPaginationRange, createPaginatedResponse } from
 
 export async function GET(request: NextRequest) {
     try {
-        const user = getAuthenticatedUser(request);
+        const user = requireAuth(request);
         if (!user || !user.id || !user.college_id) {
             return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
         }
@@ -75,7 +76,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
     try {
-        const user = getAuthenticatedUser(request);
+        const user = requireAuth(request);
         if (!user || !user.id || !user.college_id) {
             return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
         }
@@ -113,7 +114,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
     try {
-        const user = getAuthenticatedUser(request);
+        const user = requireAuth(request);
         if (!user || !user.id) {
             return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
         }
@@ -151,7 +152,7 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
     try {
-        const user = getAuthenticatedUser(request);
+        const user = requireAuth(request);
         if (!user || !user.id) {
             return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
         }

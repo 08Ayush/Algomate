@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { requireRoles } from '@/lib/auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -10,6 +11,9 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const user = requireRoles(request, ['super_admin']);
+    if (user instanceof NextResponse) return user;
+
     const { id } = params;
 
     const { data: college, error } = await supabaseAdmin
@@ -39,6 +43,9 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
+    const user = requireRoles(request, ['super_admin']);
+    if (user instanceof NextResponse) return user;
+
     const { id } = params;
     const body = await request.json();
 
@@ -97,6 +104,9 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const user = requireRoles(request, ['super_admin']);
+    if (user instanceof NextResponse) return user;
+
     const { id } = params;
 
     const { error } = await supabaseAdmin

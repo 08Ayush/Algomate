@@ -229,57 +229,57 @@ export default function AssignmentPage() {
       onConfirm: async () => {
         setIsSubmitting(true);
 
-    try {
-      const userData = localStorage.getItem('user');
-      if (!userData) throw new Error('User not found');
+        try {
+          const userData = localStorage.getItem('user');
+          if (!userData) throw new Error('User not found');
 
-      const user = JSON.parse(userData);
-      const token = btoa(JSON.stringify({
-        user_id: user.id,
-        role: user.role,
-        college_id: user.college_id
-      }));
+          const user = JSON.parse(userData);
+          const token = btoa(JSON.stringify({
+            user_id: user.id,
+            role: user.role,
+            college_id: user.college_id
+          }));
 
-      const response = await fetch(`/api/student/assignment/${assignmentId}/submit`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          answers,
-          time_taken: (assignment?.duration_minutes || 0) * 60 - timeRemaining,
-          violations
-        })
+          const response = await fetch(`/api/student/assignment/${assignmentId}/submit`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              answers,
+              time_taken: (assignment?.duration_minutes || 0) * 60 - timeRemaining,
+              violations
+            })
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to submit assignment');
+          }
+
+          const data = await response.json();
+
+          exitFullScreen();
+
+          // Show modern submission dialog
+          setSubmissionResult({
+            score: data.submission.score,
+            totalMarks: assignment?.total_marks || 0,
+            percentage: data.submission.percentage,
+            status: data.submission.status || 'SUBMITTED',
+            autoGraded: data.submission.auto_graded,
+            timeTaken: (assignment?.duration_minutes || 0) * 60 - timeRemaining,
+            violations: violations
+          });
+          setShowResultDialog(true);
+        } catch (error) {
+          console.error('Error submitting assignment:', error);
+          alert('Failed to submit assignment. Please try again.');
+        } finally {
+          setIsSubmitting(false);
+        }
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to submit assignment');
-      }
-
-        const data = await response.json();
-
-        exitFullScreen();
-
-        // Show modern submission dialog
-        setSubmissionResult({
-          score: data.submission.score,
-          totalMarks: assignment?.total_marks || 0,
-          percentage: data.submission.percentage,
-          status: data.submission.status || 'SUBMITTED',
-          autoGraded: data.submission.auto_graded,
-          timeTaken: (assignment?.duration_minutes || 0) * 60 - timeRemaining,
-          violations: violations
-        });
-        setShowResultDialog(true);
-      } catch (error) {
-        console.error('Error submitting assignment:', error);
-        alert('Failed to submit assignment. Please try again.');
-      } finally {
-        setIsSubmitting(false);
-      }
-    });
   };
 
   const isQuestionAnswered = (questionId: string) => {

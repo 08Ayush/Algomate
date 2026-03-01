@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireRoles } from '@/lib/auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -12,9 +13,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = requireRoles(request, ['super_admin']);
     const { id } = await params;
 
-    const { data: demoRequest, error } = await supabase
       .from('demo_requests')
       .select('*')
       .eq('id', id)
@@ -44,6 +45,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = requireRoles(request, ['super_admin']);
+    if (user instanceof NextResponse) return user;
+
     const { id } = await params;
     const body = await request.json();
 
@@ -57,7 +61,7 @@ export async function PATCH(
 
     // Build update object (only include fields that exist in the table)
     const updateData: Record<string, any> = {};
-    
+
     if (status) updateData.status = status;
     if (demo_scheduled_at) updateData.demo_scheduled_at = demo_scheduled_at;
     if (demo_completed_at) updateData.demo_completed_at = demo_completed_at;
@@ -104,6 +108,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = requireRoles(request, ['super_admin']);
+    if (user instanceof NextResponse) return user;
+
     const { id } = await params;
 
     const { error } = await supabase

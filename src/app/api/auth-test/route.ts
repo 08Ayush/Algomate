@@ -1,25 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthenticatedUser } from '@/shared/middleware/auth';
+import { requireAuth } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
     console.log('Auth test endpoint called');
     console.log('Headers:', Object.fromEntries(request.headers.entries()));
-    
-    const user = await getAuthenticatedUser(request);
-    
-    if (!user) {
-      return NextResponse.json({ 
-        error: 'Authentication failed',
-        debug: {
-          hasAuthHeader: !!request.headers.get('authorization'),
-          authHeader: request.headers.get('authorization')?.substring(0, 20) + '...'
-        }
-      }, { status: 401 });
-    }
 
-    return NextResponse.json({ 
-      success: true, 
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
+    return NextResponse.json({
+      success: true,
       user: {
         id: user.id,
         name: user.name,

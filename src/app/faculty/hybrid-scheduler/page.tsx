@@ -6,6 +6,8 @@ import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
 import { motion } from 'framer-motion';
 import { Zap, Settings, Play, CheckCircle, AlertCircle, Clock, Save, Send, Eye, ChevronDown, ChevronUp } from 'lucide-react';
 import { useSemesterMode } from '@/contexts/SemesterModeContext';
+import { useRealtimeTaskStatus } from '@/hooks/useRealtimeTaskStatus';
+import type { GenerationTask } from '@/hooks/useRealtimeTaskStatus';
 
 interface Batch {
   id: string;

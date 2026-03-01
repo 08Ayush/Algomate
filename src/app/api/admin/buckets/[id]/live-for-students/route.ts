@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/shared/database/client';
+import { requireAuth } from '@/lib/auth';
 
 /**
  * Make Bucket Live for Students API
@@ -10,11 +11,10 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const { id } = await params;
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
 
     const body = await request.json();
     const { is_live, admin_id } = body;
@@ -23,6 +23,8 @@ export async function POST(
     if (!admin_id) {
       return NextResponse.json({ error: 'Admin ID is required' }, { status: 400 });
     }
+    // Use admin_id from body if provided, otherwise use authenticated user id
+    const adminId = admin_id || user.id;
 
     // First, check if bucket has subjects added (using bucket_subjects table for new workflow)
     const { data: bucketSubjects, error: checkError } = await supabaseAdmin

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
 
 // Create admin Supabase client
@@ -24,7 +25,7 @@ async function getAuthenticatedUser(request: NextRequest) {
   try {
     const userString = Buffer.from(token, 'base64').toString();
     const user = JSON.parse(userString);
-    
+
     const { data: dbUser, error } = await supabaseAdmin
       .from('users')
       .select('id, college_id, role, is_active')
@@ -49,13 +50,8 @@ export async function PUT(
 ) {
   try {
     // Get authenticated user
-    const user = await getAuthenticatedUser(request);
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized. Please log in as an admin.' },
-        { status: 401 }
-      );
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     const id = params.id;
     const body = await request.json();
@@ -163,9 +159,9 @@ export async function PUT(
       return NextResponse.json({ error: 'Failed to update classroom' }, { status: 500 });
     }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       message: 'Classroom updated successfully',
-      classroom 
+      classroom
     });
   } catch (error) {
     console.error('Server error:', error);
@@ -179,13 +175,8 @@ export async function DELETE(
 ) {
   try {
     // Get authenticated user
-    const user = await getAuthenticatedUser(request);
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized. Please log in as an admin.' },
-        { status: 401 }
-      );
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     const id = params.id;
 

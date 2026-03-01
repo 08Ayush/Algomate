@@ -8,7 +8,7 @@ export class SupabaseClassroomRepository implements IClassroomRepository {
     async findById(id: string): Promise<Classroom | null> {
         const { data, error } = await this.db
             .from('classrooms')
-            .select('*, departments(id, name, code)')
+            .select('*')
             .eq('id', id)
             .single();
 
@@ -22,7 +22,7 @@ export class SupabaseClassroomRepository implements IClassroomRepository {
     async findByCollegeId(collegeId: string, page?: number, limit?: number): Promise<{ items: Classroom[], total: number }> {
         let query = this.db
             .from('classrooms')
-            .select('*, departments(id, name, code)', { count: 'exact' })
+            .select('*', { count: 'exact' })
             .eq('college_id', collegeId)
             .order('name');
 
@@ -42,7 +42,7 @@ export class SupabaseClassroomRepository implements IClassroomRepository {
     async findByDepartmentId(departmentId: string, page?: number, limit?: number): Promise<{ items: Classroom[], total: number }> {
         let query = this.db
             .from('classrooms')
-            .select('*, departments(id, name, code)', { count: 'exact' })
+            .select('*', { count: 'exact' })
             .eq('department_id', departmentId)
             .order('name');
 

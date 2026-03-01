@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
 
 // Create server-side supabase client with service role key
@@ -49,6 +50,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const { id } = await params;
 
     // Fetch department by ID
@@ -86,13 +90,8 @@ export async function PUT(
 ) {
   try {
     // Get authenticated user
-    const user = await getAuthenticatedUser(request);
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized. Please log in as an admin.' },
-        { status: 401 }
-      );
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     const { id } = await params;
     const { name, code, description } = await request.json();
@@ -178,13 +177,8 @@ export async function DELETE(
 ) {
   try {
     // Get authenticated user
-    const user = await getAuthenticatedUser(request);
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized. Please log in as an admin.' },
-        { status: 401 }
-      );
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     const { id } = await params;
 

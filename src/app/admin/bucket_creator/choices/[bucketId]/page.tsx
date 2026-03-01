@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/Header';
 import { ArrowLeft, Users, BookOpen, Download, Search, Filter, RefreshCw } from 'lucide-react';
-import { createClient } from '@/shared/database/client';
+import { createBrowserClient } from '@/shared/database/client';
 
 interface User {
   id: string;
@@ -89,7 +89,7 @@ export default function StudentChoicesPage() {
   const [viewMode, setViewMode] = useState<'students' | 'subjects'>('students');
   const [filterAllotted, setFilterAllotted] = useState<'all' | 'allotted' | 'pending'>('all');
 
-  const supabase = createClient();
+  const supabase = createBrowserClient();
 
   useEffect(() => {
     checkAuthAndFetchData();

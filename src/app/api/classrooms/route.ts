@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -41,13 +42,8 @@ async function getAuthenticatedUser(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     // Get authenticated user
-    const user = await getAuthenticatedUser(request);
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized. Please log in.' },
-        { status: 401 }
-      );
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     const { searchParams } = new URL(request.url);
     const departmentCode = searchParams.get('department_code');

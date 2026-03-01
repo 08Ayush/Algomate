@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
 import { notifyAssignmentSubmitted, notifyProctoringViolation } from '@/lib/notificationService';
 
@@ -30,7 +31,7 @@ export async function POST(
   try {
     const { id: assignmentId } = await params;
 
-    const user = getAuthenticatedUser(request);
+    const user = requireAuth(request);
     if (!user || !user.user_id) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },

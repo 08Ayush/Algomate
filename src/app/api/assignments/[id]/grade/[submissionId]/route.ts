@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
 import { notifyAssignmentGraded } from '@/lib/notificationService';
 
@@ -34,7 +35,7 @@ export async function POST(
     try {
         const { id: assignmentId, submissionId } = await params;
 
-        const user = getAuthenticatedUser(request);
+        const user = requireAuth(request);
         if (!user || !user.user_id) {
             return NextResponse.json(
                 { success: false, error: 'Unauthorized' },
@@ -259,7 +260,7 @@ export async function GET(
     try {
         const { id: assignmentId, submissionId } = await params;
 
-        const user = getAuthenticatedUser(request);
+        const user = requireAuth(request);
         if (!user || !user.user_id) {
             return NextResponse.json(
                 { success: false, error: 'Unauthorized' },

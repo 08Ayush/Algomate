@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
 
 // Create server-side supabase client with service role key
@@ -24,7 +25,7 @@ async function getAuthenticatedUser(request: NextRequest) {
   try {
     const userString = Buffer.from(token, 'base64').toString();
     const user = JSON.parse(userString);
-    
+
     // Verify user exists and is active admin
     const { data: dbUser, error } = await supabaseAdmin
       .from('users')
@@ -50,13 +51,8 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await getAuthenticatedUser(request);
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized. Please log in as an admin.' },
-        { status: 401 }
-      );
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     const { title, code, nature_of_course, intake, duration_years } = await request.json();
 
@@ -140,13 +136,8 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await getAuthenticatedUser(request);
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized. Please log in as an admin.' },
-        { status: 401 }
-      );
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     // Verify the course belongs to the user's college
     const { data: existingCourse } = await supabaseAdmin

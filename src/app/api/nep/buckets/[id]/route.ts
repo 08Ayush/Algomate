@@ -6,7 +6,7 @@ import {
   SupabaseElectiveBucketRepository,
   UpdateElectiveBucketDtoSchema
 } from '@/modules/elective';
-import { authenticate } from '@/shared/middleware/auth';
+import { requireAuth } from '@/lib/auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,10 +21,8 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await authenticate(request);
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user; // Auth failed
 
     const bucket = await bucketRepo.findById(params.id);
     if (!bucket) {
@@ -52,10 +50,8 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await authenticate(request);
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user; // Auth failed
 
     const body = await request.json();
     const dto = UpdateElectiveBucketDtoSchema.parse(body);
@@ -75,10 +71,8 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await authenticate(request);
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user; // Auth failed
 
     const result = await deleteBucketUseCase.execute(params.id);
     return NextResponse.json(result);

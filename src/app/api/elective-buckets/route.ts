@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { GetBucketsForBatchUseCase, SupabaseElectiveBucketRepository } from '@/modules/elective';
-import { authenticate } from '@/shared/middleware/auth';
+import { requireAuth } from '@/lib/auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,10 +12,8 @@ const getBucketsUseCase = new GetBucketsForBatchUseCase(bucketRepo);
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await authenticate(request);
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user; // Auth failed
 
     const { searchParams } = new URL(request.url);
     const studentId = searchParams.get('studentId');

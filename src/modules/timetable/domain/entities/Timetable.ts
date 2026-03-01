@@ -59,8 +59,6 @@ export class ScheduledClass {
         public readonly sessionDuration: number,
         public readonly classType: string,
         public readonly creditHourNumber: number,
-        public readonly isContinuation: boolean,
-        public readonly sessionNumber: number,
         public readonly createdAt: Date
     ) { }
 
@@ -79,8 +77,6 @@ export class ScheduledClass {
             session_duration: this.sessionDuration,
             class_type: this.classType,
             credit_hour_number: this.creditHourNumber,
-            is_continuation: this.isContinuation,
-            session_number: this.sessionNumber,
             created_at: this.createdAt.toISOString()
         };
     }

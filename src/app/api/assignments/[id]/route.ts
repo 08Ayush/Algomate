@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Lazy initialization of Supabase client
@@ -38,7 +39,7 @@ export async function GET(
 ) {
     try {
         const { id } = await params;
-        const user = getAuthenticatedUser(request);
+        const user = requireAuth(request);
         if (!user || !user.user_id) {
             return NextResponse.json(
                 { success: false, error: 'Unauthorized' },
@@ -125,7 +126,7 @@ export async function PUT(
 ) {
     try {
         const { id } = await params;
-        const user = getAuthenticatedUser(request);
+        const user = requireAuth(request);
         if (!user || !user.user_id) {
             return NextResponse.json(
                 { success: false, error: 'Unauthorized' },
@@ -264,7 +265,7 @@ export async function DELETE(
 ) {
     try {
         const { id } = await params;
-        const user = getAuthenticatedUser(request);
+        const user = requireAuth(request);
         if (!user || !user.user_id) {
             return NextResponse.json(
                 { success: false, error: 'Unauthorized' },

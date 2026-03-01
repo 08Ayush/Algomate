@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from '@/lib/auth';
 
 /**
  * Scheduler API - Proxy to FastAPI Backend
@@ -28,6 +29,9 @@ interface TaskResponse {
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     // Parse request body
     const body: GenerateRequest = await request.json();
     const { batchId, collegeId, config } = body;
@@ -67,7 +71,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       body: JSON.stringify({
         batch_id: batchId,
         college_id: collegeId,
-        user_id: userId,
+        user_id: user.id,
         cpsat_time_limit: config?.cpsatTimeLimit || 300,
         ga_generations: config?.gaGenerations || 100,
         population_size: config?.populationSize || 50,

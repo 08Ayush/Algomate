@@ -22,6 +22,7 @@ export interface UserRow {
     current_semester: number | null;
     admission_year: number | null;
     is_active: boolean;
+    avatar_url: string | null;
     token: string | null;
     last_login: string | null;
     created_at: string;

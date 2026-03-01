@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -6,22 +7,11 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-function getAuthenticatedUser(request: NextRequest) {
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return null;
-    }
-    try {
-        const token = authHeader.substring(7);
-        return JSON.parse(Buffer.from(token, 'base64').toString());
-    } catch (error) {
-        return null;
-    }
-}
+
 
 export async function GET(request: NextRequest) {
     try {
-        const user = getAuthenticatedUser(request);
+        const user = requireAuth(request);
         if (!user || !user.id) {
             return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
         }
@@ -45,7 +35,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
     try {
-        const user = getAuthenticatedUser(request);
+        const user = requireAuth(request);
         if (!user || !user.id) {
             return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
         }

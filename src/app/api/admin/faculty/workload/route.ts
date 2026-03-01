@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/shared/database/server';
+import { requireAuth } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const { searchParams } = new URL(request.url);
     const faculty_id = searchParams.get('faculty_id');
 
@@ -37,7 +41,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Filter only published timetables
-    const publishedClasses = (classes || []).filter((cls: any) => 
+    const publishedClasses = (classes || []).filter((cls: any) =>
       cls.timetables?.status === 'published'
     );
 

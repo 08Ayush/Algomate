@@ -312,8 +312,8 @@ const PreferencesPage: React.FC = () => {
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: i * 0.03 }}
                                     className={`p-4 rounded-xl border-2 transition-all ${qual.is_preferred
-                                            ? 'border-[#4D869C] bg-[#4D869C]/5'
-                                            : 'border-gray-200 bg-gray-50'
+                                        ? 'border-[#4D869C] bg-[#4D869C]/5'
+                                        : 'border-gray-200 bg-gray-50'
                                         }`}
                                 >
                                     <div className="flex items-start justify-between mb-3">
@@ -324,8 +324,8 @@ const PreferencesPage: React.FC = () => {
                                         <button
                                             onClick={() => togglePreferredSubject(qual.id, qual.is_preferred)}
                                             className={`p-2 rounded-lg transition-all ${qual.is_preferred
-                                                    ? 'text-yellow-500 bg-yellow-50'
-                                                    : 'text-gray-400 hover:bg-gray-100'
+                                                ? 'text-yellow-500 bg-yellow-50'
+                                                : 'text-gray-400 hover:bg-gray-100'
                                                 }`}
                                             title={qual.is_preferred ? 'Remove from preferred' : 'Mark as preferred'}
                                         >
@@ -388,8 +388,8 @@ const PreferencesPage: React.FC = () => {
                                                         <button
                                                             onClick={() => toggleTimeSlot(day, slot)}
                                                             className={`w-10 h-10 rounded-lg transition-all ${isSelected
-                                                                    ? 'bg-[#4D869C] text-white'
-                                                                    : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                                                                ? 'bg-[#4D869C] text-white'
+                                                                : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
                                                                 }`}
                                                         >
                                                             {isSelected && <CheckCircle size={18} className="mx-auto" />}

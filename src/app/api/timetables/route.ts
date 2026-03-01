@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
 import { Database } from '@/shared/database';
 import { SupabaseTimetableRepository, SupabaseScheduledClassRepository } from '@/modules/timetable/infrastructure/persistence/SupabaseTimetableRepository';
@@ -52,10 +53,8 @@ import { getPaginationParams, getPaginationRange, createPaginatedResponse } from
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getAuthenticatedUser(request);
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     const { searchParams } = new URL(request.url);
     const batchId = searchParams.get('batchId') || undefined;
@@ -80,7 +79,7 @@ export async function GET(request: NextRequest) {
       `, { count: 'exact' });
 
     // Apply filters
-    if (user.role !== 'platform_admin') {
+    if (user.role !== 'super_admin') {
       query = query.eq('college_id', user.college_id ?? '');
     }
 
@@ -171,11 +170,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const user = await getAuthenticatedUser(request);
-
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     // Validate createdBy matches authenticated user or is allowed
     if (body.createdBy && body.createdBy !== user.id) {

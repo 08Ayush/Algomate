@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -7,7 +8,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 // Helper function to decode and verify user from token
 function getAuthenticatedUser(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
-  
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return null;
   }
@@ -27,7 +28,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = getAuthenticatedUser(request);
+    const user = requireAuth(request);
     if (!user || !user.user_id) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
@@ -64,8 +65,8 @@ export async function GET(
 
     if (existingSubmission) {
       return NextResponse.json(
-        { 
-          success: false, 
+        {
+          success: false,
           error: 'You have already appeared for this assignment',
           alreadySubmitted: true,
           submission: existingSubmission

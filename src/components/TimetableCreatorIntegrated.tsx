@@ -92,7 +92,6 @@ Just tell me what semester or batch you'd like to schedule, and I'll generate an
 
     const userMessage = inputMessage.trim();
     setInputMessage('');
-
     // Add user message
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
     setIsProcessing(true);
@@ -210,7 +209,6 @@ The timetable is displayed in the grid below. Review it and choose an action!`
 
       if (result.success) {
         const timetableId = result.data.timetable_id;
-
         // If published, send email notifications
         if (status === 'published') {
           try {
@@ -227,7 +225,6 @@ The timetable is displayed in the grid below. Review it and choose an action!`
             });
 
             const notifyData = await notifyResponse.json();
-
             if (notifyData.success) {
               const stats = notifyData.stats;
               alert(
@@ -379,8 +376,8 @@ What would you like to do?`;
               <button
                 onClick={() => setMode('ai')}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-all ${mode === 'ai'
-                    ? 'bg-white dark:bg-slate-600 shadow-sm text-blue-600 dark:text-blue-400'
-                    : 'text-gray-600 dark:text-gray-400'
+                  ? 'bg-white dark:bg-slate-600 shadow-sm text-blue-600 dark:text-blue-400'
+                  : 'text-gray-600 dark:text-gray-400'
                   }`}
               >
                 <Bot className="w-4 h-4" />
@@ -389,8 +386,8 @@ What would you like to do?`;
               <button
                 onClick={() => setMode('manual')}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-all ${mode === 'manual'
-                    ? 'bg-white dark:bg-slate-600 shadow-sm text-blue-600 dark:text-blue-400'
-                    : 'text-gray-600 dark:text-gray-400'
+                  ? 'bg-white dark:bg-slate-600 shadow-sm text-blue-600 dark:text-blue-400'
+                  : 'text-gray-600 dark:text-gray-400'
                   }`}
               >
                 <Grid3x3 className="w-4 h-4" />
@@ -439,8 +436,8 @@ What would you like to do?`;
                       )}
                       <div
                         className={`max-w-[80%] rounded-2xl p-4 ${msg.role === 'user'
-                            ? 'bg-blue-600 text-white rounded-tr-none'
-                            : 'bg-white dark:bg-slate-800 text-gray-900 dark:text-white rounded-tl-none border border-gray-200 dark:border-slate-700'
+                          ? 'bg-blue-600 text-white rounded-tr-none'
+                          : 'bg-white dark:bg-slate-800 text-gray-900 dark:text-white rounded-tl-none border border-gray-200 dark:border-slate-700'
                           }`}
                       >
                         <p className="whitespace-pre-line text-sm leading-relaxed">{msg.content}</p>

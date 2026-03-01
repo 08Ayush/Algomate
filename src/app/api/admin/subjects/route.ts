@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/shared/database/server';
 import { asyncHandler } from '@/shared/middleware/error-handler';
-import { authenticate } from '@/shared/middleware/auth';
+import { requireAuth } from '@/lib/auth';
 
 export const GET = asyncHandler(async (request: NextRequest) => {
-  const user = await authenticate(request);
-  if (!user) {
-    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-  }
+  const user = requireAuth(request);
+  if (user instanceof NextResponse) return user; // Auth failed
 
   const { searchParams } = new URL(request.url);
   const collegeId = searchParams.get('college_id') || user.college_id;
@@ -57,16 +55,15 @@ export const GET = asyncHandler(async (request: NextRequest) => {
 });
 
 export const POST = asyncHandler(async (request: NextRequest) => {
-  const user = await authenticate(request);
-  if (!user || !['admin', 'college_admin', 'super_admin'].includes(user.role)) {
+  const user = requireAuth(request);
+  if (user instanceof NextResponse) return user;
+
+  if (!['admin', 'college_admin', 'super_admin'].includes(user.role)) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 });
   }
 
   const body = await request.json();
-  const {
-    name, code, credits_per_week, department_id, semester,
-    subject_type, nep_category, course_id, is_active
-  } = body;
+  const { name, code, credits_per_week, department_id, semester } = body;
 
   if (!name || !code || !department_id) {
     return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
@@ -92,10 +89,11 @@ export const POST = asyncHandler(async (request: NextRequest) => {
     .select()
     .single();
 
-  if (subjectError) {
-    console.error('Subject creation error:', subjectError);
+  if (error) {
+    console.error('Subject creation error:', error);
 
-    if (subjectError.code === '23505') {
+    // Provide user-friendly error messages
+    if (error.code === '23505') {
       return NextResponse.json({
         success: false,
         error: `Subject code "${code}" already exists in this college. Please use a different code.`
@@ -149,5 +147,5 @@ export const POST = asyncHandler(async (request: NextRequest) => {
   const { redisCache } = await import('@/shared/cache/redis-cache');
   await invalidateCachePattern(redisCache.buildKey(user.college_id!, 'subjects', 'list') + '*');
 
-  return NextResponse.json({ success: true, subject }, { status: 201 });
+  return NextResponse.json({ success: true, subject: data }, { status: 201 });
 });

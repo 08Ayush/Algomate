@@ -343,6 +343,10 @@ export default function NotificationsPage() {
           <button
             onClick={() => router.push(getDashboardRoute())}
             className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+<<<<<<< HEAD
+=======
+            title="Go back"
+>>>>>>> origin/response-time
           >
             <ArrowLeft size={20} className="text-white" />
           </button>
@@ -461,6 +465,10 @@ export default function NotificationsPage() {
                 <select
                   value={typeFilter}
                   onChange={(e) => setTypeFilter(e.target.value)}
+<<<<<<< HEAD
+=======
+                  aria-label="Filter by type"
+>>>>>>> origin/response-time
                   className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#4D869C] outline-none"
                 >
                   <option value="all">All Types</option>

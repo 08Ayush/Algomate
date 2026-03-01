@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { authenticate } from '@/shared/middleware/auth';
+import { requireAuth } from '@/lib/auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,22 +9,47 @@ const supabase = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await authenticate(request);
-    if (!user || user.role !== 'college_admin') {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
+    if (user.role !== 'college_admin') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await request.json();
     const { batch_id } = body;
 
-    // Mark all pending choices as allocated for the batch
-    await supabase
+    // First, get all student IDs for the batch
+    const { data: students, error: studentError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('batch_id', batch_id);
+
+    if (studentError) {
+      console.error('Error fetching students:', studentError);
+      return NextResponse.json({ error: 'Failed to fetch students' }, { status: 500 });
+    }
+
+    if (!students || students.length === 0) {
+      return NextResponse.json({
+        success: true,
+        message: 'No students found for this batch'
+      });
+    }
+
+    const studentIds = students.map(s => s.id);
+
+    // Mark all pending choices as allocated for the batch students
+    const { error: updateError } = await supabase
       .from('student_subject_choices')
       .update({ status: 'allocated' } as any)
       .eq('status', 'pending')
-      .in('student_id',
-        supabase.from('users').select('id').eq('batch_id', batch_id)
-      );
+      .in('student_id', studentIds);
+
+    if (updateError) {
+      console.error('Error updating choices:', updateError);
+      return NextResponse.json({ error: 'Failed to update choices' }, { status: 500 });
+    }
 
     return NextResponse.json({
       success: true,

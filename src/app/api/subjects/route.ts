@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -46,13 +47,8 @@ async function getAuthenticatedUser(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     // Get authenticated user
-    const user = await getAuthenticatedUser(request);
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized. Please log in.', data: [] },
-        { status: 401 }
-      );
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     const { searchParams } = new URL(request.url);
     const departmentCode = searchParams.get('department_code');
@@ -125,6 +121,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Filter by semester at DB level
+    if (semester) {
+      query = query.eq('semester', parseInt(semester));
+    }
+
     // Default sort
     query = query.order('code', { ascending: true });
 
@@ -179,12 +180,8 @@ export async function GET(request: NextRequest) {
       };
     }) || [];
 
-    // Filter by semester if provided (on current slice)
-    let filteredData = transformedData;
-    if (semester) {
-      const semNum = parseInt(semester);
-      filteredData = transformedData.filter(s => s.semester === semNum);
-    }
+    // Semester is now filtered at DB level (see query building above)
+    const filteredData = transformedData;
 
     // Group by semester (on returned subjects)
     const groupedBySemester: { [key: number]: any[] } = {};
@@ -240,8 +237,11 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     // Get authenticated user
-    const user = await getAuthenticatedUser(request);
-    if (!user || (user.role !== 'admin' && user.role !== 'college_admin')) {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
+    // Check admin role
+    if (user.role !== 'admin' && user.role !== 'college_admin') {
       return NextResponse.json({
         success: false,
         error: 'Unauthorized. Admin access required.'

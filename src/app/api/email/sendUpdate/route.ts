@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { requireAuth } from '@/lib/auth';
 import { emailService } from '@/services/email/emailService';
 
 const supabase = createClient(
@@ -19,6 +20,9 @@ const supabase = createClient(
  */
 export async function POST(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
     const { timetableId, publishedBy } = body;
 
@@ -142,10 +146,10 @@ export async function POST(request: NextRequest) {
 
     if (allRecipients.length === 0) {
       return NextResponse.json(
-        { 
-          success: true, 
+        {
+          success: true,
           message: 'No recipients found for this timetable',
-          sent: 0 
+          sent: 0
         },
         { status: 200 }
       );
@@ -242,7 +246,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error sending timetable update emails:', error);
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to send timetable update emails',
         details: error instanceof Error ? error.message : 'Unknown error'
       },

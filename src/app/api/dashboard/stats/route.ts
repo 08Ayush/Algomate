@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
 import { GetFacultyDashboardStatsUseCase, SupabaseDashboardQueryService } from '@/modules/dashboard';
 
@@ -35,10 +36,8 @@ async function getAuthenticatedUser(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getAuthenticatedUser(request);
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     console.log('📊 Fetching dashboard stats for user:', user.id);
 

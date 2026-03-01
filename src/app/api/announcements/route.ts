@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
 import { notifyAnnouncement } from '@/lib/notificationService';
 
@@ -6,22 +7,6 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 // Helper function to decode and verify user from token
-function getAuthenticatedUser(request: NextRequest) {
-    const authHeader = request.headers.get('authorization');
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return null;
-    }
-
-    try {
-        const token = authHeader.substring(7);
-        const decoded = JSON.parse(Buffer.from(token, 'base64').toString());
-        return decoded;
-    } catch (error) {
-        console.error('Token decode error:', error);
-        return null;
-    }
-}
 
 /**
  * POST /api/announcements
@@ -29,7 +14,7 @@ function getAuthenticatedUser(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
     try {
-        const user = getAuthenticatedUser(request);
+        const user = requireAuth(request);
         if (!user || !user.id) {
             return NextResponse.json(
                 { success: false, error: 'Unauthorized' },
@@ -154,7 +139,7 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
     try {
-        const user = getAuthenticatedUser(request);
+        const user = requireAuth(request);
         if (!user || !user.id) {
             return NextResponse.json(
                 { success: false, error: 'Unauthorized' },

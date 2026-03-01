@@ -93,12 +93,21 @@ export class GetTimetableUseCase {
                     }
                 }
 
-                // Fetch time slot details for day name (day_of_week number already exists)
-                const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-                
-                // Use existing time data from the scheduled class (already populated by repository join)
-                classJson.day = dayNames[cls.dayOfWeek] || 'Unknown';
-                // start_time and end_time are already in classJson from toJSON()
+                // Fetch time slot details (includes day, start_time, end_time)
+                const { data: timeSlot } = await supabase
+                    .from('time_slots')
+                    .select('day, start_time, end_time')
+                    .eq('id', classJson.time_slot_id)
+                    .single();
+
+                if (timeSlot) {
+                    classJson.day = timeSlot.day;
+                    classJson.start_time = timeSlot.start_time;
+                    classJson.end_time = timeSlot.end_time;
+                } else {
+                    // Fallback: use existing start_time/end_time from scheduled_classes
+                    classJson.day = 'Unknown';
+                }
 
                 return classJson;
             })

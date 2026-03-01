@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -6,7 +7,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 function getAuthenticatedUser(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
-  
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return null;
   }
@@ -26,7 +27,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = getAuthenticatedUser(request);
+    const user = requireAuth(request);
     if (!user || !user.user_id) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
@@ -103,8 +104,8 @@ export async function GET(
     const totalSubmissions = enrichedSubmissions.length;
     const gradedSubmissions = enrichedSubmissions.filter(s => !s.auto_graded || s.graded_at).length;
     const pendingGrading = enrichedSubmissions.filter(s => s.requires_manual_grading && !s.graded_at).length;
-    const averageScore = totalSubmissions > 0 
-      ? enrichedSubmissions.reduce((sum, s) => sum + (s.score || 0), 0) / totalSubmissions 
+    const averageScore = totalSubmissions > 0
+      ? enrichedSubmissions.reduce((sum, s) => sum + (s.score || 0), 0) / totalSubmissions
       : 0;
     const averagePercentage = totalSubmissions > 0
       ? enrichedSubmissions.reduce((sum, s) => sum + (s.percentage || 0), 0) / totalSubmissions
@@ -133,7 +134,7 @@ export async function GET(
         pending_grading: pendingGrading,
         average_score: averageScore.toFixed(2),
         average_percentage: averagePercentage.toFixed(2),
-        submission_rate: assignment.batches?.total_students 
+        submission_rate: assignment.batches?.total_students
           ? ((totalSubmissions / assignment.batches.total_students) * 100).toFixed(2)
           : 'N/A'
       }

@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { serviceDb } from '@/shared/database';
-import { requireAuth } from '@/shared/middleware/auth';
+import { requireRoles } from '@/lib/auth';
 import { asyncHandler } from '@/shared/middleware/error-handler';
 import { withCacheAside } from '@/shared/cache/cache-helper';
 import { redisCache } from '@/shared/cache/redis-cache';
 
 export const GET = asyncHandler(async (request: NextRequest) => {
     try {
-        // Authenticate user
-        const authResult = await requireAuth(['admin', 'college_admin', 'super_admin'])(request);
+        // Authenticate user and check roles
+        const authResult = requireRoles(request, ['admin', 'college_admin', 'super_admin']);
         if (authResult instanceof NextResponse) {
             return authResult;
         }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/shared/database/client';
+import { requireAuth } from '@/lib/auth';
 
 /**
  * Make Bucket Live for Creators API
@@ -15,6 +16,10 @@ export async function POST(
     if (!authHeader) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
+    const { id } = await params;
 
     const body = await request.json();
     const { is_live, admin_id } = body;
@@ -23,6 +28,8 @@ export async function POST(
     if (!admin_id) {
       return NextResponse.json({ error: 'Admin ID is required' }, { status: 400 });
     }
+    // Use admin_id from body if provided, otherwise use authenticated user id
+    const adminId = admin_id || user.id;
 
     const updateData: any = {
       is_live_for_creators: is_live,

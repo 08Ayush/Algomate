@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { notificationService } from '@/services/notifications/notificationService';
 import { createClient } from '@supabase/supabase-js';
 
@@ -18,7 +19,7 @@ async function getAuthenticatedUser(request: NextRequest) {
   try {
     const userString = Buffer.from(token, 'base64').toString();
     const user = JSON.parse(userString);
-    
+
     // Verify user exists and is active
     const { data: dbUser, error } = await supabase
       .from('users')
@@ -39,8 +40,8 @@ async function getAuthenticatedUser(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getAuthenticatedUser(request);
-    
+    const user = requireAuth(request);
+
     if (!user || !['admin', 'publisher'].includes(user.role)) {
       return NextResponse.json(
         { error: 'Unauthorized. Only admin or publisher can send urgent updates' },

@@ -23,6 +23,12 @@ export interface IUserRepository {
     findByCollegeUid(collegeUid: string): Promise<User | null>;
 
     /**
+     * Find user by college UID - Direct (Skip Cache)
+     * Used for login to avoid cache overhead
+     */
+    findByCollegeUidDirect(collegeUid: string): Promise<User | null>;
+
+    /**
      * Find all users
      */
     findAll(): Promise<User[]>;

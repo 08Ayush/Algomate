@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from '@/lib/auth';
 
 /**
  * Scheduler Status API - Proxy to FastAPI Backend
@@ -25,6 +26,9 @@ export async function GET(
   { params }: { params: Promise<{ taskId: string }> }
 ): Promise<NextResponse> {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const { taskId } = await params;
 
     if (!taskId) {
@@ -104,6 +108,9 @@ export async function DELETE(
   { params }: { params: Promise<{ taskId: string }> }
 ): Promise<NextResponse> {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const { taskId } = await params;
 
     console.log(`🛑 Proxying cancel request to FastAPI: task=${taskId}`);

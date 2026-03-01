@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/shared/database/client';
+import { requireAuth } from '@/lib/auth';
 
 /**
  * NEP 2020 Scheduler API Endpoint
@@ -12,6 +13,9 @@ import { supabaseAdmin } from '@/shared/database/client';
 
 export async function POST(request: NextRequest) {
   try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
     const body = await request.json();
     const { batch_id, time_limit = 30, save_to_db = false } = body;
 
@@ -123,6 +127,12 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
+<<<<<<< HEAD
+=======
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
+>>>>>>> origin/response-time
     const searchParams = request.nextUrl.searchParams;
     const batch_id = searchParams.get('batch_id');
 

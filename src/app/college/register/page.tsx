@@ -1,16 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { 
-  Building2, 
-  Users, 
-  Mail, 
-  Phone, 
-  Globe, 
-  MapPin, 
-  CheckCircle2, 
+import {
+  Building2,
+  Users,
+  Mail,
+  Phone,
+  Globe,
+  MapPin,
+  CheckCircle2,
   ArrowRight,
   Shield,
   Lock,
@@ -35,12 +35,12 @@ interface CollegeFormData {
   establishedYear: string;
   affiliatedUniversity: string;
   accreditation: string;
-  
+
   // Principal/Head Details
   principalName: string;
   principalEmail: string;
   principalPhone: string;
-  
+
   // College Admin Details (who will manage the system)
   adminFirstName: string;
   adminLastName: string;
@@ -49,13 +49,13 @@ interface CollegeFormData {
   adminDesignation: string;
   adminPassword: string;
   confirmPassword: string;
-  
+
   // Academic Configuration
   academicYear: string;
   workingDays: string[];
   startTime: string;
   endTime: string;
-  
+
   // Agreement
   agreedToTerms: boolean;
 }
@@ -64,7 +64,7 @@ const workingDayOptions = [
   'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 ];
 
-export default function CollegeRegistrationPage() {
+function CollegeRegistrationPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const registrationToken = searchParams.get('token');
@@ -123,7 +123,7 @@ export default function CollegeRegistrationPage() {
         if (response.ok && data.valid) {
           setIsValidToken(true);
           setTokenData(data.tokenData);
-          
+
           // Pre-fill form with token data if available
           if (data.tokenData) {
             setFormData(prev => ({
@@ -151,14 +151,14 @@ export default function CollegeRegistrationPage() {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => {
     const { name, value, type } = e.target;
-    
+
     if (type === 'checkbox') {
       const checked = (e.target as HTMLInputElement).checked;
       setFormData(prev => ({ ...prev, [name]: checked }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
-    
+
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
@@ -293,8 +293,8 @@ export default function CollegeRegistrationPage() {
             Access Restricted
           </h1>
           <p className="text-gray-600 dark:text-gray-300 mb-6">
-            This registration page requires a valid invitation link. 
-            If your institution has requested a demo, you'll receive a unique registration link 
+            This registration page requires a valid invitation link.
+            If your institution has requested a demo, you'll receive a unique registration link
             after your account is approved.
           </p>
           <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 mb-6">
@@ -311,13 +311,13 @@ export default function CollegeRegistrationPage() {
             </div>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Link 
+            <Link
               href="/demo"
               className="inline-flex items-center justify-center px-6 py-3 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors"
             >
               Request a Demo
             </Link>
-            <Link 
+            <Link
               href="/"
               className="inline-flex items-center justify-center px-6 py-3 border border-gray-300 dark:border-gray-600 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
             >
@@ -356,7 +356,7 @@ export default function CollegeRegistrationPage() {
             adminName: `${formData.adminFirstName} ${formData.adminLastName}`
           })
         });
-        
+
         if (response.ok) {
           setEmailSent(true);
         }
@@ -377,7 +377,7 @@ export default function CollegeRegistrationPage() {
             Registration Complete!
           </h1>
           <p className="text-lg text-gray-600 dark:text-gray-300 mb-6">
-            Your institution <span className="font-semibold text-primary">{formData.collegeName}</span> has 
+            Your institution <span className="font-semibold text-primary">{formData.collegeName}</span> has
             been successfully registered on Academic Compass.
           </p>
 
@@ -457,7 +457,7 @@ export default function CollegeRegistrationPage() {
             </ul>
           </div>
 
-          <Link 
+          <Link
             href="/login"
             className="inline-flex items-center justify-center px-8 py-3 bg-gradient-to-r from-primary to-purple-600 text-white rounded-lg font-medium hover:from-primary/90 hover:to-purple-600/90 transition-all"
           >
@@ -503,8 +503,8 @@ export default function CollegeRegistrationPage() {
               ].map((item, index) => (
                 <div key={item.step} className="flex items-center">
                   <div className={`flex items-center justify-center w-10 h-10 rounded-full font-medium
-                    ${currentStep >= item.step 
-                      ? 'bg-primary text-white' 
+                    ${currentStep >= item.step
+                      ? 'bg-primary text-white'
                       : 'bg-gray-200 dark:bg-gray-700 text-gray-500'
                     }`}
                   >
@@ -515,8 +515,8 @@ export default function CollegeRegistrationPage() {
                     )}
                   </div>
                   <span className={`ml-2 text-sm font-medium hidden md:inline
-                    ${currentStep >= item.step 
-                      ? 'text-gray-900 dark:text-white' 
+                    ${currentStep >= item.step
+                      ? 'text-gray-900 dark:text-white'
                       : 'text-gray-500'
                     }`}
                   >
@@ -524,8 +524,8 @@ export default function CollegeRegistrationPage() {
                   </span>
                   {index < 3 && (
                     <div className={`w-8 md:w-16 h-0.5 mx-2 md:mx-4
-                      ${currentStep > item.step 
-                        ? 'bg-primary' 
+                      ${currentStep > item.step
+                        ? 'bg-primary'
                         : 'bg-gray-200 dark:bg-gray-700'
                       }`}
                     />
@@ -538,7 +538,7 @@ export default function CollegeRegistrationPage() {
           {/* Form Card */}
           <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-md rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
             <form onSubmit={handleSubmit} className="p-6 md:p-8 space-y-6">
-              
+
               {/* Step 1: College Information */}
               {currentStep === 1 && (
                 <div className="space-y-6">
@@ -558,9 +558,8 @@ export default function CollegeRegistrationPage() {
                         value={formData.collegeName}
                         onChange={handleInputChange}
                         placeholder="Full name of the institution"
-                        className={`w-full px-4 py-3 rounded-lg border ${
-                          errors.collegeName ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
-                        } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                        className={`w-full px-4 py-3 rounded-lg border ${errors.collegeName ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
+                          } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
                       />
                       {errors.collegeName && (
                         <p className="mt-1 text-sm text-red-600">{errors.collegeName}</p>
@@ -577,9 +576,8 @@ export default function CollegeRegistrationPage() {
                         value={formData.collegeCode}
                         onChange={handleInputChange}
                         placeholder="e.g., SVPCET, GCOEJ"
-                        className={`w-full px-4 py-3 rounded-lg border ${
-                          errors.collegeCode ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
-                        } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20 uppercase`}
+                        className={`w-full px-4 py-3 rounded-lg border ${errors.collegeCode ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
+                          } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20 uppercase`}
                       />
                       {errors.collegeCode && (
                         <p className="mt-1 text-sm text-red-600">{errors.collegeCode}</p>
@@ -611,9 +609,8 @@ export default function CollegeRegistrationPage() {
                       onChange={handleInputChange}
                       rows={2}
                       placeholder="Complete address including locality"
-                      className={`w-full px-4 py-3 rounded-lg border ${
-                        errors.address ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
-                      } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none`}
+                      className={`w-full px-4 py-3 rounded-lg border ${errors.address ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
+                        } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none`}
                     />
                     {errors.address && (
                       <p className="mt-1 text-sm text-red-600">{errors.address}</p>
@@ -631,9 +628,8 @@ export default function CollegeRegistrationPage() {
                         value={formData.city}
                         onChange={handleInputChange}
                         placeholder="City"
-                        className={`w-full px-4 py-3 rounded-lg border ${
-                          errors.city ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
-                        } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                        className={`w-full px-4 py-3 rounded-lg border ${errors.city ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
+                          } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
                       />
                       {errors.city && <p className="mt-1 text-sm text-red-600">{errors.city}</p>}
                     </div>
@@ -648,9 +644,8 @@ export default function CollegeRegistrationPage() {
                         value={formData.state}
                         onChange={handleInputChange}
                         placeholder="State"
-                        className={`w-full px-4 py-3 rounded-lg border ${
-                          errors.state ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
-                        } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                        className={`w-full px-4 py-3 rounded-lg border ${errors.state ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
+                          } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
                       />
                       {errors.state && <p className="mt-1 text-sm text-red-600">{errors.state}</p>}
                     </div>
@@ -666,9 +661,8 @@ export default function CollegeRegistrationPage() {
                         onChange={handleInputChange}
                         placeholder="6-digit PIN"
                         maxLength={6}
-                        className={`w-full px-4 py-3 rounded-lg border ${
-                          errors.pincode ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
-                        } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                        className={`w-full px-4 py-3 rounded-lg border ${errors.pincode ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
+                          } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
                       />
                       {errors.pincode && <p className="mt-1 text-sm text-red-600">{errors.pincode}</p>}
                     </div>
@@ -731,9 +725,8 @@ export default function CollegeRegistrationPage() {
                         value={formData.principalName}
                         onChange={handleInputChange}
                         placeholder="Dr. Full Name"
-                        className={`w-full px-4 py-3 rounded-lg border ${
-                          errors.principalName ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
-                        } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                        className={`w-full px-4 py-3 rounded-lg border ${errors.principalName ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
+                          } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
                       />
                       {errors.principalName && (
                         <p className="mt-1 text-sm text-red-600">{errors.principalName}</p>
@@ -752,9 +745,8 @@ export default function CollegeRegistrationPage() {
                           value={formData.principalEmail}
                           onChange={handleInputChange}
                           placeholder="principal@college.edu"
-                          className={`w-full pl-10 pr-4 py-3 rounded-lg border ${
-                            errors.principalEmail ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
-                          } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                          className={`w-full pl-10 pr-4 py-3 rounded-lg border ${errors.principalEmail ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
+                            } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
                         />
                       </div>
                       {errors.principalEmail && (
@@ -818,9 +810,8 @@ export default function CollegeRegistrationPage() {
                         value={formData.adminFirstName}
                         onChange={handleInputChange}
                         placeholder="First name"
-                        className={`w-full px-4 py-3 rounded-lg border ${
-                          errors.adminFirstName ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
-                        } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                        className={`w-full px-4 py-3 rounded-lg border ${errors.adminFirstName ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
+                          } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
                       />
                       {errors.adminFirstName && (
                         <p className="mt-1 text-sm text-red-600">{errors.adminFirstName}</p>
@@ -837,9 +828,8 @@ export default function CollegeRegistrationPage() {
                         value={formData.adminLastName}
                         onChange={handleInputChange}
                         placeholder="Last name"
-                        className={`w-full px-4 py-3 rounded-lg border ${
-                          errors.adminLastName ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
-                        } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                        className={`w-full px-4 py-3 rounded-lg border ${errors.adminLastName ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
+                          } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
                       />
                       {errors.adminLastName && (
                         <p className="mt-1 text-sm text-red-600">{errors.adminLastName}</p>
@@ -858,9 +848,8 @@ export default function CollegeRegistrationPage() {
                           value={formData.adminEmail}
                           onChange={handleInputChange}
                           placeholder="admin@college.edu"
-                          className={`w-full pl-10 pr-4 py-3 rounded-lg border ${
-                            errors.adminEmail ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
-                          } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                          className={`w-full pl-10 pr-4 py-3 rounded-lg border ${errors.adminEmail ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
+                            } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
                         />
                       </div>
                       {errors.adminEmail && (
@@ -880,9 +869,8 @@ export default function CollegeRegistrationPage() {
                           value={formData.adminPhone}
                           onChange={handleInputChange}
                           placeholder="+91 9876543210"
-                          className={`w-full pl-10 pr-4 py-3 rounded-lg border ${
-                            errors.adminPhone ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
-                          } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                          className={`w-full pl-10 pr-4 py-3 rounded-lg border ${errors.adminPhone ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
+                            } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
                         />
                       </div>
                       {errors.adminPhone && (
@@ -916,9 +904,8 @@ export default function CollegeRegistrationPage() {
                           value={formData.adminPassword}
                           onChange={handleInputChange}
                           placeholder="Create a strong password"
-                          className={`w-full pl-10 pr-12 py-3 rounded-lg border ${
-                            errors.adminPassword ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
-                          } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                          className={`w-full pl-10 pr-12 py-3 rounded-lg border ${errors.adminPassword ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
+                            } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
                         />
                         <button
                           type="button"
@@ -948,9 +935,8 @@ export default function CollegeRegistrationPage() {
                           value={formData.confirmPassword}
                           onChange={handleInputChange}
                           placeholder="Confirm your password"
-                          className={`w-full pl-10 pr-4 py-3 rounded-lg border ${
-                            errors.confirmPassword ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
-                          } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                          className={`w-full pl-10 pr-4 py-3 rounded-lg border ${errors.confirmPassword ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
+                            } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
                         />
                       </div>
                       {errors.confirmPassword && (
@@ -996,9 +982,9 @@ export default function CollegeRegistrationPage() {
                             name="startTime"
                             value={formData.startTime}
                             onChange={handleInputChange}
-                            className={`w-full pl-10 pr-4 py-3 rounded-lg border ${
-                              errors.startTime ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
-                            } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                            title="College Start Time"
+                            className={`w-full pl-10 pr-4 py-3 rounded-lg border ${errors.startTime ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
+                              } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
                           />
                         </div>
                       </div>
@@ -1012,9 +998,9 @@ export default function CollegeRegistrationPage() {
                           name="endTime"
                           value={formData.endTime}
                           onChange={handleInputChange}
-                          className={`w-full px-4 py-3 rounded-lg border ${
-                            errors.endTime ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
-                          } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                          title="College End Time"
+                          className={`w-full px-4 py-3 rounded-lg border ${errors.endTime ? 'border-red-300' : 'border-gray-300 dark:border-gray-600'
+                            } bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20`}
                         />
                       </div>
                     </div>
@@ -1030,11 +1016,10 @@ export default function CollegeRegistrationPage() {
                           key={day}
                           type="button"
                           onClick={() => handleWorkingDayToggle(day)}
-                          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                            formData.workingDays.includes(day)
+                          className={`px-4 py-2 rounded-lg font-medium transition-colors ${formData.workingDays.includes(day)
                               ? 'bg-primary text-white'
                               : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                          }`}
+                            }`}
                         >
                           {day.slice(0, 3)}
                         </button>
@@ -1057,8 +1042,8 @@ export default function CollegeRegistrationPage() {
                       />
                       <span className="text-sm text-gray-700 dark:text-gray-300">
                         I agree to the <Link href="/terms" className="text-primary hover:underline">Terms of Service</Link> and{' '}
-                        <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>. 
-                        I understand that this platform will be used to manage academic data and I am 
+                        <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>.
+                        I understand that this platform will be used to manage academic data and I am
                         authorized to register on behalf of my institution.
                       </span>
                     </label>
@@ -1124,5 +1109,13 @@ export default function CollegeRegistrationPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CollegeRegistrationPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4D869C]"></div></div>}>
+      <CollegeRegistrationPageContent />
+    </Suspense>
   );
 }

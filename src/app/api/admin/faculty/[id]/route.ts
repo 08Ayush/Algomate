@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth';
 import { createClient } from '@supabase/supabase-js';
 
 // Create server-side supabase client with service role key
@@ -24,7 +25,7 @@ async function getAuthenticatedUser(request: NextRequest) {
   try {
     const userString = Buffer.from(token, 'base64').toString();
     const user = JSON.parse(userString);
-    
+
     const { data: dbUser, error } = await supabaseAdmin
       .from('users')
       .select('id, college_id, role, is_active')
@@ -50,30 +51,25 @@ export async function PUT(
 ) {
   try {
     // Get authenticated user
-    const user = await getAuthenticatedUser(request);
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized. Please log in as an admin.' },
-        { status: 401 }
-      );
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     const id = params.id;
-    const { 
-      first_name, 
-      last_name, 
-      email, 
-      phone, 
-      role, 
-      faculty_type, 
-      department_id, 
-      is_active 
+    const {
+      first_name,
+      last_name,
+      email,
+      phone,
+      role,
+      faculty_type,
+      department_id,
+      is_active
     } = await request.json();
 
     // Map creator/publisher role to faculty role with appropriate faculty_type
     let actualRole = role;
     let actualFacultyType = faculty_type || 'general';
-    
+
     if (role === 'creator' || role === 'publisher') {
       actualRole = 'faculty';
       actualFacultyType = role;
@@ -185,8 +181,8 @@ export async function PUT(
     // Map faculty_type back to role for display (reverse the mapping)
     const displayFaculty = {
       ...updatedFaculty,
-      role: (updatedFaculty.role === 'faculty' && 
-             (updatedFaculty.faculty_type === 'creator' || updatedFaculty.faculty_type === 'publisher'))
+      role: (updatedFaculty.role === 'faculty' &&
+        (updatedFaculty.faculty_type === 'creator' || updatedFaculty.faculty_type === 'publisher'))
         ? updatedFaculty.faculty_type
         : updatedFaculty.role
     };
@@ -212,13 +208,8 @@ export async function DELETE(
 ) {
   try {
     // Get authenticated user
-    const user = await getAuthenticatedUser(request);
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized. Please log in as an admin.' },
-        { status: 401 }
-      );
-    }
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
 
     const id = params.id;
 
@@ -313,8 +304,8 @@ export async function DELETE(
     // If there are any dependencies, return error with details
     if (dependencies.length > 0) {
       return NextResponse.json(
-        { 
-          error: `Cannot delete faculty. This faculty has active ${dependencies.join(', ')}. Please remove these assignments first.` 
+        {
+          error: `Cannot delete faculty. This faculty has active ${dependencies.join(', ')}. Please remove these assignments first.`
         },
         { status: 400 }
       );

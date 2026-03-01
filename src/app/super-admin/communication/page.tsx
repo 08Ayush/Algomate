@@ -146,6 +146,7 @@ const SuperAdminCommunicationPage: React.FC = () => {
                                         className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none transition-all font-medium"
                                         value={alertForm.targetCollegeId}
                                         onChange={e => setAlertForm({ ...alertForm, targetCollegeId: e.target.value })}
+                                        aria-label="Target audience"
                                     >
                                         <option value="">🌍 All Colleges (Global Broadcast)</option>
                                         {colleges.map(college => (
@@ -177,6 +178,7 @@ const SuperAdminCommunicationPage: React.FC = () => {
                                             className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none transition-all"
                                             value={alertForm.priority}
                                             onChange={e => setAlertForm({ ...alertForm, priority: e.target.value })}
+                                            aria-label="Priority"
                                         >
                                             <option value="normal">Normal</option>
                                             <option value="high">High</option>

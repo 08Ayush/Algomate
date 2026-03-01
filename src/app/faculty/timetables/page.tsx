@@ -83,7 +83,6 @@ const TimetablesPage: React.FC = () => {
 
     const submitForReview = (timetable: Timetable, e: React.MouseEvent) => {
         e.stopPropagation();
-
         showConfirm({
             title: 'Submit for Review',
             message: `Submit "${timetable.title}" for review by publisher? Once submitted, you cannot edit it until the publisher reviews it.`,
@@ -118,7 +117,6 @@ const TimetablesPage: React.FC = () => {
 
     const deleteTimetable = (timetable: Timetable, e: React.MouseEvent) => {
         e.stopPropagation();
-
         showConfirm({
             title: 'Delete Timetable',
             message: `Are you sure you want to delete "${timetable.title}"? This action cannot be undone.`,
@@ -153,7 +151,6 @@ const TimetablesPage: React.FC = () => {
 
     const unpublishTimetable = (timetable: Timetable, e: React.MouseEvent) => {
         e.stopPropagation();
-
         showConfirm({
             title: 'Unpublish Timetable',
             message: `Are you sure you want to unpublish "${timetable.title}"? It will be reverted to draft status and students will no longer be able to view it.`,

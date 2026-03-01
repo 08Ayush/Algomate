@@ -124,14 +124,6 @@ const BatchesPage: React.FC = () => {
               ))}
             </select>
           </div>
-          {semesterMode !== 'all' && (
-            <div className={`mt-3 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium ${semesterMode === 'odd' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-violet-50 text-violet-700 border border-violet-200'
-              }`}>
-              <span className="w-2 h-2 rounded-full animate-pulse inline-block bg-current"></span>
-              Active mode: <strong className="ml-1">{modeLabel}</strong>
-              <span className="ml-1 text-xs opacity-70">— Sem {activeSemesters.join(', ')} only.</span>
-            </div>
-          )}
         </div>
 
         {/* Stats */}
