@@ -1,18 +1,6 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { createClient } from '@supabase/supabase-js';
-
-// Create server-side supabase client with service role key
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-);
 
 // Helper function to get user from Authorization header
 async function getAuthenticatedUser(request: NextRequest) {
@@ -27,7 +15,7 @@ async function getAuthenticatedUser(request: NextRequest) {
     const user = JSON.parse(userString);
 
     // Verify user exists and is active admin
-    const { data: dbUser, error } = await supabaseAdmin
+    const { data: dbUser, error } = await supabase
       .from('users')
       .select('id, college_id, role, is_active')
       .eq('id', user.id)
@@ -65,7 +53,7 @@ export async function PUT(
     }
 
     // Verify the course belongs to the user's college
-    const { data: existingCourse } = await supabaseAdmin
+    const { data: existingCourse } = await supabase
       .from('courses')
       .select('id, college_id')
       .eq('id', id)
@@ -79,7 +67,7 @@ export async function PUT(
     }
 
     // Check if code is being changed to an existing one
-    const { data: duplicateCourse } = await supabaseAdmin
+    const { data: duplicateCourse } = await supabase
       .from('courses')
       .select('id')
       .eq('code', code)
@@ -95,7 +83,7 @@ export async function PUT(
     }
 
     // Update course
-    const { data: updatedCourse, error } = await supabaseAdmin
+    const { data: updatedCourse, error } = await supabase
       .from('courses')
       .update({
         title,
@@ -143,7 +131,7 @@ export async function DELETE(
     const { id } = await params;
 
     // Verify the course belongs to the user's college
-    const { data: existingCourse } = await supabaseAdmin
+    const { data: existingCourse } = await supabase
       .from('courses')
       .select('id, college_id, code')
       .eq('id', id)
@@ -157,7 +145,7 @@ export async function DELETE(
     }
 
     // Check if course is being used by subjects
-    const { data: relatedSubjects } = await supabaseAdmin
+    const { data: relatedSubjects } = await supabase
       .from('subjects')
       .select('id')
       .eq('course_id', id)
@@ -171,7 +159,7 @@ export async function DELETE(
     }
 
     // Delete the course
-    const { error } = await supabaseAdmin
+    const { error } = await supabase
       .from('courses')
       .delete()
       .eq('id', id);

@@ -1,13 +1,10 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { Database } from '@/shared/database';
 import { GetStudentTimetableUseCase } from '@/modules/timetable/application/use-cases/GetStudentTimetableUseCase';
 import { handleError } from '@/shared/utils/response';
 import { requireAuth } from '@/lib/auth';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 
 export async function GET(request: NextRequest) {
   try {

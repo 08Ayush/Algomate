@@ -1,5 +1,5 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import {
   PublishTimetableUseCase,
   ApproveTimetableUseCase,
@@ -15,10 +15,6 @@ import {
   notifyTimetablePublished
 } from '@/lib/notificationService';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 const timetableRepo = new SupabaseTimetableRepository(supabase);
 const publishUseCase = new PublishTimetableUseCase(timetableRepo);
 const approveUseCase = new ApproveTimetableUseCase(timetableRepo);

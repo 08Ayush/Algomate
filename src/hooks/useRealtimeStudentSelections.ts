@@ -1,3 +1,8 @@
+// Neon does not support Realtime -- type stub for compatibility
+type RealtimeChannel = { unsubscribe: () => void };
+
+// Neon does not support Realtime -- type stub for backward compatibility
+
 /**
  * useRealtimeStudentSelections Hook
  * 
@@ -7,8 +12,6 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { supabaseBrowser } from '@/lib/supabase/client';
-import type { RealtimeChannel } from '@supabase/supabase-js';
-
 export interface StudentSelection {
   id: string;
   student_id: string;
@@ -233,3 +236,4 @@ export function useRealtimeStudentSelections(options?: UseRealtimeStudentSelecti
     refetch: fetchSelections,
   };
 }
+

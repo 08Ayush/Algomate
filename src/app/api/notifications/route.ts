@@ -1,5 +1,5 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '@/lib/auth';
 import {
   BroadcastNotificationUseCase,
@@ -10,12 +10,9 @@ import {
   MarkAsReadDtoSchema
 } from '@/modules/notifications';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
-const notificationRepo = new SupabaseNotificationRepository(supabaseClient);
+const notificationRepo = new SupabaseNotificationRepository(supabase);
 
-const broadcastUseCase = new BroadcastNotificationUseCase(notificationRepo, supabaseClient);
+const broadcastUseCase = new BroadcastNotificationUseCase(notificationRepo, supabase);
 const getNotificationsUseCase = new GetNotificationsUseCase(notificationRepo);
 const markAsReadUseCase = new MarkAsReadUseCase(notificationRepo);
 

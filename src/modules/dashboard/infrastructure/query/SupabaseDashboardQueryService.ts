@@ -1,4 +1,4 @@
-import { SupabaseClient } from '@supabase/supabase-js';
+import type { NeonClient as SupabaseClient } from '@/lib/neon-supabase-compat';
 import { IDashboardQueryService } from '../../domain/ports/IDashboardQueryService';
 import { DashboardStats, RecentActivity, RecentTimetable } from '../../domain/entities/DashboardTypes';
 import { withCacheAside } from '@/shared/cache/cache-helper';

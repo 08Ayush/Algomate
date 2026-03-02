@@ -1,34 +1,11 @@
 /**
- * Supabase Browser Client
- * 
- * Client-side Supabase instance with Realtime support
- * Use this in React components and client-side code
+ * Neon Database Client (Browser/Client-side)
+ *
+ * Drop-in replacement for the old Supabase browser client.
+ * Uses the NeonClient compatibility shim -- same API, Neon backend.
  */
 
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from '@/shared/database';
+import { createNeonClient } from '@/lib/neon-supabase-compat';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    'Missing Supabase environment variables. Please check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY'
-  );
-}
-
-/**
- * Supabase client for browser/client-side use
- * Includes Realtime subscriptions and respects RLS policies
- */
-export const supabaseBrowser = createClient<Database>(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-  },
-  realtime: {
-    params: {
-      eventsPerSecond: 10,
-    },
-  },
-});
+export const supabaseBrowser = createNeonClient();
+export default supabaseBrowser;

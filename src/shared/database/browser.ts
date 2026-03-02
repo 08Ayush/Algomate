@@ -1,11 +1,11 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { DatabaseClient } from './client';
 
 /**
- * Create a Supabase client for client-side usage (legacy compatibility)
- * Returns the singleton browser database client
+ * Create a Neon client for client-side usage (legacy compatibility).
  */
 export function createClient() {
-    return DatabaseClient.getInstance();
+  return DatabaseClient.getInstance();
 }
 
 export type SupabaseClient = ReturnType<typeof createClient>;

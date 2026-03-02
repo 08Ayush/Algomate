@@ -1,23 +1,15 @@
+import { serviceDb as supabase } from '@/shared/database';
 /**
  * Enhanced Notification Service v2
  * Comprehensive notification system for all platform events
  * Supports: Timetables, Assignments, Announcements, Events, System Alerts
  */
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-// Singleton instance for server-side use
-let supabaseInstance: SupabaseClient | null = null;
-
-function getSupabase(): SupabaseClient {
-  if (!supabaseInstance) {
-    supabaseInstance = createClient(supabaseUrl, supabaseServiceKey);
-  }
-  return supabaseInstance;
+// Use serviceDb singleton directly
+function getSupabase() {
+  return supabase;
 }
 
 // ============================================================================

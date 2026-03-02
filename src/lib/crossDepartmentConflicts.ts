@@ -1,14 +1,11 @@
+import { serviceDb as supabase } from '@/shared/database';
 /**
  * Cross-Department Conflict Detection System
  * Prevents shared resource conflicts (faculty, classrooms) across departments
  */
 
-import { createClient } from '@supabase/supabase-js';
-
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
 export interface ResourceConflict {
   conflict_id?: string;
   resource_type: 'FACULTY' | 'CLASSROOM';

@@ -1,7 +1,6 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { createClient } from '@supabase/supabase-js';
-
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
@@ -31,8 +30,6 @@ export async function GET(
     if (user instanceof NextResponse) return user;
 
     const { id: assignmentId } = await params;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
     // Fetch assignment details and verify ownership
     const { data: assignment, error: assignmentError } = await supabase
       .from('assignments')

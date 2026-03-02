@@ -1,16 +1,14 @@
+import { serviceDb as supabase } from '@/shared/database';
 /**
  * Master Timetable Registry System
  * Manages the college-wide published timetable registry
  * Prevents cross-department conflicts by maintaining a global schedule
  */
 
-import { createClient } from '@supabase/supabase-js';
 import { calculateAllResourceUtilization } from './resourceUtilization';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
 export interface MasterTimetableEntry {
   id: string;
   source_timetable_id: string;

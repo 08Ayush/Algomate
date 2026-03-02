@@ -1,15 +1,12 @@
+import { serviceDb as supabase } from '@/shared/database';
+import type { NeonClient as SupabaseClient } from '@/lib/neon-supabase-compat';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-
 // Lazy initialization of Supabase client
 let _supabase: SupabaseClient | null = null;
 function getSupabase(): SupabaseClient {
     if (!_supabase) {
-        _supabase = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!
-        );
+        _supabase = supabase;
     }
     return _supabase;
 }

@@ -1,3 +1,4 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/shared/database/server';
 import { requireAuth } from '@/lib/auth';

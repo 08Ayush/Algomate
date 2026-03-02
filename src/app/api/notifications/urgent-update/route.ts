@@ -1,13 +1,7 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { notificationService } from '@/services/notifications/notificationService';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 // Helper function to get authenticated user
 async function getAuthenticatedUser(request: NextRequest) {
   const authHeader = request.headers.get('Authorization');

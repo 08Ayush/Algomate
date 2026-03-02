@@ -1,12 +1,8 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { SupabaseElectiveBucketRepository } from '@/modules/elective';
 import { requireAuth } from '@/lib/auth';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 const bucketRepo = new SupabaseElectiveBucketRepository(supabase);
 
 // POST - Add subjects to bucket

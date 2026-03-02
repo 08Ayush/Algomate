@@ -1,18 +1,6 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { createClient } from '@supabase/supabase-js';
-
-// Create server-side supabase client with service role key
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-);
 
 // Helper function to get user from Authorization header
 async function getAuthenticatedUser(request: NextRequest) {
@@ -26,7 +14,7 @@ async function getAuthenticatedUser(request: NextRequest) {
     const userString = Buffer.from(token, 'base64').toString();
     const user = JSON.parse(userString);
 
-    const { data: dbUser, error } = await supabaseAdmin
+    const { data: dbUser, error } = await supabase
       .from('users')
       .select('id, college_id, role, is_active')
       .eq('id', user.id)
@@ -56,7 +44,7 @@ export async function GET(
     const { id } = await params;
 
     // Fetch department by ID
-    const { data: department, error } = await supabaseAdmin
+    const { data: department, error } = await supabase
       .from('departments')
       .select('id, name, code, description, college_id')
       .eq('id', id)
@@ -105,7 +93,7 @@ export async function PUT(
     }
 
     // Check if department exists and belongs to user's college
-    const { data: existingDept } = await supabaseAdmin
+    const { data: existingDept } = await supabase
       .from('departments')
       .select('id, college_id')
       .eq('id', id)
@@ -120,7 +108,7 @@ export async function PUT(
     }
 
     // Check if code is taken by another department in the same college
-    const { data: conflictDept } = await supabaseAdmin
+    const { data: conflictDept } = await supabase
       .from('departments')
       .select('id')
       .eq('code', code)
@@ -136,7 +124,7 @@ export async function PUT(
     }
 
     // Update department
-    const { data: updatedDept, error } = await supabaseAdmin
+    const { data: updatedDept, error } = await supabase
       .from('departments')
       .update({
         name,
@@ -183,7 +171,7 @@ export async function DELETE(
     const { id } = await params;
 
     // Check if department exists and belongs to user's college
-    const { data: existingDept } = await supabaseAdmin
+    const { data: existingDept } = await supabase
       .from('departments')
       .select('id, name, college_id')
       .eq('id', id)
@@ -198,7 +186,7 @@ export async function DELETE(
     }
 
     // Check if department has users
-    const { data: users, error: usersError } = await supabaseAdmin
+    const { data: users, error: usersError } = await supabase
       .from('users')
       .select('id')
       .eq('department_id', id)
@@ -221,7 +209,7 @@ export async function DELETE(
     }
 
     // Delete department
-    const { error } = await supabaseAdmin
+    const { error } = await supabase
       .from('departments')
       .delete()
       .eq('id', id)

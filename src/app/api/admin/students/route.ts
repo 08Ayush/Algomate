@@ -1,3 +1,4 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { asyncHandler } from '@/shared/middleware/error-handler';
 import { createClient } from '@/shared/database/server';
@@ -19,8 +20,7 @@ export const GET = asyncHandler(
       targetCollegeId = queryCollegeId;
     }
 
-    const supabase = createClient();
-    const cacheKey = redisCache.buildKey(targetCollegeId ?? '', 'students', 'list');
+        const cacheKey = redisCache.buildKey(targetCollegeId ?? '', 'students', 'list');
     const forceRefresh = searchParams.get('refresh') === '1';
     if (forceRefresh) {
       await invalidateCache(cacheKey);
@@ -103,8 +103,7 @@ export const POST = asyncHandler(
       return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
     }
 
-    const supabase = createClient();
-    const { data: existingStudents } = await supabase
+        const { data: existingStudents } = await supabase
       .from('users')
       .select('college_uid')
       .eq('college_id', user.college_id)

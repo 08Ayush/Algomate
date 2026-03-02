@@ -1,18 +1,6 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { createClient } from '@supabase/supabase-js';
-
-// Create server-side supabase client with service role key
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-);
 
 // Helper function to get user from Authorization header
 async function getAuthenticatedUser(request: NextRequest) {
@@ -26,7 +14,7 @@ async function getAuthenticatedUser(request: NextRequest) {
     const userString = Buffer.from(token, 'base64').toString();
     const user = JSON.parse(userString);
 
-    const { data: dbUser, error } = await supabaseAdmin
+    const { data: dbUser, error } = await supabase
       .from('users')
       .select('id, college_id, role, is_active')
       .eq('id', user.id)
@@ -93,7 +81,7 @@ export async function PUT(
     }
 
     // Check if faculty exists and belongs to user's college
-    const { data: existingFaculty } = await supabaseAdmin
+    const { data: existingFaculty } = await supabase
       .from('users')
       .select('id, role, college_id')
       .eq('id', id)
@@ -109,7 +97,7 @@ export async function PUT(
     }
 
     // Check if email is taken by another user
-    const { data: conflictUser } = await supabaseAdmin
+    const { data: conflictUser } = await supabase
       .from('users')
       .select('id')
       .eq('email', email)
@@ -124,7 +112,7 @@ export async function PUT(
     }
 
     // Check if department exists and belongs to user's college
-    const { data: department } = await supabaseAdmin
+    const { data: department } = await supabase
       .from('departments')
       .select('id, college_id')
       .eq('id', department_id)
@@ -139,7 +127,7 @@ export async function PUT(
     }
 
     // Update faculty
-    const { data: updatedFaculty, error } = await supabaseAdmin
+    const { data: updatedFaculty, error } = await supabase
       .from('users')
       .update({
         first_name,
@@ -214,7 +202,7 @@ export async function DELETE(
     const { id } = await params;
 
     // Check if faculty exists and belongs to user's college
-    const { data: existingFaculty } = await supabaseAdmin
+    const { data: existingFaculty } = await supabase
       .from('users')
       .select('id, first_name, last_name, role, college_id')
       .eq('id', id)
@@ -231,7 +219,7 @@ export async function DELETE(
 
     // Check if this is the last admin
     if (existingFaculty.role === 'admin') {
-      const { data: adminCount, error: countError } = await supabaseAdmin
+      const { data: adminCount, error: countError } = await supabase
         .from('users')
         .select('id')
         .eq('role', 'admin')
@@ -258,7 +246,7 @@ export async function DELETE(
     const dependencies: string[] = [];
 
     // Check scheduled_classes (has ON DELETE RESTRICT)
-    const { data: scheduledClasses, error: scheduledError } = await supabaseAdmin
+    const { data: scheduledClasses, error: scheduledError } = await supabase
       .from('scheduled_classes')
       .select('id')
       .eq('faculty_id', id)
@@ -269,7 +257,7 @@ export async function DELETE(
     }
 
     // Check batch_subjects (assigned_faculty_id)
-    const { data: batchSubjects, error: batchSubjectsError } = await supabaseAdmin
+    const { data: batchSubjects, error: batchSubjectsError } = await supabase
       .from('batch_subjects')
       .select('id')
       .eq('assigned_faculty_id', id)
@@ -280,7 +268,7 @@ export async function DELETE(
     }
 
     // Check if faculty is HOD of any department
-    const { data: departments, error: deptError } = await supabaseAdmin
+    const { data: departments, error: deptError } = await supabase
       .from('departments')
       .select('id')
       .eq('head_of_department', id)
@@ -291,7 +279,7 @@ export async function DELETE(
     }
 
     // Check if faculty is class coordinator
-    const { data: batches, error: batchError } = await supabaseAdmin
+    const { data: batches, error: batchError } = await supabase
       .from('batches')
       .select('id')
       .eq('class_coordinator', id)
@@ -316,7 +304,7 @@ export async function DELETE(
     // - faculty_availability
     // - notifications (sender_id will be SET NULL)
     // - student_enrollments (if any)
-    const { error } = await supabaseAdmin
+    const { error } = await supabase
       .from('users')
       .delete()
       .eq('id', id)

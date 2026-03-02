@@ -1,11 +1,10 @@
-import { createClient } from '@supabase/supabase-js';
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { requireRoles } from '@/lib/auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 export async function PATCH(
   request: NextRequest,
@@ -46,7 +45,7 @@ export async function PATCH(
       updates.password_hash = await bcrypt.hash(password, salt);
     }
 
-    const { data: updatedAdmin, error } = await supabaseAdmin
+    const { data: updatedAdmin, error } = await supabase
       .from('users')
       .update(updates)
       .eq('id', id)
@@ -75,7 +74,7 @@ export async function DELETE(
 
     const { id } = await params;
 
-    const { error } = await supabaseAdmin
+    const { error } = await supabase
       .from('users')
       .delete()
       .eq('id', id);

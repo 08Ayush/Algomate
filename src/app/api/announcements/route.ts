@@ -1,6 +1,6 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { createClient } from '@supabase/supabase-js';
 import { notifyAnnouncement } from '@/lib/notificationService';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -24,8 +24,6 @@ export async function POST(request: NextRequest) {
                 { status: 403 }
             );
         }
-
-        const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
         const body = await request.json();
         const {
@@ -137,7 +135,6 @@ export async function GET(request: NextRequest) {
         const user = requireAuth(request);
         if (user instanceof NextResponse) return user;
 
-        const supabase = createClient(supabaseUrl, supabaseServiceKey);
         const { searchParams } = new URL(request.url);
 
         const limit = parseInt(searchParams.get('limit') || '20');

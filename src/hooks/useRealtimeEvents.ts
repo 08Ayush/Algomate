@@ -1,3 +1,8 @@
+// Neon does not support Realtime -- type stub for compatibility
+type RealtimeChannel = { unsubscribe: () => void };
+
+// Neon does not support Realtime -- type stub for backward compatibility
+
 /**
  * useRealtimeEvents Hook
  * 
@@ -7,8 +12,6 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { supabaseBrowser } from '@/lib/supabase/client';
-import type { RealtimeChannel } from '@supabase/supabase-js';
-
 export interface CalendarEvent {
   id: string;
   title: string;
@@ -239,3 +242,4 @@ export function useRealtimeEvents(options: UseRealtimeEventsOptions) {
     refetch: fetchEvents,
   };
 }
+

@@ -1,15 +1,13 @@
+import { serviceDb as supabase } from '@/shared/database';
 /**
  * Constraint Rules Engine
  * Fetches and applies constraint rules from database for timetable generation
  */
 
-import { createClient } from '@supabase/supabase-js';
 import { getFacultyUnavailableSlots, getFacultyPreferences } from './facultyAvailability';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
 export interface ConstraintRule {
   id: string;
   rule_name: string;

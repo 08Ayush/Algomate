@@ -1,15 +1,11 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { SupabaseElectiveBucketRepository } from '../../../../modules/elective/infrastructure/persistence/SupabaseElectiveBucketRepository';
 import { GetBucketsForBatchUseCase } from '../../../../modules/elective/application/use-cases/GetBucketsForBatchUseCase';
 import { CreateElectiveBucketUseCase } from '../../../../modules/elective/application/use-cases/CreateElectiveBucketUseCase';
 import { CreateElectiveBucketDtoSchema } from '../../../../modules/elective/application/dto/ElectiveBucketDto';
 import { requireAuth } from '@/lib/auth';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 const bucketRepo = new SupabaseElectiveBucketRepository(supabase);
 const getBucketsUseCase = new GetBucketsForBatchUseCase(bucketRepo);
 const createBucketUseCase = new CreateElectiveBucketUseCase(bucketRepo);

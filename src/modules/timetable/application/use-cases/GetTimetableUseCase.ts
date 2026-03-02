@@ -1,12 +1,6 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { ITimetableRepository } from '../../domain/repositories/ITimetableRepository';
 import { IScheduledClassRepository } from '../../domain/repositories/ITimetableRepository';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 export class GetTimetableUseCase {
     constructor(
         private readonly timetableRepository: ITimetableRepository,

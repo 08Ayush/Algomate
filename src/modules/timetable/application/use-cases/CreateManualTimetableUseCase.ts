@@ -1,7 +1,7 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { ITimetableRepository, IScheduledClassRepository } from '../../domain/repositories/ITimetableRepository';
 import { Timetable, ScheduledClass } from '../../domain/entities/Timetable';
 import { IUserRepository } from '../../../auth/domain/repositories/IUserRepository';
-import { createClient } from '@supabase/supabase-js';
 import { Database } from '@/shared/database';
 
 // Import shared libs - assuming these are available as per existing route
@@ -31,7 +31,8 @@ export class CreateManualTimetableUseCase {
         private readonly userRepository: IUserRepository,
         // We'll use a direct supabase client for lookups that don't have repositories yet
         // In a strictly clean arch, these should be injected repositories
-        private readonly supabase: ReturnType<typeof createClient<Database>>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        private readonly supabase: any
     ) { }
 
     async execute(request: CreateManualTimetableRequest): Promise<any> {

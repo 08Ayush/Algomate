@@ -1,12 +1,7 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '@/lib/auth';
 import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 
 export async function GET(request: NextRequest) {
   try {

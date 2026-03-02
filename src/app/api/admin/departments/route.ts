@@ -1,3 +1,4 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { createClient } from '@/shared/database/server';
@@ -24,8 +25,7 @@ export const GET = asyncHandler(
     const departments = await withCacheAside(
       { key: cacheKey, ttl: 3600 },
       async () => {
-        const supabase = createClient();
-        const { data, error } = await supabase
+                const { data, error } = await supabase
           .from('departments')
           .select('*')
           .eq('college_id', targetCollegeId)
@@ -60,8 +60,7 @@ export const POST = asyncHandler(
       return NextResponse.json({ success: false, error: 'Name and code required' }, { status: 400 });
     }
 
-    const supabase = createClient();
-    const { data: newDept, error } = await supabase
+        const { data: newDept, error } = await supabase
       .from('departments')
       .insert({
         name,

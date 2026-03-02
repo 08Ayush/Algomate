@@ -1,6 +1,6 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { createClient } from '@supabase/supabase-js';
 import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
 import { notifyAssignmentCreated } from '@/lib/notificationService';
 
@@ -14,8 +14,6 @@ export async function POST(request: NextRequest) {
     // Verify authentication
     const user = requireAuth(request);
     if (user instanceof NextResponse) return user;
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Parse request body
     const body = await request.json();
@@ -190,8 +188,6 @@ export async function GET(request: NextRequest) {
     if (user instanceof NextResponse) return user;
 
     const { page, limit, isPaginated } = getPaginationParams(request);
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
     // Build query with joins
     let query = supabase
       .from('assignments')

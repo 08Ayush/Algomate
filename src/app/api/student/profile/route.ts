@@ -1,3 +1,4 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/shared/database/server';
 import { asyncHandler } from '@/shared/middleware/error-handler';
@@ -22,8 +23,7 @@ export const GET = asyncHandler(async (request: NextRequest) => {
   const result = await withCacheAside(
     { key: cacheKey, ttl: 3600 },
     async () => {
-      const supabase = createClient();
-      // Get user profile data from users table
+            // Get user profile data from users table
       const { data: profile, error: profileError } = await supabase
         .from('users')
         .select(`
@@ -159,8 +159,7 @@ export const PATCH = asyncHandler(async (request: NextRequest) => {
     return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 });
   }
 
-  const supabase = createClient();
-  const updateData: any = {
+    const updateData: any = {
     updated_at: new Date().toISOString()
   };
 

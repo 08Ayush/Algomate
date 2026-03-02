@@ -1,4 +1,4 @@
-import { SupabaseClient } from '@supabase/supabase-js';
+import type { NeonClient as SupabaseClient } from '@/lib/neon-supabase-compat';
 import { ITimetableRepository, IScheduledClassRepository } from '../../domain/repositories/ITimetableRepository';
 import { Timetable, ScheduledClass } from '../../domain/entities/Timetable';
 import { Database } from '@/shared/database';

@@ -1,3 +1,4 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/shared/database/server';
 import bcrypt from 'bcryptjs';
@@ -13,8 +14,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = createClient();
-
+    
     // Check if user exists in admin_users table
     const { data: user, error } = await supabase
       .from('admin_users')

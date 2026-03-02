@@ -1,6 +1,6 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { createClient } from '@supabase/supabase-js';
 import { notifyAssignmentSubmitted, notifyProctoringViolation } from '@/lib/notificationService';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -36,8 +36,6 @@ export async function POST(
 
     const body = await request.json();
     const { answers, time_taken, violations } = body;
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Fetch assignment to get questions and calculate score
     const { data: assignment, error: assignmentError } = await supabase

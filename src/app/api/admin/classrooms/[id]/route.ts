@@ -1,18 +1,6 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { createClient } from '@supabase/supabase-js';
-
-// Create admin Supabase client
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  }
-);
 
 // Helper function to get user from Authorization header
 async function getAuthenticatedUser(request: NextRequest) {
@@ -26,7 +14,7 @@ async function getAuthenticatedUser(request: NextRequest) {
     const userString = Buffer.from(token, 'base64').toString();
     const user = JSON.parse(userString);
 
-    const { data: dbUser, error } = await supabaseAdmin
+    const { data: dbUser, error } = await supabase
       .from('users')
       .select('id, college_id, role, is_active')
       .eq('id', user.id)
@@ -99,7 +87,7 @@ export async function PUT(
     }
 
     // Check if classroom exists and belongs to user's college
-    const { data: existingClassroom } = await supabaseAdmin
+    const { data: existingClassroom } = await supabase
       .from('classrooms')
       .select('id, name, college_id')
       .eq('id', id)
@@ -111,7 +99,7 @@ export async function PUT(
     }
 
     // Check if another classroom has the same name in the same college (excluding current one)
-    const { data: duplicateClassroom } = await supabaseAdmin
+    const { data: duplicateClassroom } = await supabase
       .from('classrooms')
       .select('id')
       .eq('name', name)
@@ -146,7 +134,7 @@ export async function PUT(
       updated_at: new Date().toISOString(),
     };
 
-    const { data: classroom, error } = await supabaseAdmin
+    const { data: classroom, error } = await supabase
       .from('classrooms')
       .update(classroomData)
       .eq('id', id)
@@ -181,7 +169,7 @@ export async function DELETE(
     const { id } = await params;
 
     // Check if classroom exists and belongs to user's college
-    const { data: existingClassroom } = await supabaseAdmin
+    const { data: existingClassroom } = await supabase
       .from('classrooms')
       .select('id, name, college_id')
       .eq('id', id)
@@ -195,7 +183,7 @@ export async function DELETE(
     // Check if classroom is being used in schedules or bookings
     // You might want to add this check based on your schema
     /*
-    const { data: schedules } = await supabaseAdmin
+    const { data: schedules } = await supabase
       .from('schedules')
       .select('id')
       .eq('classroom_id', id)
@@ -209,7 +197,7 @@ export async function DELETE(
     }
     */
 
-    const { error } = await supabaseAdmin
+    const { error } = await supabase
       .from('classrooms')
       .delete()
       .eq('id', id)

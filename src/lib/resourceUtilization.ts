@@ -1,14 +1,11 @@
+import { serviceDb as supabase } from '@/shared/database';
 /**
  * Resource Utilization Service
  * Calculate and track usage statistics for faculty, classrooms, and time slots
  */
 
-import { createClient } from '@supabase/supabase-js';
-
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
 export interface ResourceUtilization {
   id: string;
   resource_type: 'faculty' | 'classroom' | 'time_slot';

@@ -1,18 +1,6 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { createClient } from '@supabase/supabase-js';
-
-// Create server-side supabase client with service role key
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-);
 
 // Helper function to get user from Authorization header
 async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) {
@@ -28,7 +16,7 @@ async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) 
     const user = JSON.parse(userString);
 
     // Verify user exists and is active - include department_id
-    const { data: dbUser, error } = await supabaseAdmin
+    const { data: dbUser, error } = await supabase
       .from('users')
       .select('id, college_id, department_id, role, faculty_type, is_active')
       .eq('id', user.id)
@@ -79,7 +67,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Use !inner joins to filter at DB level by college_id (avoids full table scan)
-    let query = supabaseAdmin
+    let query = supabase
       .from('faculty_qualified_subjects')
       .select(`
         id,
@@ -201,19 +189,19 @@ export async function POST(request: NextRequest) {
 
     // Parallelize all 3 validation queries
     const [{ data: facultyCheck, error: facultyError }, { data: subjectCheck, error: subjectError }, { data: existing }] = await Promise.all([
-      supabaseAdmin
+      supabase
         .from('users')
         .select('id, first_name, last_name, role, college_id')
         .eq('id', faculty_id)
         .eq('college_id', user.college_id)
         .maybeSingle(),
-      supabaseAdmin
+      supabase
         .from('subjects')
         .select('id, name, code, college_id')
         .eq('id', subject_id)
         .eq('college_id', user.college_id)
         .maybeSingle(),
-      supabaseAdmin
+      supabase
         .from('faculty_qualified_subjects')
         .select('id')
         .eq('faculty_id', faculty_id)
@@ -249,7 +237,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Insert new qualification
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await supabase
       .from('faculty_qualified_subjects')
       .insert({
         faculty_id,
@@ -277,7 +265,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch the complete record with relations
-    const { data: completeData } = await supabaseAdmin
+    const { data: completeData } = await supabase
       .from('faculty_qualified_subjects')
       .select(`
         *,
@@ -339,7 +327,7 @@ export async function DELETE(request: NextRequest) {
 
     console.log('📥 Deleting qualification:', id);
 
-    const { error } = await supabaseAdmin
+    const { error } = await supabase
       .from('faculty_qualified_subjects')
       .delete()
       .eq('id', id);

@@ -1,5 +1,5 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/shared/database/server';
 import {
   GetClassroomsUseCase,
   CreateClassroomUseCase,
@@ -10,8 +10,8 @@ import { requireAuth } from '@/lib/auth';
 import { asyncHandler } from '@/shared/middleware/error-handler';
 import { getPaginationParams, createPaginatedResponse } from '@/shared/utils/pagination';
 
-const supabaseClient = createClient();
-const classroomRepo = new SupabaseClassroomRepository(supabaseClient);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const classroomRepo = new SupabaseClassroomRepository(supabase as any);
 const getClassroomsUseCase = new GetClassroomsUseCase(classroomRepo);
 const createClassroomUseCase = new CreateClassroomUseCase(classroomRepo);
 

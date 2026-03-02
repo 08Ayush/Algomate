@@ -1,3 +1,4 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { createClient } from '@/shared/database/browser';
 
 interface GenerateStudentsParams {
@@ -24,8 +25,7 @@ export async function generateMockStudents({
   count,
   bucketIds,
 }: GenerateStudentsParams): Promise<{ success: boolean; message: string; students?: MockStudent[] }> {
-  const supabase = createClient();
-
+  
   try {
     // 1. Fetch batch details
     const { data: batch, error: batchError } = await supabase
@@ -162,8 +162,7 @@ export async function generateMockStudents({
  * Delete all mock students (for cleanup)
  */
 export async function deleteMockStudents(batchId: string): Promise<{ success: boolean; message: string }> {
-  const supabase = createClient();
-
+  
   try {
     // 1. Find all students in batch with test email pattern
     const { data: batchStudents, error: fetchError } = await supabase
@@ -216,8 +215,7 @@ export async function deleteMockStudents(batchId: string): Promise<{ success: bo
  * Get statistics about student selections
  */
 export async function getStudentSelectionStats(batchId: string) {
-  const supabase = createClient();
-
+  
   try {
     // Get all students in batch
     const { data: batchStudents } = await supabase

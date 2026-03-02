@@ -1,3 +1,4 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/shared/database/server';
 import { asyncHandler } from '@/shared/middleware/error-handler';
@@ -22,8 +23,7 @@ export const GET = asyncHandler(async (request: NextRequest) => {
   const result = await withCacheAside(
     { key: cacheKey, ttl: 3600 },
     async () => {
-      const supabase = createClient();
-      const { data: user, error: userError } = await supabase
+            const { data: user, error: userError } = await supabase
         .from('users')
         .select(`
           id,

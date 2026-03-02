@@ -1,16 +1,11 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { createClient } from '@supabase/supabase-js';
-import { Database } from '@/shared/database';
 import { SupabaseSubjectRepository } from '@/modules/nep-curriculum/infrastructure/persistence/SupabaseSubjectRepository';
 import { SupabaseBatchRepository } from '@/modules/college/infrastructure/persistence/SupabaseBatchRepository';
 import { GetQualifiedSubjectsUseCase } from '@/modules/nep-curriculum/application/use-cases/GetQualifiedSubjectsUseCase';
 import { GetBatchesUseCase } from '@/modules/college/application/use-cases/GetBatchesUseCase';
 import { handleError } from '@/shared/utils/response';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 
 // Helper function to get authenticated user
 async function getAuthenticatedUser(request: NextRequest) {

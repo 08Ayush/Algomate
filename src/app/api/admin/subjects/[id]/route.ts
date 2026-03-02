@@ -1,18 +1,6 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { createClient } from '@supabase/supabase-js';
-
-// Create server-side supabase client with service role key
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  }
-);
 
 
 // PUT - Update subject
@@ -46,7 +34,7 @@ export async function PUT(
     } = body;
 
     // Verify subject belongs to user's college
-    const { data: existingSubject, error: fetchError } = await supabaseAdmin
+    const { data: existingSubject, error: fetchError } = await supabase
       .from('subjects')
       .select('id, college_id, department_id, semester, course_id, credits_per_week')
       .eq('id', subjectId)
@@ -62,7 +50,7 @@ export async function PUT(
 
     // If department is being changed, verify it belongs to user's college
     if (department_id && department_id !== existingSubject.department_id) {
-      const { data: department, error: deptError } = await supabaseAdmin
+      const { data: department, error: deptError } = await supabase
         .from('departments')
         .select('id')
         .eq('id', department_id)
@@ -79,7 +67,7 @@ export async function PUT(
 
     // Check for duplicate subject code (if code is being changed)
     if (code) {
-      const { data: duplicate } = await supabaseAdmin
+      const { data: duplicate } = await supabase
         .from('subjects')
         .select('id')
         .eq('code', code)
@@ -112,7 +100,7 @@ export async function PUT(
     }
     if (is_active !== undefined) updateData.is_active = is_active;
 
-    const { data: updatedSubject, error: updateError } = await supabaseAdmin
+    const { data: updatedSubject, error: updateError } = await supabase
       .from('subjects')
       .update(updateData)
       .eq('id', subjectId)
@@ -141,7 +129,7 @@ export async function PUT(
       const effectiveCredits = credits_per_week || existingSubject.credits_per_week || 3;
 
       // Find all active batches that should have this subject
-      let matchQuery = supabaseAdmin
+      let matchQuery = supabase
         .from('batches')
         .select('id')
         .eq('college_id', user.college_id)
@@ -160,7 +148,7 @@ export async function PUT(
           const matchingBatchIds = matchingBatches.map((b: { id: string }) => b.id);
 
           // Remove stale entries (subject moved to different dept/semester)
-          await supabaseAdmin
+          await supabase
             .from('batch_subjects')
             .delete()
             .eq('subject_id', subjectId)
@@ -168,7 +156,7 @@ export async function PUT(
 
           // Sync batch_subjects without overwriting existing PKs:
           // 1. Fetch which batches already have a row for this subject.
-          const { data: existingRows } = await supabaseAdmin
+          const { data: existingRows } = await supabase
             .from('batch_subjects')
             .select('id, batch_id')
             .eq('subject_id', subjectId)
@@ -180,7 +168,7 @@ export async function PUT(
 
           // 2. Update required_hours_per_week for already-existing rows.
           for (const [, rowId] of existingByBatchId) {
-            await supabaseAdmin
+            await supabase
               .from('batch_subjects')
               .update({ required_hours_per_week: effectiveCredits })
               .eq('id', rowId);
@@ -198,7 +186,7 @@ export async function PUT(
               required_hours_per_week: effectiveCredits,
               is_mandatory: true,
             }));
-            const { error: insertErr } = await supabaseAdmin
+            const { error: insertErr } = await supabase
               .from('batch_subjects')
               .insert(insertRows);
             if (insertErr) {
@@ -208,7 +196,7 @@ export async function PUT(
         } else {
           // No batches match anymore (e.g. no active batch for this dept/semester)
           // Remove all existing batch_subjects for this subject
-          await supabaseAdmin
+          await supabase
             .from('batch_subjects')
             .delete()
             .eq('subject_id', subjectId);
@@ -256,7 +244,7 @@ export async function DELETE(
     const force = searchParams.get('force') === 'true';
 
     // Verify subject belongs to user's college
-    const { data: existingSubject, error: fetchError } = await supabaseAdmin
+    const { data: existingSubject, error: fetchError } = await supabase
       .from('subjects')
       .select('id, college_id')
       .eq('id', subjectId)
@@ -271,7 +259,7 @@ export async function DELETE(
     }
 
     // Check for locked MAJOR course selections
-    const { data: lockedSelections } = await supabaseAdmin
+    const { data: lockedSelections } = await supabase
       .from('student_course_selections')
       .select('id')
       .eq('subject_id', subjectId)
@@ -282,17 +270,17 @@ export async function DELETE(
 
     // Check for dependent records
     const [{ data: timetableEntries }, { data: scheduledClasses }, { data: batchSubjects }] = await Promise.all([
-      supabaseAdmin
+      supabase
         .from('timetable_entries')
         .select('id')
         .eq('subject_id', subjectId)
         .limit(1),
-      supabaseAdmin
+      supabase
         .from('scheduled_classes')
         .select('id')
         .eq('subject_id', subjectId)
         .limit(1),
-      supabaseAdmin
+      supabase
         .from('batch_subjects')
         .select('id')
         .eq('subject_id', subjectId)
@@ -340,7 +328,7 @@ export async function DELETE(
       // ---------------------------------------------------------------
       if (hasLockedMajorRefs) {
         // Step 1a: Change selection_type away from 'MAJOR' — bypasses the UPDATE trigger
-        const { error: reclassifyError } = await supabaseAdmin
+        const { error: reclassifyError } = await supabase
           .from('student_course_selections')
           .update({ selection_type: 'ELECTIVE' })
           .eq('subject_id', subjectId)
@@ -357,7 +345,7 @@ export async function DELETE(
 
       // Step 1b: Now delete all student_course_selections for this subject
       // DELETE trigger checks OLD.selection_type = 'MAJOR' — now 'ELECTIVE' — so it passes
-      const { error: selectionsError } = await supabaseAdmin
+      const { error: selectionsError } = await supabase
         .from('student_course_selections')
         .delete()
         .eq('subject_id', subjectId);
@@ -368,7 +356,7 @@ export async function DELETE(
 
       // Step 3: Delete batch_subjects references
       if (hasBatchSubjectRefs) {
-        const { error: batchError } = await supabaseAdmin
+        const { error: batchError } = await supabase
           .from('batch_subjects')
           .delete()
           .eq('subject_id', subjectId);
@@ -380,7 +368,7 @@ export async function DELETE(
 
       // Step 4: Delete scheduled_classes
       if (hasScheduledRefs) {
-        const { error: scheduledError } = await supabaseAdmin
+        const { error: scheduledError } = await supabase
           .from('scheduled_classes')
           .delete()
           .eq('subject_id', subjectId);
@@ -392,7 +380,7 @@ export async function DELETE(
 
       // Step 5: Delete timetable_entries
       if (hasTimetableRefs) {
-        const { error: timetableError } = await supabaseAdmin
+        const { error: timetableError } = await supabase
           .from('timetable_entries')
           .delete()
           .eq('subject_id', subjectId);
@@ -404,7 +392,7 @@ export async function DELETE(
     }
 
     // Delete the subject
-    const { error: deleteError } = await supabaseAdmin
+    const { error: deleteError } = await supabase
       .from('subjects')
       .delete()
       .eq('id', subjectId);

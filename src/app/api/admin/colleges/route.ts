@@ -1,3 +1,4 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/shared/database/server';
 import { asyncHandler } from '@/shared/middleware/error-handler';
@@ -26,8 +27,7 @@ export const GET = asyncHandler(async (request: NextRequest) => {
     const college = await withCacheAside(
       { key: cacheKey, ttl: 3600 },
       async () => {
-        const supabase = createClient();
-        const { data, error } = await supabase
+                const { data, error } = await supabase
           .from('colleges')
           .select('*')
           .eq('id', user.college_id)
@@ -46,8 +46,7 @@ export const GET = asyncHandler(async (request: NextRequest) => {
   const result = await withCacheAside(
     { key: cacheKey, ttl: 3600 },
     async () => {
-      const supabase = createClient();
-      let query = supabase.from('colleges').select('*', { count: 'exact' });
+            let query = supabase.from('colleges').select('*', { count: 'exact' });
 
       if (isPaginated && page && limit) {
         const { from, to } = getPaginationRange(page, limit);
@@ -83,8 +82,7 @@ export const POST = asyncHandler(async (request: NextRequest) => {
   const body = await request.json();
   const { name, code, address, email, phone } = body;
 
-  const supabase = createClient();
-  const { data, error } = await supabase
+    const { data, error } = await supabase
     .from('colleges')
     .insert({ name, code, address, contact_email: email, contact_phone: phone })
     .select()

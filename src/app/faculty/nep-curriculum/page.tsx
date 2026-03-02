@@ -1,5 +1,6 @@
 'use client';
 
+import { serviceDb as supabase } from '@/shared/database';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
@@ -92,8 +93,7 @@ export default function NEPCurriculumPage() {
   const [debugInfo, setDebugInfo] = useState<string>('');
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const supabase = createClient();
-
+  
   const getAvailableSemesters = useCallback(() => {
     const selectedCourseObj = courses.find(c => c.id === selectedCourse);
     const duration = selectedCourseObj?.duration_years || 4;

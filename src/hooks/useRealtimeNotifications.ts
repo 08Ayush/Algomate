@@ -1,3 +1,8 @@
+// Neon does not support Realtime -- type stub for compatibility
+type RealtimeChannel = { unsubscribe: () => void };
+
+// Neon does not support Realtime -- type stub for backward compatibility
+
 /**
  * useRealtimeNotifications Hook
  * 
@@ -7,8 +12,6 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { supabaseBrowser } from '@/lib/supabase/client';
-import type { RealtimeChannel } from '@supabase/supabase-js';
-
 export interface Notification {
   id: string;
   type: string;
@@ -224,3 +227,4 @@ export function useRealtimeNotifications(userId: string | null): UseRealtimeNoti
     markAllAsRead,
   };
 }
+

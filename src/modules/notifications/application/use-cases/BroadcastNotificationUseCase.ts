@@ -1,7 +1,6 @@
+import type { NeonClient as SupabaseClient } from '@/lib/neon-supabase-compat';
 import { INotificationRepository } from '../../domain/repositories/INotificationRepository';
 import { BroadcastNotificationDto } from '../dto/BroadcastNotificationDto';
-import { SupabaseClient } from '@supabase/supabase-js';
-
 export class BroadcastNotificationUseCase {
     constructor(
         private readonly notificationRepository: INotificationRepository,

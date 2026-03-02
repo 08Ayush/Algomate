@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import {
@@ -12,8 +12,6 @@ import { createConstraintViolationNotifications } from '@/lib/notifications';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Save Hybrid Generated Timetable
 export async function POST(request: NextRequest) {

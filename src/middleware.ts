@@ -100,6 +100,10 @@ export async function middleware(request: NextRequest) {
     return response;
 }
 
+// Use Node.js runtime so middleware can access pg/neon database clients
+// (Edge Runtime does not support Node.js built-ins like 'crypto' used by the pg package)
+export const runtime = 'nodejs';
+
 export const config = {
     matcher: [
         /*

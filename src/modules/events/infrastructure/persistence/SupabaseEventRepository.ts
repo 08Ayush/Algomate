@@ -1,4 +1,4 @@
-import { SupabaseClient } from '@supabase/supabase-js';
+import type { NeonClient as SupabaseClient } from '@/lib/neon-supabase-compat';
 import { IEventRepository, IEventRegistrationRepository } from '../../domain/repositories/IEventRepository';
 import { Event, EventRegistration } from '../../domain/entities/Event';
 import { Database } from '@/shared/database';

@@ -1,3 +1,8 @@
+// Neon does not support Realtime -- type stub for compatibility
+type RealtimeChannel = { unsubscribe: () => void };
+
+// Neon does not support Realtime -- type stub for backward compatibility
+
 /**
  * useRealtimeConflictDetection Hook
  * 
@@ -7,8 +12,6 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { supabaseBrowser } from '@/lib/supabase/client';
-import type { RealtimeChannel } from '@supabase/supabase-js';
-
 export interface ResourceConflict {
   resource_type: 'FACULTY' | 'CLASSROOM';
   resource_id: string;
@@ -230,3 +233,4 @@ export function useRealtimeConflictDetection(options: UseRealtimeConflictDetecti
     clearConflicts,
   };
 }
+

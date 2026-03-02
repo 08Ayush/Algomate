@@ -1,11 +1,5 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { emailService } from '../email/emailService';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
-
 export class NotificationService {
   /**
    * Notify about schedule change or class rescheduling

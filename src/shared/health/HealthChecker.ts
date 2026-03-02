@@ -1,24 +1,8 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
-
+import { serviceDb as supabase } from '@/shared/database';
 export class HealthChecker {
-    // Lazy singleton — created on first use, not at class-load time.
-    // This avoids the static-field antipattern where the client is
-    // constructed before .env.local is loaded by Next.js.
-    private static _supabase: SupabaseClient | null = null;
-
-    private static get supabase(): SupabaseClient {
-        if (!this._supabase) {
-            const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-            const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-            if (!url || !key) {
-                throw new Error(
-                    'HealthChecker: NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set. ' +
-                    'Ensure .env.local is present and the dev server has been restarted after any changes.'
-                );
-            }
-            this._supabase = createClient(url, key);
-        }
-        return this._supabase;
+    // Uses serviceDb (Neon) for all health checks.
+    private static get supabase() {
+        return supabase;
     }
 
     /**

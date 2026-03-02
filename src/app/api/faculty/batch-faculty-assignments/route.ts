@@ -1,15 +1,8 @@
 'use server';
 
+import { serviceDb } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '@/lib/auth';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-function getSupabaseAdmin() {
-    return createClient(supabaseUrl, supabaseServiceKey);
-}
 
 interface QualifiedFaculty {
     faculty_id: string;
@@ -59,7 +52,7 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        const supabase = getSupabaseAdmin();
+        const supabase = serviceDb;
 
         // Get batch info with department and course details
         const { data: batch, error: batchError } = await supabase
@@ -332,7 +325,7 @@ export async function PUT(request: NextRequest) {
             );
         }
 
-        const supabase = getSupabaseAdmin();
+        const supabase = serviceDb;
         const results = [];
         const errors = [];
 
@@ -383,3 +376,4 @@ export async function PUT(request: NextRequest) {
         );
     }
 }
+

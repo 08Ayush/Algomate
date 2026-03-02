@@ -1,5 +1,5 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { notifySystemAlert } from '@/lib/notificationService';
 import { requireAuth } from '@/lib/auth';
 

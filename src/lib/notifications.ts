@@ -1,15 +1,13 @@
+import { serviceDb as supabase } from '@/shared/database';
 /**
  * Notification Utility Functions
  * Handles creation of notifications for various system events
  */
 
-import { createClient } from '@supabase/supabase-js';
 import type { ConstraintViolation } from './constraintRules';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
 interface NotificationRecipient {
   userId: string;
   role: 'creator' | 'publisher' | 'hod' | 'admin';

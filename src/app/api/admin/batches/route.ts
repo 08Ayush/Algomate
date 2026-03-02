@@ -1,3 +1,4 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/shared/database/server';
 import { asyncHandler } from '@/shared/middleware/error-handler';
@@ -32,8 +33,7 @@ export const GET = asyncHandler(async (request: NextRequest) => {
   const result = await withCacheAside(
     { key: cacheKey, ttl: 1800 },
     async () => {
-      const supabase = createClient();
-      let query = supabase
+            let query = supabase
         .from('batches')
         .select(`
           *,
@@ -85,8 +85,7 @@ export const POST = asyncHandler(async (request: NextRequest) => {
     return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
   }
 
-  const supabase = createClient();
-  const { data, error } = await supabase
+    const { data, error } = await supabase
     .from('batches')
     .insert({
       name,

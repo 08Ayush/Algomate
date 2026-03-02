@@ -1,5 +1,4 @@
-import { SupabaseClient } from '@supabase/supabase-js';
-
+import type { NeonClient as SupabaseClient } from '@/lib/neon-supabase-compat';
 export class GetReviewQueueUseCase {
     constructor(private readonly supabase: SupabaseClient) { }
 

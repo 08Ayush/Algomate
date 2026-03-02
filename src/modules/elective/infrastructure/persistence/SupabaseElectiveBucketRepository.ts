@@ -1,4 +1,4 @@
-import { SupabaseClient } from '@supabase/supabase-js';
+import type { NeonClient as SupabaseClient } from '@/lib/neon-supabase-compat';
 import { IElectiveBucketRepository } from '../../domain/repositories/IElectiveBucketRepository';
 import { ElectiveBucket } from '../../domain/entities/ElectiveBucket';
 

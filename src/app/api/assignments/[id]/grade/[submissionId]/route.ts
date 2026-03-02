@@ -1,6 +1,6 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { createClient } from '@supabase/supabase-js';
 import { notifyAssignmentGraded } from '@/lib/notificationService';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -45,8 +45,6 @@ export async function POST(
                 { status: 403 }
             );
         }
-
-        const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
         const body = await request.json();
         const {
@@ -257,8 +255,6 @@ export async function GET(
 
         const user = requireAuth(request);
         if (user instanceof NextResponse) return user;
-
-        const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
         // Fetch submission with grades
         const { data: submission, error } = await supabase

@@ -1,3 +1,4 @@
+import { serviceDb as supabase } from '@/shared/database';
 /*
 ===============================================================================
 🎓 COMPLETE BUCKET WORKFLOW SYSTEM - ACADEMIC COMPASS 2025
@@ -242,8 +243,7 @@ export default function NEPCurriculumPage() {
   const [selectedSemester, setSelectedSemester] = useState<number>(1);
   const [loading, setLoading] = useState(true);
 
-  const supabase = createClient();
-
+  
   // Get semesters based on selected course
   const getAvailableSemesters = () => {
     const selectedCourseObj = courses.find(c => c.id === selectedCourse);

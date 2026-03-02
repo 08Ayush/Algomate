@@ -1,11 +1,10 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '@/lib/auth';
 import { TimetableGenerationService } from '@/modules/timetable';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const supabase = createClient(supabaseUrl, supabaseKey);
 const generationService = new TimetableGenerationService();
 
 // Generate AI Timetable

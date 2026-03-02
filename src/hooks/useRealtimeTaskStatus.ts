@@ -1,3 +1,8 @@
+// Neon does not support Realtime -- type stub for compatibility
+type RealtimeChannel = { unsubscribe: () => void };
+
+// Neon does not support Realtime -- type stub for backward compatibility
+
 /**
  * useRealtimeTaskStatus Hook
  * 
@@ -7,9 +12,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { supabaseBrowser } from '@/lib/supabase/client';
-import type { RealtimeChannel } from '@supabase/supabase-js';
-
-export interface TaskStatus {
+export interface GenerationTask {
   id: string;
   status: 'pending' | 'running' | 'completed' | 'failed';
   progress_message?: string;
@@ -185,3 +188,4 @@ export function useRealtimeTaskStatus(
 
   return task;
 }
+

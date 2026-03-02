@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { notifyEventCreated } from '@/lib/notificationService';
 import { requireAuth } from '@/lib/auth';
@@ -7,8 +7,6 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 // Use service role key for server-side operations (bypasses RLS)
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
 function mask(val?: string) {
   if (!val) return '<<missing>>';
   try { return val.slice(0, 8) + '...' + val.slice(-4); } catch { return '<<masked>>'; }

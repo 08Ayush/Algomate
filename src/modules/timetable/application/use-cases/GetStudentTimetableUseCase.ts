@@ -1,6 +1,6 @@
+import type { NeonClient as SupabaseClient } from '@/lib/neon-supabase-compat';
 import { ITimetableRepository } from '../../domain/repositories/ITimetableRepository';
 // We might need IScheduledClassRepository to fetch classes
-import { SupabaseClient } from '@supabase/supabase-js';
 import { Database } from '@/shared/database';
 
 export class GetStudentTimetableUseCase {

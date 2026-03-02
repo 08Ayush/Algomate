@@ -1,12 +1,8 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { GetStudentDashboardStatsUseCase, SupabaseDashboardQueryService } from '@/modules/dashboard';
 import { requireAuth } from '@/lib/auth';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
 const queryService = new SupabaseDashboardQueryService(supabase);
 const getStudentDataUseCase = new GetStudentDashboardStatsUseCase(queryService);
 

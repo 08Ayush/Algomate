@@ -1,3 +1,4 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { createClient } from '@/shared/database/server';
@@ -12,8 +13,7 @@ async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) 
   try {
     const userString = Buffer.from(token, 'base64').toString();
     const user = JSON.parse(userString);
-    const supabase = createClient();
-
+    
     const { data: dbUser, error } = await supabase
       .from('users')
       .select('id, college_id, department_id, role, faculty_type, is_active')
@@ -64,8 +64,7 @@ export const GET = asyncHandler(
     const faculty = await withCacheAside(
       { key: cacheKey, ttl: 1800 },
       async () => {
-        const supabase = createClient();
-        let query = supabase
+                let query = supabase
           .from('users')
           .select(`
             id,
@@ -126,8 +125,7 @@ export const POST = asyncHandler(
       return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
     }
 
-    const supabase = createClient();
-    const { data: existingUser } = await supabase
+        const { data: existingUser } = await supabase
       .from('users')
       .select('id')
       .eq('email', email)

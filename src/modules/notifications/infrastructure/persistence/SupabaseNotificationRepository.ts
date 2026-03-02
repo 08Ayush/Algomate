@@ -1,4 +1,4 @@
-import { SupabaseClient } from '@supabase/supabase-js';
+import type { NeonClient as SupabaseClient } from '@/lib/neon-supabase-compat';
 import { INotificationRepository } from '../../domain/repositories/INotificationRepository';
 import { Notification, NotificationData, NotificationType, ContentType, Priority } from '../../domain/entities/Notification';
 import { Database } from '@/shared/database';

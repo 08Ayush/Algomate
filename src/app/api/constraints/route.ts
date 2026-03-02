@@ -1,17 +1,14 @@
+import { serviceDb } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from '@/lib/auth';
 import {
   GetConstraintRulesUseCase,
   SupabaseConstraintRepository
 } from '@/modules/timetable';
-import { Database } from '@/shared/database';
 
 // Initialize dependencies
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey);
-const constraintRepo = new SupabaseConstraintRepository(supabase);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const constraintRepo = new SupabaseConstraintRepository(serviceDb as any);
 const getConstraintRulesUseCase = new GetConstraintRulesUseCase(constraintRepo);
 
 /**

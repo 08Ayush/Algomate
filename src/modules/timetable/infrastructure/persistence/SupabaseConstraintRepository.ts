@@ -1,4 +1,4 @@
-import { SupabaseClient } from '@supabase/supabase-js';
+import type { NeonClient as SupabaseClient } from '@/lib/neon-supabase-compat';
 import { IConstraintRepository } from '../../domain/repositories/IConstraintRepository';
 import { ConstraintRule } from '../../domain/entities/ConstraintRule';
 import { Database } from '@/shared/database';

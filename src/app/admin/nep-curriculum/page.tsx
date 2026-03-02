@@ -1,5 +1,6 @@
 'use client';
 
+import { serviceDb as supabase } from '@/shared/database';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/Header';
@@ -34,8 +35,7 @@ export default function NEPCurriculumPage() {
   const [selectedSemester, setSelectedSemester] = useState<number>(1);
   const [loading, setLoading] = useState(true);
 
-  const supabase = createClient();
-
+  
   // Get semesters based on selected course
   const getAvailableSemesters = () => {
     const selectedCourseObj = courses.find(c => c.id === selectedCourse);

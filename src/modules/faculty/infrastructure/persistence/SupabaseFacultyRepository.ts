@@ -1,4 +1,4 @@
-import { SupabaseClient } from '@supabase/supabase-js';
+import type { NeonClient as SupabaseClient } from '@/lib/neon-supabase-compat';
 import { IFacultyRepository, IFacultyQualificationRepository } from '../../domain/repositories/IFacultyRepository';
 import { Faculty, FacultyQualification } from '../../domain/entities/Faculty';
 import { BaseRepository, Database } from '@/shared/database';

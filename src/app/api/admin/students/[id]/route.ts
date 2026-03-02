@@ -1,3 +1,4 @@
+import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/shared/database/server';
 import bcrypt from 'bcryptjs';
@@ -20,8 +21,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Missing required fields (first_name, last_name, email, course_id, department_id)' }, { status: 400 });
     }
 
-    const supabase = createClient();
-
+    
     // Prepare update data
     const updateData: any = {
       first_name,
@@ -80,8 +80,7 @@ export async function DELETE(
 
     const { id } = await params;
 
-    const supabase = createClient();
-
+    
     // Delete student
     const { error } = await supabase
       .from('users')
