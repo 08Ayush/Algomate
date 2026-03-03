@@ -2,9 +2,6 @@ import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRoles } from '@/lib/auth';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
 // GET - Fetch all academic calendars
 export async function GET(request: NextRequest) {
     try {
@@ -13,10 +10,7 @@ export async function GET(request: NextRequest) {
 
         const { data: calendars, error } = await supabase
             .from('academic_calendars')
-            .select(`
-        *,
-        college_calendars:college_calendars(count)
-      `)
+            .select('*')
             .order('created_at', { ascending: false });
 
         if (error) {
@@ -27,10 +21,10 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // Transform to include usage count
-        const transformedCalendars = calendars.map(cal => ({
+        // Transform to include usage count (college_calendars join not supported on Neon)
+        const transformedCalendars = (calendars || []).map((cal: Record<string, unknown>) => ({
             ...cal,
-            used_by: cal.college_calendars?.[0]?.count || 0
+            used_by: 0
         }));
 
         return NextResponse.json({ calendars: transformedCalendars });

@@ -1,6 +1,7 @@
 import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
+import { getPool } from '@/lib/db';
 
 /**
  * GET /api/student/elective-buckets
@@ -19,129 +20,91 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Student ID is required' }, { status: 400 });
         }
 
-        // If batchId not provided, get it from student enrollment
+        const pool = getPool();
+
+        // Resolve batch if not provided
         let studentBatchId = batchId;
         if (!studentBatchId) {
-            const { data: enrollment } = await supabase
-                .from('student_batch_enrollment')
-                .select('batch_id')
-                .eq('student_id', studentId)
-                .eq('is_active', true)
-                .single();
-
-            if (enrollment) {
-                studentBatchId = enrollment.batch_id;
-            }
+            const enrollResult = await pool.query(
+                `SELECT batch_id FROM student_batch_enrollment WHERE student_id = $1 AND is_active = true LIMIT 1`,
+                [studentId]
+            );
+            if (enrollResult.rows.length > 0) studentBatchId = enrollResult.rows[0].batch_id;
         }
 
         if (!studentBatchId) {
-            return NextResponse.json({
-                error: 'Student is not enrolled in any batch',
-                buckets: []
-            }, { status: 200 });
+            return NextResponse.json({ success: true, buckets: [], count: 0 });
         }
 
-        // Optimized: Fetch buckets with subjects and bulk fetch choices
-        const { data: buckets, error: bucketError } = await supabase
-            .from('elective_buckets')
-            .select(`
-                id,
-                bucket_name,
-                batch_id,
-                min_selection,
-                max_selection,
-                is_common_slot,
-                is_published,
-                is_live_for_students,
-                submission_deadline,
-                created_at,
-                batches:batches (
-                  id,
-                  name,
-                  semester,
-                  section,
-                  academic_year
-                ),
-                subjects (
-                    id,
-                    code,
-                    name,
-                    credit_value,
-                    nep_category,
-                    subject_type,
-                    description
-                )
-            `)
-            .eq('batch_id', studentBatchId)
-            .eq('is_live_for_students', true)
-            .eq('is_published', true);
+        // Fetch buckets with batch info; subjects fetched separately per bucket
+        const bucketsResult = await pool.query(`
+            SELECT
+                eb.id, eb.bucket_name, eb.batch_id, eb.min_selection, eb.max_selection,
+                eb.is_common_slot, eb.is_published, eb.is_live_for_students, eb.submission_deadline, eb.created_at,
+                CASE WHEN b.id IS NOT NULL
+                    THEN json_build_object('id', b.id, 'name', b.name, 'semester', b.semester, 'section', b.section, 'academic_year', b.academic_year)
+                    ELSE NULL END AS batches
+            FROM elective_buckets eb
+            LEFT JOIN batches b ON b.id = eb.batch_id
+            WHERE eb.batch_id = $1 AND eb.is_live_for_students = true AND eb.is_published = true
+        `, [studentBatchId]);
 
-        if (bucketError) {
-            console.error('[Student Buckets] Error:', bucketError);
-            return NextResponse.json({ error: 'Failed to fetch buckets' }, { status: 500 });
+        if (bucketsResult.rows.length === 0) {
+            return NextResponse.json({ success: true, buckets: [], count: 0 });
         }
 
-        if (!buckets || buckets.length === 0) {
-            return NextResponse.json({
-                success: true,
-                buckets: [],
-                count: 0
-            });
-        }
+        const bucketIds = bucketsResult.rows.map((b: any) => b.id);
 
-        // Bulk fetch all choices for this student and these buckets
-        const bucketIds = buckets.map(b => b.id);
-        const { data: allChoices } = await supabase
-            .from('student_subject_choices')
-            .select(`
-                id,
-                subject_id,
-                priority,
-                is_allotted,
-                allotment_status,
-                updated_at,
-                bucket_id
-            `)
-            .eq('student_id', studentId)
-            .in('bucket_id', bucketIds);
+        // Fetch subjects for all buckets via bucket_subjects junction table
+        const subjectsResult = await pool.query(`
+            SELECT bs.bucket_id, s.id, s.code, s.name, s.credit_value, s.nep_category, s.subject_type, s.description
+            FROM bucket_subjects bs
+            INNER JOIN subjects s ON s.id = bs.subject_id
+            WHERE bs.bucket_id = ANY($1::uuid[]) AND bs.is_active = true
+        `, [bucketIds]);
 
-        const enrichedBuckets = buckets.map((bucket: any) => {
-            // Filter choices for this bucket
-            let processedChoices = allChoices?.filter(c => c.bucket_id === bucket.id) || [];
+        // Group subjects by bucket_id
+        const subjectsByBucket = new Map<string, any[]>();
+        subjectsResult.rows.forEach((s: any) => {
+            if (!subjectsByBucket.has(s.bucket_id)) subjectsByBucket.set(s.bucket_id, []);
+            const { bucket_id, ...subjectData } = s;
+            subjectsByBucket.get(s.bucket_id)!.push(subjectData);
+        });
 
-            // Data consistency fix: Check if multiple subjects are allotted exceeding max_selection
+        // Fetch choices for this student
+        const choicesResult = await pool.query(`
+            SELECT id, subject_id, priority, is_allotted, allotment_status, updated_at, bucket_id
+            FROM student_subject_choices
+            WHERE student_id = $1 AND bucket_id = ANY($2::uuid[])
+        `, [studentId, bucketIds]);
+
+        const choicesByBucket = new Map<string, any[]>();
+        choicesResult.rows.forEach((c: any) => {
+            if (!choicesByBucket.has(c.bucket_id)) choicesByBucket.set(c.bucket_id, []);
+            choicesByBucket.get(c.bucket_id)!.push(c);
+        });
+
+        const enrichedBuckets = bucketsResult.rows.map((bucket: any) => {
+            let processedChoices = choicesByBucket.get(bucket.id) || [];
             const allottedChoices = processedChoices.filter((c: any) => c.is_allotted || c.allotment_status === 'allotted');
 
             if (allottedChoices.length > bucket.max_selection) {
-                // Sort by updated_at desc to keep latest allotments
-                allottedChoices.sort((a: any, b: any) =>
-                    new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()
+                allottedChoices.sort((a: any, b: any) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime());
+                const validIds = allottedChoices.slice(0, bucket.max_selection).map((c: any) => c.id);
+                processedChoices = processedChoices.map((c: any) =>
+                    c.is_allotted && !validIds.includes(c.id) ? { ...c, is_allotted: false, allotment_status: 'pending' } : c
                 );
-
-                // Keep valid ones
-                const validAllotmentIds = allottedChoices.slice(0, bucket.max_selection).map((c: any) => c.id);
-
-                processedChoices = processedChoices.map((c: any) => {
-                    if (c.is_allotted && !validAllotmentIds.includes(c.id)) {
-                        return { ...c, is_allotted: false, allotment_status: 'pending' };
-                    }
-                    return c;
-                });
             }
 
             return {
                 ...bucket,
-                subjects: bucket.subjects || [], // joined subjects
+                subjects: subjectsByBucket.get(bucket.id) || [],
                 student_choices: processedChoices,
-                has_submitted: (processedChoices.length || 0) > 0
+                has_submitted: processedChoices.length > 0
             };
         });
 
-        return NextResponse.json({
-            success: true,
-            buckets: enrichedBuckets,
-            count: enrichedBuckets.length
-        });
+        return NextResponse.json({ success: true, buckets: enrichedBuckets, count: enrichedBuckets.length });
 
     } catch (error) {
         console.error('[Student Buckets] Server error:', error);

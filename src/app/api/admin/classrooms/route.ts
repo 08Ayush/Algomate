@@ -9,6 +9,7 @@ import {
 import { requireAuth } from '@/lib/auth';
 import { asyncHandler } from '@/shared/middleware/error-handler';
 import { getPaginationParams, createPaginatedResponse } from '@/shared/utils/pagination';
+import { getPool } from '@/lib/db';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const classroomRepo = new SupabaseClassroomRepository(supabase as any);
@@ -39,12 +40,37 @@ export const GET = asyncHandler(async (request: NextRequest) => {
   const result = await withCacheAside(
     { key: cacheKey, ttl: 1800 },
     async () => {
-      return await getClassroomsUseCase.execute(
-        collegeId!,
-        departmentId || undefined,
-        page,
-        limit
-      );
+      const pool = getPool();
+      const params: any[] = [collegeId];
+      let sql = `
+        SELECT c.*,
+          d.name AS department_name,
+          d.code AS department_code
+        FROM classrooms c
+        LEFT JOIN departments d ON d.id = c.department_id
+        WHERE c.college_id = $1
+      `;
+
+      if (departmentId) {
+        sql += ` AND c.department_id = $${params.length + 1}`;
+        params.push(departmentId);
+      }
+
+      const countParams = departmentId ? [collegeId, departmentId] : [collegeId];
+      const countSql = `SELECT COUNT(*) FROM classrooms WHERE college_id = $1${departmentId ? ' AND department_id = $2' : ''}`;
+      const countResult = await pool.query(countSql, countParams);
+      const total = parseInt(countResult.rows[0].count, 10);
+
+      if (isPaginated && page && limit) {
+        const offset = (page - 1) * limit;
+        sql += ` ORDER BY c.name LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+        params.push(limit, offset);
+      } else {
+        sql += ' ORDER BY c.name';
+      }
+
+      const { rows } = await pool.query(sql, params);
+      return { classrooms: rows, total };
     }
   );
 

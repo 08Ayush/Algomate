@@ -83,7 +83,13 @@ export default function StudentProfile() {
     const fetchProfile = async (user: any) => {
         try {
             setLoading(true);
-            const response = await fetch(`/api/student/profile?userId=${user.id}`);
+            const token = btoa(JSON.stringify({
+                id: user.id, user_id: user.id, role: user.role,
+                college_id: user.college_id, department_id: user.department_id
+            }));
+            const response = await fetch(`/api/student/profile?userId=${user.id}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
             if (response.ok) {
                 const data = await response.json();
                 setProfile(data.profile);
@@ -105,9 +111,13 @@ export default function StudentProfile() {
     const handleSave = async () => {
         try {
             setSaving(true);
+            const token = btoa(JSON.stringify({
+                id: user.id, user_id: user.id, role: user.role,
+                college_id: user.college_id, department_id: user.department_id
+            }));
             const response = await fetch('/api/student/profile', {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({
                     userId: user.id,
                     ...formData
@@ -427,7 +437,7 @@ export default function StudentProfile() {
                             { label: 'Semester', value: profile?.current_semester || '?', color: 'text-[#4D869C]' },
                             { label: 'Course', value: profile?.course?.code || 'N/A', color: 'text-purple-600' },
                             { label: 'Year', value: profile?.admission_year || 'N/A', color: 'text-pink-600' },
-                            { label: 'CGPA', value: profile?.cgpa ? profile.cgpa.toFixed(2) : '-', color: 'text-green-600' },
+                            { label: 'CGPA', value: profile?.cgpa ? parseFloat(String(profile.cgpa)).toFixed(2) : '-', color: 'text-green-600' },
                         ].map((stat, index) => (
                             <div key={stat.label} className="text-center">
                                 <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>

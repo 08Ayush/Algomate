@@ -67,12 +67,21 @@ const CollegeAdminsPage: React.FC = () => {
         fetchData();
     }, []);
 
+    const getAuthHeaders = (): Record<string, string> => {
+        if (typeof window === 'undefined') return {};
+        const userData = localStorage.getItem('user');
+        if (!userData) return {};
+        const authToken = Buffer.from(userData).toString('base64');
+        return { 'Authorization': `Bearer ${authToken}` };
+    };
+
     const fetchData = async () => {
         try {
             setLoading(true);
+            const headers = getAuthHeaders();
             const [adminRes, collegeRes] = await Promise.all([
-                fetch('/api/super-admin/college-admins'),
-                fetch('/api/super-admin/colleges')
+                fetch('/api/super-admin/college-admins', { headers }),
+                fetch('/api/super-admin/colleges', { headers })
             ]);
 
             if (adminRes.ok) {
@@ -114,7 +123,7 @@ const CollegeAdminsPage: React.FC = () => {
         try {
             const res = await fetch('/api/super-admin/college-admins', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     first_name: firstName,
                     last_name: lastName,
@@ -186,7 +195,7 @@ const CollegeAdminsPage: React.FC = () => {
 
             const res = await fetch(`/api/super-admin/college-admins/${editingAdmin.id}`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
 
@@ -211,7 +220,7 @@ const CollegeAdminsPage: React.FC = () => {
             confirmText: 'Delete',
             onConfirm: async () => {
                 try {
-                    const res = await fetch(`/api/super-admin/college-admins/${admin.id}`, { method: 'DELETE' });
+                    const res = await fetch(`/api/super-admin/college-admins/${admin.id}`, { method: 'DELETE', headers: getAuthHeaders() });
                     if (res.ok) {
                         toast.success('Admin deleted successfully');
                         fetchData();

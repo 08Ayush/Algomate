@@ -155,9 +155,17 @@ const ManagePage: React.FC = () => {
     fetchColleges();
   }, [router]);
 
+  const getAuthHeaders = (): Record<string, string> => {
+    if (typeof window === 'undefined') return {};
+    const userData = localStorage.getItem('user');
+    if (!userData) return {};
+    const authToken = Buffer.from(userData).toString('base64');
+    return { 'Authorization': `Bearer ${authToken}` };
+  };
+
   const fetchColleges = async () => {
     try {
-      const res = await fetch('/api/super-admin/colleges');
+      const res = await fetch('/api/super-admin/colleges', { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         const list = (data.colleges || []).map((c: any) => ({ id: c.id, name: c.name, code: c.code }));

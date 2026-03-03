@@ -25,7 +25,12 @@ export const HEADER_AUTH_USER = 'x-auth-user';
  */
 export function getAuthUser(request: NextRequest): AuthUser | null {
     try {
-        const userHeader = request.headers.get(HEADER_AUTH_USER);
+        // In Next.js 15, headers set by middleware via NextResponse.next({ request: { headers } })
+        // are forwarded to route handlers with a "x-middleware-request-" prefix.
+        // We check both the direct name and the prefixed variant for compatibility.
+        const userHeader =
+            request.headers.get(HEADER_AUTH_USER) ||
+            request.headers.get(`x-middleware-request-${HEADER_AUTH_USER}`);
         if (!userHeader) {
             return null;
         }

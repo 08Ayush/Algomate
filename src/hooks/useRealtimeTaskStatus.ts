@@ -5,14 +5,13 @@ type RealtimeChannel = { unsubscribe: () => void };
 
 /**
  * useRealtimeTaskStatus Hook
- * 
- * Subscribes to real-time timetable generation task updates from Supabase
- * Replaces polling with instant progress notifications
+ *
+ * Polls timetable generation task status (Supabase Realtime not available on Neon).
  */
 
-import { useEffect, useState, useCallback } from 'react';
-import { supabaseBrowser } from '@/lib/supabase/client';
-export interface GenerationTask {
+import { useEffect, useState, useCallback, useRef } from 'react';
+
+export interface TaskStatus {
   id: string;
   status: 'pending' | 'running' | 'completed' | 'failed';
   progress_message?: string;
@@ -59,31 +58,12 @@ export function useRealtimeTaskStatus(
     progress: 0,
     message: '',
   });
-  const [channel, setChannel] = useState<RealtimeChannel | null>(null);
-  const [startTime] = useState<number>(Date.now());
-
-  // Fetch initial task status
-  const fetchTaskStatus = useCallback(async () => {
-    if (!taskId) return;
-
-    try {
-      const { data, error } = await supabaseBrowser
-        .from('timetable_generation_tasks')
-        .select('*')
-        .eq('id', taskId)
-        .single();
-
-      if (error) throw error;
-
-      updateTaskFromData(data);
-    } catch (err) {
-      console.error('Error fetching task status:', err);
-    }
-  }, [taskId]);
+  const startTimeRef = useRef<number>(Date.now());
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Helper to update task state from database data
-  const updateTaskFromData = (data: TaskStatus) => {
-    const elapsedSeconds = (Date.now() - startTime) / 1000;
+  const updateTaskFromData = useCallback((data: TaskStatus) => {
+    const elapsedSeconds = (Date.now() - startTimeRef.current) / 1000;
 
     let progress = 0;
     let phase = 'INITIALIZING';
@@ -97,7 +77,7 @@ export function useRealtimeTaskStatus(
         progress = data.progress_percentage || Math.min(50 + elapsedSeconds * 0.5, 90);
         phase = data.current_phase || (
           data.progress_message?.includes('CP-SAT') ? 'CP-SAT SOLVER' :
-          data.progress_message?.includes('genetic') ? 'GENETIC OPTIMIZATION' : 
+          data.progress_message?.includes('genetic') ? 'GENETIC OPTIMIZATION' :
           'RUNNING'
         );
         break;
@@ -112,9 +92,9 @@ export function useRealtimeTaskStatus(
     }
 
     const updatedTask: GenerationTask = {
-      status: data.status === 'pending' || data.status === 'running' ? 'running' 
-        : data.status === 'completed' ? 'completed' 
-        : data.status === 'failed' ? 'failed' 
+      status: data.status === 'pending' || data.status === 'running' ? 'running'
+        : data.status === 'completed' ? 'completed'
+        : data.status === 'failed' ? 'failed'
         : 'idle',
       phase,
       progress,
@@ -136,55 +116,53 @@ export function useRealtimeTaskStatus(
 
     setTask(updatedTask);
 
-    // Trigger callbacks
-    if (options?.onUpdate) {
-      options.onUpdate(updatedTask);
-    }
-
+    if (options?.onUpdate) options.onUpdate(updatedTask);
     if (data.status === 'completed' && data.timetable_id && options?.onComplete) {
       options.onComplete(data.timetable_id, data);
     }
-
     if (data.status === 'failed' && options?.onError) {
       options.onError(data.error_message || 'Task failed');
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Setup Realtime subscription
+  // Poll every 3 seconds while task is active
+  const fetchTaskStatus = useCallback(async () => {
+    if (!taskId) return;
+    try {
+      const response = await fetch(`/api/scheduler/status/${taskId}`);
+      if (!response.ok) return;
+      const data = await response.json();
+      if (data) updateTaskFromData(data as TaskStatus);
+    } catch (err) {
+      console.error('Error polling task status:', err);
+    }
+  }, [taskId, updateTaskFromData]);
+
   useEffect(() => {
     if (!taskId) return;
 
-    // Initial fetch
+    startTimeRef.current = Date.now();
     fetchTaskStatus();
 
-    // Setup Realtime channel
-    const taskChannel = supabaseBrowser
-      .channel(`task:${taskId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'timetable_generation_tasks',
-          filter: `id=eq.${taskId}`,
-        },
-        (payload) => {
-          console.log('📊 Task status updated:', payload.new);
-          updateTaskFromData(payload.new as TaskStatus);
-        }
-      )
-      .subscribe((status) => {
-        console.log('🔌 Task channel status:', status);
-      });
+    intervalRef.current = setInterval(() => {
+      fetchTaskStatus();
+    }, 3000);
 
-    setChannel(taskChannel);
-
-    // Cleanup
     return () => {
-      console.log('🔌 Unsubscribing from task channel');
-      taskChannel.unsubscribe();
+      if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [taskId, fetchTaskStatus]);
+
+  // Stop polling when task is done
+  useEffect(() => {
+    if (task.status === 'completed' || task.status === 'failed') {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    }
+  }, [task.status]);
 
   return task;
 }

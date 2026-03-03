@@ -77,9 +77,14 @@ export default function StudentTimetable() {
     const fetchTimetable = async (user: any) => {
         try {
             setLoading(true);
+            const token = btoa(JSON.stringify({
+                id: user.id, user_id: user.id, role: user.role,
+                college_id: user.college_id, department_id: user.department_id
+            }));
+            const authHeaders = { 'Authorization': `Bearer ${token}` };
 
             // Get batch info
-            const dashRes = await fetch(`/api/student/dashboard?userId=${user.id}&role=student`);
+            const dashRes = await fetch(`/api/student/dashboard?userId=${user.id}&role=student`, { headers: authHeaders });
             if (!dashRes.ok) throw new Error('Failed to fetch dashboard');
             const dashData = await dashRes.json();
 
@@ -91,7 +96,8 @@ export default function StudentTimetable() {
 
             // Get timetables
             const ttRes = await fetch(
-                `/api/student/published-timetables?courseId=${user.course_id}&semester=${dashData.additionalData.batch?.semester}`
+                `/api/student/published-timetables?courseId=${user.course_id}&semester=${dashData.additionalData.batch?.semester}`,
+                { headers: authHeaders }
             );
             if (!ttRes.ok) throw new Error('Failed to fetch timetables');
             const ttData = await ttRes.json();
@@ -104,7 +110,7 @@ export default function StudentTimetable() {
                 setTimetable(studentTT);
 
                 // Fetch classes
-                const classesRes = await fetch(`/api/student/timetable-classes?timetableId=${studentTT.id}`);
+                const classesRes = await fetch(`/api/student/timetable-classes?timetableId=${studentTT.id}`, { headers: authHeaders });
                 if (classesRes.ok) {
                     const classesData = await classesRes.json();
                     setClasses(classesData.classes || []);

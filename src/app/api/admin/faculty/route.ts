@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/auth';
 import { createClient } from '@/shared/database/server';
 import bcrypt from 'bcryptjs';
 import { asyncHandler } from '@/shared/middleware/error-handler';
+import { getPool } from '@/lib/db';
 
 async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) {
   const authHeader = request.headers.get('Authorization');
@@ -64,32 +65,28 @@ export const GET = asyncHandler(
     const faculty = await withCacheAside(
       { key: cacheKey, ttl: 1800 },
       async () => {
-                let query = supabase
-          .from('users')
-          .select(`
-            id,
-            first_name,
-            last_name,
-            email,
-            college_uid,
-            phone,
-            role,
-            faculty_type,
-            department_id,
-            college_id,
-            is_active,
-            departments!users_department_id_fkey(id, name, code)
-          `)
-          .eq('college_id', targetCollegeId)
-          .in('role', ['admin', 'faculty']);
+        const pool = getPool();
+        const params: any[] = [targetCollegeId];
+        let sql = `
+          SELECT
+            u.id, u.first_name, u.last_name, u.email, u.college_uid, u.phone,
+            u.role, u.faculty_type, u.department_id, u.college_id, u.is_active,
+            CASE WHEN d.id IS NOT NULL
+              THEN json_build_object('id', d.id, 'name', d.name, 'code', d.code)
+              ELSE NULL END AS departments
+          FROM users u
+          LEFT JOIN departments d ON d.id = u.department_id
+          WHERE u.college_id = $1 AND u.role IN ('admin', 'faculty')
+        `;
 
         if (!['super_admin', 'admin', 'college_admin'].includes(user.role) && user.department_id) {
-          query = query.eq('department_id', user.department_id);
+          sql += ` AND u.department_id = $${params.length + 1}`;
+          params.push(user.department_id);
         }
 
-        const { data, error } = await query.order('first_name');
-        if (error) throw new Error('Failed to fetch faculty');
-        return data || [];
+        sql += ' ORDER BY u.first_name';
+        const { rows } = await pool.query(sql, params);
+        return rows;
       }
     );
 
@@ -152,7 +149,7 @@ export const POST = asyncHandler(
     const defaultPassword = 'faculty123';
     const passwordHash = await bcrypt.hash(defaultPassword, 12);
 
-    const { data: newFaculty, error } = await supabase
+    const { data: insertedUser, error } = await supabase
       .from('users')
       .insert({
         first_name,
@@ -168,24 +165,29 @@ export const POST = asyncHandler(
         is_active: is_active !== undefined ? is_active : true,
         email_verified: false
       })
-      .select(`
-        id,
-        first_name,
-        last_name,
-        email,
-        college_uid,
-        phone,
-        role,
-        faculty_type,
-        department_id,
-        college_id,
-        is_active,
-        departments!users_department_id_fkey(id, name, code)
-      `)
+      .select('id')
       .single();
 
     if (error) {
       return NextResponse.json({ success: false, error: 'Failed to create faculty' }, { status: 500 });
+    }
+
+    const pool = getPool();
+    const facultyResult = await pool.query(`
+      SELECT
+        u.id, u.first_name, u.last_name, u.email, u.college_uid, u.phone,
+        u.role, u.faculty_type, u.department_id, u.college_id, u.is_active,
+        CASE WHEN d.id IS NOT NULL
+          THEN json_build_object('id', d.id, 'name', d.name, 'code', d.code)
+          ELSE NULL END AS departments
+      FROM users u
+      LEFT JOIN departments d ON d.id = u.department_id
+      WHERE u.id = $1
+    `, [insertedUser.id]);
+
+    const newFaculty = facultyResult.rows[0];
+    if (!newFaculty) {
+      return NextResponse.json({ success: false, error: 'Failed to fetch created faculty' }, { status: 500 });
     }
 
     const displayFaculty = {

@@ -48,10 +48,18 @@ const DemoRequestsPage: React.FC = () => {
     fetchRequests();
   }, []);
 
+  const getAuthHeaders = (): Record<string, string> => {
+    if (typeof window === 'undefined') return {};
+    const userData = localStorage.getItem('user');
+    if (!userData) return {};
+    const authToken = Buffer.from(userData).toString('base64');
+    return { 'Authorization': `Bearer ${authToken}` };
+  };
+
   const fetchRequests = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/super-admin/demo-requests');
+      const res = await fetch('/api/super-admin/demo-requests', { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         const mapped = (data.requests || []).map((r: any) => ({
@@ -90,7 +98,7 @@ const DemoRequestsPage: React.FC = () => {
     try {
       const res = await fetch(`/api/super-admin/demo-requests/${selectedRequest.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: selectedStatus,
           follow_up_notes: followUpNotes || undefined

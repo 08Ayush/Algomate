@@ -55,6 +55,30 @@ const DEFAULT_CONSTRAINTS: Constraint[] = [
   { id: 'SC005', type: 'SOFT', category: 'TIME', name: 'Consecutive Classes', description: 'Minimize gaps between classes for faculty', weight: 25, enabled: true },
 ];
 
+/** Convert snake_case DB rule_name to a readable Title Case display name */
+function formatConstraintName(ruleName: string): string {
+  return (ruleName || '')
+    .replace(/_per_timetable$/, '')   // strip common suffixes
+    .replace(/_per_day$/, ' Per Day')
+    .split('_')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+/** Derive display category from DB rule_name */
+function deriveCategory(ruleName: string): string {
+  const name = (ruleName || '').toLowerCase();
+  if (name.includes('lab')) return 'LAB';
+  if (name.includes('faculty')) return 'FACULTY';
+  if (name.includes('classroom')) return 'CLASSROOM';
+  if (name.includes('batch')) return 'BATCH';
+  if (name.includes('slot') || name.includes('time') || name.includes('lunch')) return 'TIME';
+  if (name.includes('workload') || name.includes('distribute') || name.includes('evenly')) return 'WORKLOAD';
+  if (name.includes('preference')) return 'PREFERENCE';
+  if (name.includes('hours') || name.includes('subject')) return 'HOURS';
+  return 'GENERAL';
+}
+
 export default function HybridSchedulerPage() {
   const router = useRouter();
   const { semesterMode, activeSemesters, modeLabel } = useSemesterMode();
@@ -136,27 +160,34 @@ export default function HybridSchedulerPage() {
     }
   };
 
-  const fetchConstraints = async (departmentId: string) => {
+  const fetchConstraints = async (_departmentId: string) => {
     try {
       setConstraintsLoading(true);
-      const response = await fetch(`/api/constraints?department_id=${departmentId}`);
+      const userData = localStorage.getItem('user');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (userData) {
+        headers['Authorization'] = `Bearer ${Buffer.from(userData).toString('base64')}`;
+      }
+      const response = await fetch(`/api/admin/constraints`, { headers });
       const data = await response.json();
 
-      if (data.success && data.data && data.data.length > 0) {
+      if (data.success && Array.isArray(data.data) && data.data.length > 0) {
         const mappedConstraints: Constraint[] = data.data.map((rule: any) => ({
           id: rule.id,
-          type: rule.rule_type,
-          category: rule.rule_parameters?.category || 'GENERAL',
-          name: rule.rule_name,
-          description: rule.description,
-          weight: rule.weight,
-          enabled: rule.is_active
+          type: (rule.rule_type || '').toUpperCase() === 'HARD' ? 'HARD' : 'SOFT' as 'HARD' | 'SOFT',
+          category: deriveCategory(rule.rule_name),
+          name: formatConstraintName(rule.rule_name),
+          description: rule.description || '',
+          weight: parseFloat(rule.weight) || 0,
+          enabled: rule.is_active ?? true
         }));
         setConstraints(mappedConstraints);
       } else {
+        console.warn('No constraints found in DB, using defaults. API response:', data);
         setConstraints(DEFAULT_CONSTRAINTS);
       }
     } catch (error) {
+      console.error('Error fetching constraints:', error);
       setConstraints(DEFAULT_CONSTRAINTS);
     } finally {
       setConstraintsLoading(false);
@@ -690,7 +721,10 @@ export default function HybridSchedulerPage() {
                       className="mt-1 w-4 h-4 text-[#4D869C] rounded"
                     />
                     <div className="flex-1">
-                      <div className="text-sm font-medium text-gray-900">{constraint.name}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-900">{constraint.name}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-medium">{constraint.category}</span>
+                      </div>
                       <div className="text-xs text-gray-500">{constraint.description}</div>
                       {constraint.type === 'SOFT' && (
                         <div className="text-xs text-blue-600 mt-1">Weight: {constraint.weight}</div>

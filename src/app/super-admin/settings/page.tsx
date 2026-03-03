@@ -49,10 +49,18 @@ const SettingsPage: React.FC = () => {
         fetchSettings();
     }, []);
 
+    const getAuthHeaders = (): Record<string, string> => {
+        if (typeof window === 'undefined') return {};
+        const userData = localStorage.getItem('user');
+        if (!userData) return {};
+        const authToken = Buffer.from(userData).toString('base64');
+        return { 'Authorization': `Bearer ${authToken}` };
+    };
+
     const fetchSettings = async () => {
         try {
             setLoading(true);
-            const res = await fetch('/api/super-admin/settings');
+            const res = await fetch('/api/super-admin/settings', { headers: getAuthHeaders() });
             if (res.ok) {
                 const data = await res.json();
                 if (data.settings) {
@@ -77,7 +85,7 @@ const SettingsPage: React.FC = () => {
         try {
             const res = await fetch('/api/super-admin/settings', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
                 body: JSON.stringify({ settings })
             });
 

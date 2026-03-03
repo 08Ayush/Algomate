@@ -49,10 +49,18 @@ const CalendarsPage: React.FC = () => {
         fetchCalendars();
     }, []);
 
+    const getAuthHeaders = (): Record<string, string> => {
+        if (typeof window === 'undefined') return {};
+        const userData = localStorage.getItem('user');
+        if (!userData) return {};
+        const authToken = Buffer.from(userData).toString('base64');
+        return { 'Authorization': `Bearer ${authToken}` };
+    };
+
     const fetchCalendars = async () => {
         try {
             setLoading(true);
-            const res = await fetch('/api/super-admin/calendars');
+            const res = await fetch('/api/super-admin/calendars', { headers: getAuthHeaders() });
             if (res.ok) {
                 const data = await res.json();
                 setCalendars(data.calendars || []);
@@ -76,7 +84,7 @@ const CalendarsPage: React.FC = () => {
         try {
             const res = await fetch('/api/super-admin/calendars', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
                 body: JSON.stringify(newCalendar)
             });
 
@@ -113,7 +121,7 @@ const CalendarsPage: React.FC = () => {
         try {
             const res = await fetch(`/api/super-admin/calendars/${editingCalendar.id}`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
                 body: JSON.stringify(newCalendar)
             });
 
@@ -145,7 +153,8 @@ const CalendarsPage: React.FC = () => {
             onConfirm: async () => {
                 try {
                     const res = await fetch(`/api/super-admin/calendars/${id}`, {
-                        method: 'DELETE'
+                        method: 'DELETE',
+                        headers: getAuthHeaders()
                     });
 
                     if (res.ok) {

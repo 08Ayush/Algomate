@@ -4,7 +4,7 @@ import { Notification, NotificationData, NotificationType, ContentType, Priority
 import { Database } from '@/shared/database';
 
 export class SupabaseNotificationRepository implements INotificationRepository {
-    constructor(private readonly db: SupabaseClient<Database>) { }
+    constructor(private readonly db: SupabaseClient) { }
 
     private mapToEntity(row: any): Notification {
         // Handle missing columns gracefully for backwards compatibility
@@ -43,7 +43,7 @@ export class SupabaseNotificationRepository implements INotificationRepository {
         return this.mapToEntity(data);
     }
 
-    private static readonly NOTIFICATION_COLUMNS = 'id, recipient_id, sender_id, title, message, type, is_read, batch_id, department_id, timetable_id, content_type, content_id, priority, action_url, expires_at, read_at, created_at';
+    private static readonly NOTIFICATION_COLUMNS = 'id, recipient_id, sender_id, title, message, type, is_read, batch_id, timetable_id, content_type, content_id, priority, action_url, expires_at, read_at, created_at';
 
     async findByUser(userId: string, limit = 50, offset = 0): Promise<Notification[]> {
         const { data, error } = await this.db
@@ -54,7 +54,7 @@ export class SupabaseNotificationRepository implements INotificationRepository {
             .range(offset, offset + limit - 1);
 
         if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+        return data.map((row: any) => this.mapToEntity(row));
     }
 
     async findUnreadByUser(userId: string, limit = 50): Promise<Notification[]> {
@@ -67,7 +67,7 @@ export class SupabaseNotificationRepository implements INotificationRepository {
             .limit(limit);
 
         if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+        return data.map((row: any) => this.mapToEntity(row));
     }
 
     async create(notification: NotificationData): Promise<Notification> {
@@ -99,7 +99,7 @@ export class SupabaseNotificationRepository implements INotificationRepository {
     async createMany(notifications: NotificationData[]): Promise<Notification[]> {
         const { data, error } = await this.db
             .from('notifications' as any)
-            .insert(notifications.map(n => ({
+            .insert(notifications.map((n: NotificationData) => ({
                 recipient_id: n.userId,
                 sender_id: n.senderId || null,
                 title: n.title,
@@ -118,7 +118,7 @@ export class SupabaseNotificationRepository implements INotificationRepository {
             .select();
 
         if (error) throw error;
-        return (data as any[]).map(row => this.mapToEntity(row));
+        return (data as any[]).map((row: any) => this.mapToEntity(row));
     }
 
     async markAsRead(id: string): Promise<Notification> {
@@ -218,7 +218,7 @@ export class SupabaseNotificationRepository implements INotificationRepository {
             .limit(limit);
 
         if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+        return data.map((row: any) => this.mapToEntity(row));
     }
 
     async findByPriority(userId: string, priority: Priority, limit = 50): Promise<Notification[]> {
@@ -231,6 +231,6 @@ export class SupabaseNotificationRepository implements INotificationRepository {
             .limit(limit);
 
         if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+        return data.map((row: any) => this.mapToEntity(row));
     }
 }

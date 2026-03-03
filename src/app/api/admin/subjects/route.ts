@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/shared/database/server';
 import { asyncHandler } from '@/shared/middleware/error-handler';
 import { requireAuth } from '@/lib/auth';
+import { getPool } from '@/lib/db';
 
 export const GET = asyncHandler(async (request: NextRequest) => {
   const user = requireAuth(request);
@@ -29,25 +30,30 @@ export const GET = asyncHandler(async (request: NextRequest) => {
   const subjects = await withCacheAside(
     { key: cacheKey, ttl: 1800 },
     async () => {
-            let query = supabase
-        .from('subjects')
-        .select(`
-          *,
-          departments (id, name, code)
-        `)
-        .eq('college_id', collegeId);
+      const pool = getPool();
+      const params: any[] = [collegeId];
+      let sql = `
+        SELECT s.*, CASE WHEN d.id IS NOT NULL
+          THEN json_build_object('id', d.id, 'name', d.name, 'code', d.code)
+          ELSE NULL END AS departments
+        FROM subjects s
+        LEFT JOIN departments d ON d.id = s.department_id
+        WHERE s.college_id = $1
+      `;
 
       if (departmentId) {
-        query = query.eq('department_id', departmentId);
+        sql += ` AND s.department_id = $${params.length + 1}`;
+        params.push(departmentId);
       }
 
       if (semester) {
-        query = query.eq('semester', semester);
+        sql += ` AND s.semester = $${params.length + 1}`;
+        params.push(semester);
       }
 
-      const { data, error } = await query.order('name');
-      if (error) throw new Error(error.message);
-      return data || [];
+      sql += ' ORDER BY s.name';
+      const { rows } = await pool.query(sql, params);
+      return rows;
     }
   );
 

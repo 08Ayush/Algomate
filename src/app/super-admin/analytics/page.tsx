@@ -51,14 +51,23 @@ const AnalyticsPage: React.FC = () => {
         fetchStats();
     }, []);
 
+    const getAuthHeaders = (): Record<string, string> => {
+        if (typeof window === 'undefined') return {};
+        const userData = localStorage.getItem('user');
+        if (!userData) return {};
+        const authToken = Buffer.from(userData).toString('base64');
+        return { 'Authorization': `Bearer ${authToken}` };
+    };
+
     const fetchStats = async () => {
         try {
             setLoading(true);
+            const headers = getAuthHeaders();
             const [collegeRes, adminRes, demoRes, tokenRes] = await Promise.all([
-                fetch('/api/super-admin/colleges').catch(() => ({ ok: false, json: () => Promise.resolve({ colleges: [] }) } as Response)),
-                fetch('/api/super-admin/college-admins').catch(() => ({ ok: false, json: () => Promise.resolve({ admins: [] }) } as Response)),
-                fetch('/api/super-admin/demo-requests').catch(() => ({ ok: false, json: () => Promise.resolve({ requests: [] }) } as Response)),
-                fetch('/api/super-admin/registration-tokens').catch(() => ({ ok: false, json: () => Promise.resolve({ tokens: [] }) } as Response))
+                fetch('/api/super-admin/colleges', { headers }).catch(() => ({ ok: false, json: () => Promise.resolve({ colleges: [] }) } as Response)),
+                fetch('/api/super-admin/college-admins', { headers }).catch(() => ({ ok: false, json: () => Promise.resolve({ admins: [] }) } as Response)),
+                fetch('/api/super-admin/demo-requests', { headers }).catch(() => ({ ok: false, json: () => Promise.resolve({ requests: [] }) } as Response)),
+                fetch('/api/super-admin/registration-tokens', { headers }).catch(() => ({ ok: false, json: () => Promise.resolve({ tokens: [] }) } as Response))
             ]);
 
             const [collegeData, adminData, demoData, tokenData] = await Promise.all([

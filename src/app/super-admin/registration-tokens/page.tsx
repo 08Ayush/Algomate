@@ -49,10 +49,18 @@ const RegistrationTokensPage: React.FC = () => {
     fetchTokens();
   }, []);
 
+  const getAuthHeaders = (): Record<string, string> => {
+    if (typeof window === 'undefined') return {};
+    const userData = localStorage.getItem('user');
+    if (!userData) return {};
+    const authToken = Buffer.from(userData).toString('base64');
+    return { 'Authorization': `Bearer ${authToken}` };
+  };
+
   const fetchTokens = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/super-admin/registration-tokens');
+      const res = await fetch('/api/super-admin/registration-tokens', { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         const mapped = (data.tokens || []).map((t: any) => ({
@@ -83,7 +91,7 @@ const RegistrationTokensPage: React.FC = () => {
     try {
       const res = await fetch('/api/super-admin/registration-tokens', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify(newToken)
       });
 
@@ -126,7 +134,7 @@ const RegistrationTokensPage: React.FC = () => {
       confirmText: 'Delete',
       onConfirm: async () => {
         try {
-          const res = await fetch(`/api/super-admin/registration-tokens/${token.id}`, { method: 'DELETE' });
+          const res = await fetch(`/api/super-admin/registration-tokens/${token.id}`, { method: 'DELETE', headers: getAuthHeaders() });
           if (res.ok) {
             toast.success('Token deleted');
             fetchTokens();
@@ -145,7 +153,7 @@ const RegistrationTokensPage: React.FC = () => {
     try {
       const res = await fetch(`/api/super-admin/registration-tokens/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'reactivate', expiresInDays: 7 })
       });
 

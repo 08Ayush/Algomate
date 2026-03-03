@@ -69,9 +69,14 @@ export default function StudentAssignments() {
     const fetchAssignments = async (user: any) => {
         try {
             setLoading(true);
+            const token = btoa(JSON.stringify({
+                id: user.id, user_id: user.id, role: user.role,
+                college_id: user.college_id, department_id: user.department_id
+            }));
+            const authHeaders = { 'Authorization': `Bearer ${token}` };
 
             // First, get batch info from dashboard
-            const dashRes = await fetch(`/api/student/dashboard?userId=${user.id}&role=student`);
+            const dashRes = await fetch(`/api/student/dashboard?userId=${user.id}&role=student`, { headers: authHeaders });
             if (!dashRes.ok) {
                 throw new Error('Failed to get batch info');
             }
@@ -85,14 +90,9 @@ export default function StudentAssignments() {
                 return;
             }
 
-            // Create auth token for the API
-            const authToken = Buffer.from(JSON.stringify({ user_id: user.id })).toString('base64');
-
             // Fetch assignments for student's batch
             const response = await fetch(`/api/student/assignments?batchId=${batchId}`, {
-                headers: {
-                    'Authorization': `Bearer ${authToken}`
-                }
+                headers: authHeaders
             });
 
             if (response.ok) {

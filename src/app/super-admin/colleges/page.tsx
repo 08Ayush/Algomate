@@ -80,10 +80,18 @@ const CollegesPage: React.FC = () => {
         fetchColleges();
     }, []);
 
+    const getAuthHeaders = (): Record<string, string> => {
+        if (typeof window === 'undefined') return {};
+        const userData = localStorage.getItem('user');
+        if (!userData) return {};
+        const authToken = Buffer.from(userData).toString('base64');
+        return { 'Authorization': `Bearer ${authToken}` };
+    };
+
     const fetchColleges = async () => {
         try {
             setLoading(true);
-            const res = await fetch('/api/super-admin/colleges');
+            const res = await fetch('/api/super-admin/colleges', { headers: getAuthHeaders() });
             if (res.ok) {
                 const data = await res.json();
                 const mapped = (data.colleges || []).map((c: any) => ({
@@ -120,7 +128,7 @@ const CollegesPage: React.FC = () => {
         try {
             const res = await fetch('/api/super-admin/colleges', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     name: newCollege.name,
                     code: newCollege.code,
@@ -173,7 +181,7 @@ const CollegesPage: React.FC = () => {
 
         // Fetch full details
         try {
-            const res = await fetch(`/api/super-admin/colleges/${college.id}`);
+            const res = await fetch(`/api/super-admin/colleges/${college.id}`, { headers: getAuthHeaders() });
             if (res.ok) {
                 const data = await res.json();
                 const full = data.college;
@@ -203,7 +211,7 @@ const CollegesPage: React.FC = () => {
         try {
             const res = await fetch(`/api/super-admin/colleges/${editingCollege.id}`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     name: newCollege.name,
                     code: newCollege.code,
@@ -238,7 +246,7 @@ const CollegesPage: React.FC = () => {
     const handleDeleteCollege = async () => {
         if (!deletingCollege) return;
         try {
-            const res = await fetch(`/api/super-admin/colleges/${deletingCollege.id}`, { method: 'DELETE' });
+            const res = await fetch(`/api/super-admin/colleges/${deletingCollege.id}`, { method: 'DELETE', headers: getAuthHeaders() });
             if (res.ok) {
                 toast.success('College deleted successfully');
                 setShowDeleteModal(false);

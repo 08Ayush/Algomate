@@ -4,6 +4,7 @@ import { createClient } from '@/shared/database/server';
 import { asyncHandler } from '@/shared/middleware/error-handler';
 import { requireAuth } from '@/lib/auth';
 import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
+import { getPool } from '@/lib/db';
 
 export const GET = asyncHandler(async (request: NextRequest) => {
   const user = requireAuth(request);
@@ -33,24 +34,37 @@ export const GET = asyncHandler(async (request: NextRequest) => {
   const result = await withCacheAside(
     { key: cacheKey, ttl: 1800 },
     async () => {
-            let query = supabase
-        .from('batches')
-        .select(`
-          *,
-          departments (id, name, code),
-          courses (id, title, code)
-        `, { count: 'exact' })
-        .eq('college_id', collegeId)
-        .eq('is_active', true);
+      const pool = getPool();
+      const countResult = await pool.query(
+        `SELECT COUNT(*) FROM batches WHERE college_id = $1 AND is_active = true`,
+        [collegeId]
+      );
+      const count = parseInt(countResult.rows[0].count, 10);
+
+      const params: any[] = [collegeId];
+      let sql = `
+        SELECT b.*,
+          CASE WHEN d.id IS NOT NULL
+            THEN json_build_object('id', d.id, 'name', d.name, 'code', d.code)
+            ELSE NULL END AS departments,
+          CASE WHEN c.id IS NOT NULL
+            THEN json_build_object('id', c.id, 'title', c.title, 'code', c.code)
+            ELSE NULL END AS courses
+        FROM batches b
+        LEFT JOIN departments d ON d.id = b.department_id
+        LEFT JOIN courses c ON c.id = b.course_id
+        WHERE b.college_id = $1 AND b.is_active = true
+        ORDER BY b.created_at DESC
+      `;
 
       if (isPaginated && page && limit) {
-        const { from, to } = getPaginationRange(page, limit);
-        query = query.range(from, to);
+        const offset = (page - 1) * limit;
+        sql += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+        params.push(limit, offset);
       }
 
-      const { data, count, error } = await query.order('created_at', { ascending: false });
-      if (error) throw new Error(error.message);
-      return { batches: data || [], count: count || 0 };
+      const { rows } = await pool.query(sql, params);
+      return { batches: rows, count };
     }
   );
 

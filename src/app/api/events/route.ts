@@ -3,35 +3,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { notifyEventCreated } from '@/lib/notificationService';
 import { requireAuth } from '@/lib/auth';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-
-// Use service role key for server-side operations (bypasses RLS)
-function mask(val?: string) {
-  if (!val) return '<<missing>>';
-  try { return val.slice(0, 8) + '...' + val.slice(-4); } catch { return '<<masked>>'; }
-}
-
-function checkSupabaseConfig() {
-  if (!supabaseUrl || !supabaseServiceKey) {
-    console.error('Supabase config missing:', {
-      SUPABASE_URL: mask(supabaseUrl),
-      SUPABASE_SERVICE_ROLE_KEY: mask(supabaseServiceKey)
-    });
-    return false;
-  }
-  return true;
-}
-
 // GET - Fetch all events or single event by ID
 export async function GET(request: NextRequest) {
   try {
     const user = requireAuth(request);
     if (user instanceof NextResponse) return user;
 
-    if (!checkSupabaseConfig()) {
-      return NextResponse.json({ error: 'Supabase configuration missing on server.' }, { status: 500 });
-    }
     const { searchParams } = new URL(request.url);
     const eventId = searchParams.get('id');
     const status = searchParams.get('status');
@@ -168,9 +145,6 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     console.log('Received event creation request:', JSON.stringify(body, null, 2));
-    if (!checkSupabaseConfig()) {
-      return NextResponse.json({ error: 'Supabase configuration missing on server.' }, { status: 500 });
-    }
 
     const {
       title,
@@ -297,9 +271,6 @@ export async function PUT(request: NextRequest) {
     const user = requireAuth(request);
     if (user instanceof NextResponse) return user;
 
-    if (!checkSupabaseConfig()) {
-      return NextResponse.json({ error: 'Supabase configuration missing on server.' }, { status: 500 });
-    }
     const body = await request.json();
     console.log('Received event update request:', JSON.stringify(body, null, 2));
 
@@ -363,10 +334,6 @@ export async function DELETE(request: NextRequest) {
   try {
     const user = requireAuth(request);
     if (user instanceof NextResponse) return user;
-
-    if (!checkSupabaseConfig()) {
-      return NextResponse.json({ error: 'Supabase configuration missing on server.' }, { status: 500 });
-    }
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');

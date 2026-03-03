@@ -1,6 +1,7 @@
 import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
+import { getPool } from '@/lib/db';
 
 // Helper function to get user from Authorization header
 async function getAuthenticatedUser(request: NextRequest, requireAdmin = false) {
@@ -66,67 +67,75 @@ export async function GET(request: NextRequest) {
       facultyId
     });
 
-    // Use !inner joins to filter at DB level by college_id (avoids full table scan)
-    let query = supabase
-      .from('faculty_qualified_subjects')
-      .select(`
-        id,
-        faculty_id,
-        subject_id,
-        proficiency_level,
-        preference_score,
-        teaching_load_weight,
-        is_primary_teacher,
-        can_handle_lab,
-        can_handle_tutorial,
-        created_at,
-        faculty:users!faculty_qualified_subjects_faculty_id_fkey!inner(
-          id,
-          first_name,
-          last_name,
-          email,
-          course_id,
-          college_id,
-          department_id
-        ),
-        subject:subjects!inner(
-          id,
-          name,
-          code,
-          subject_type,
-          semester,
-          credits_per_week,
-          requires_lab,
-          course_id,
-          college_id,
-          department_id
-        )
-      `)
-      .eq('faculty.college_id', user.college_id)
-      .eq('subject.college_id', user.college_id)
-      .order('created_at', { ascending: false });
+    // Use raw SQL with JOINs — compat layer doesn't support embedded relations
+    const pool = getPool();
+    const params: unknown[] = [user.college_id];
+    let paramIdx = 1;
+
+    let sql = `
+      SELECT
+        fqs.id,
+        fqs.faculty_id,
+        fqs.subject_id,
+        fqs.proficiency_level,
+        fqs.preference_score,
+        fqs.teaching_load_weight,
+        fqs.is_primary_teacher,
+        fqs.can_handle_lab,
+        fqs.can_handle_tutorial,
+        fqs.created_at,
+        json_build_object(
+          'id', u.id,
+          'first_name', u.first_name,
+          'last_name', u.last_name,
+          'email', u.email,
+          'course_id', u.course_id,
+          'college_id', u.college_id,
+          'department_id', u.department_id
+        ) AS faculty,
+        json_build_object(
+          'id', s.id,
+          'name', s.name,
+          'code', s.code,
+          'subject_type', s.subject_type,
+          'semester', s.semester,
+          'credits_per_week', s.credits_per_week,
+          'requires_lab', s.requires_lab,
+          'course_id', s.course_id,
+          'college_id', s.college_id,
+          'department_id', s.department_id
+        ) AS subject
+      FROM faculty_qualified_subjects fqs
+      INNER JOIN users u ON u.id = fqs.faculty_id
+      INNER JOIN subjects s ON s.id = fqs.subject_id
+      WHERE u.college_id = $${paramIdx}
+        AND s.college_id = $${paramIdx}
+    `;
 
     if (facultyId) {
-      query = query.eq('faculty_id', facultyId);
+      paramIdx++;
+      params.push(facultyId);
+      sql += ` AND fqs.faculty_id = $${paramIdx}`;
+    } else if (user.role === 'faculty' && user.faculty_type !== 'creator' && user.faculty_type !== 'publisher') {
+      // Regular faculty (general/guest) see only their own qualifications
+      // Creator and publisher faculty see all qualifications in their college
+      paramIdx++;
+      params.push(user.id);
+      sql += ` AND fqs.faculty_id = $${paramIdx}`;
     }
 
-    // Filter by department at DB level for non-admin users
-    if (user.role !== 'admin' && user.role !== 'college_admin' && user.department_id) {
-      query = query.eq('faculty.department_id', user.department_id);
+    // Admins/college_admins see the whole college; everyone else is scoped to their department
+    const isCollegeWide = user.role === 'admin' || user.role === 'college_admin';
+    if (!isCollegeWide && user.department_id) {
+      paramIdx++;
+      params.push(user.department_id);
+      sql += ` AND u.department_id = $${paramIdx}`;
     }
 
-    const { data, error } = await query;
+    sql += ` ORDER BY fqs.created_at DESC`;
 
-    if (error) {
-      console.error('❌ Error fetching qualifications:', error);
-      return NextResponse.json({
-        success: false,
-        error: 'Failed to fetch qualifications',
-        details: error.message
-      }, { status: 500 });
-    }
-
-    const filteredData = data || [];
+    const result = await pool.query(sql, params);
+    const filteredData = result.rows;
     if (user.role !== 'admin' && user.role !== 'college_admin' && user.department_id) {
       console.log(`🔍 Filtered to ${filteredData.length} qualifications for department ${user.department_id}`);
     }
@@ -145,6 +154,42 @@ export async function GET(request: NextRequest) {
       error: 'Internal server error',
       details: error.message
     }, { status: 500 });
+  }
+}
+
+// PATCH: Update faculty-subject qualification (toggle is_primary_teacher)
+export async function PATCH(request: NextRequest) {
+  try {
+    const user = requireAuth(request);
+    if (user instanceof NextResponse) return user;
+
+    const body = await request.json();
+    const { qualification_id, is_primary_teacher } = body;
+
+    if (!qualification_id || is_primary_teacher === undefined) {
+      return NextResponse.json({ success: false, error: 'qualification_id and is_primary_teacher are required' }, { status: 400 });
+    }
+
+    const pool = getPool();
+    // Verify the qualification belongs to this college (and to the faculty if role=faculty)
+    const checkSql = user.role === 'faculty'
+      ? `SELECT fqs.id FROM faculty_qualified_subjects fqs JOIN users u ON u.id = fqs.faculty_id WHERE fqs.id = $1 AND u.college_id = $2 AND fqs.faculty_id = $3`
+      : `SELECT fqs.id FROM faculty_qualified_subjects fqs JOIN users u ON u.id = fqs.faculty_id WHERE fqs.id = $1 AND u.college_id = $2`;
+    const checkParams = user.role === 'faculty' ? [qualification_id, user.college_id, user.id] : [qualification_id, user.college_id];
+    const check = await pool.query(checkSql, checkParams);
+    if (check.rows.length === 0) {
+      return NextResponse.json({ success: false, error: 'Qualification not found or access denied' }, { status: 404 });
+    }
+
+    await pool.query(
+      `UPDATE faculty_qualified_subjects SET is_primary_teacher = $1, updated_at = NOW() WHERE id = $2`,
+      [is_primary_teacher, qualification_id]
+    );
+
+    return NextResponse.json({ success: true, message: 'Qualification updated' });
+  } catch (error: any) {
+    console.error('❌ Exception in PATCH /api/faculty/qualifications:', error);
+    return NextResponse.json({ success: false, error: 'Internal server error', details: error.message }, { status: 500 });
   }
 }
 
@@ -264,26 +309,29 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // Fetch the complete record with relations
-    const { data: completeData } = await supabase
-      .from('faculty_qualified_subjects')
-      .select(`
-        *,
-        faculty:users(
-          id,
-          first_name,
-          last_name,
-          email
-        ),
-        subject:subjects(
-          id,
-          name,
-          code,
-          semester
-        )
-      `)
-      .eq('id', data.id)
-      .single();
+    // Fetch the complete record with relations using raw SQL
+    const pool = getPool();
+    const completeResult = await pool.query(`
+      SELECT
+        fqs.*,
+        json_build_object(
+          'id', u.id,
+          'first_name', u.first_name,
+          'last_name', u.last_name,
+          'email', u.email
+        ) AS faculty,
+        json_build_object(
+          'id', s.id,
+          'name', s.name,
+          'code', s.code,
+          'semester', s.semester
+        ) AS subject
+      FROM faculty_qualified_subjects fqs
+      INNER JOIN users u ON u.id = fqs.faculty_id
+      INNER JOIN subjects s ON s.id = fqs.subject_id
+      WHERE fqs.id = $1
+    `, [data.id]);
+    const completeData = completeResult.rows[0] || null;
 
     console.log('✅ Qualification added successfully');
 

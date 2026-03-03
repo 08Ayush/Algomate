@@ -23,6 +23,8 @@ interface Qualification {
     proficiency_level: number;
     years_experience: number;
     is_preferred: boolean;
+    subject_type?: string;
+    can_handle_lab?: boolean;
 }
 
 interface TimePreference {
@@ -77,28 +79,52 @@ const PreferencesPage: React.FC = () => {
                 department_id: userData.department_id
             }));
 
-            // Fetch qualifications
-            const qualRes = await fetch('/api/faculty/qualifications', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const qualData = await qualRes.json();
+            // Parallel-fetch qualifications, subjects, and preferences
+            const [qualRes, subjectsRes, prefRes] = await Promise.all([
+                fetch('/api/faculty/qualifications', { headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch(`/api/admin/subjects?department_id=${userData.department_id}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch('/api/faculty/preferences', { headers: { 'Authorization': `Bearer ${token}` } })
+            ]);
+            const [qualData, subjectsData, prefData] = await Promise.all([
+                qualRes.json(), subjectsRes.json(), prefRes.json()
+            ]);
+
+            const subjectsList = subjectsData.success ? (subjectsData.subjects || []) : [];
+            setAvailableSubjects(subjectsList);
+
             if (qualData.success) {
-                setQualifications(qualData.qualifications || []);
+                // Build a lookup map so we can fall back to subjects-list data if the
+                // json_build_object inside the qualifications query returns null names.
+                const subjectMap = new Map<string, any>(subjectsList.map((s: any) => [s.id, s]));
+                setQualifications((qualData.qualifications || []).map((q: any) => {
+                    const fb = subjectMap.get(q.subject_id) || {};
+                    return {
+                        id: q.id,
+                        subject_id: q.subject_id,
+                        subject_name: q.subject?.name || fb.name || '—',
+                        subject_code: q.subject?.code || fb.code || '',
+                        proficiency_level: q.proficiency_level || 1,
+                        years_experience: 0,
+                        is_preferred: q.is_primary_teacher || false,
+                        subject_type: q.subject?.subject_type || fb.subject_type || '',
+                        can_handle_lab: q.can_handle_lab || false
+                    };
+                }));
             }
 
-            // Fetch available subjects
-            const subjectsRes = await fetch(`/api/admin/subjects?department_id=${userData.department_id}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const subjectsData = await subjectsRes.json();
-            if (subjectsData.success || subjectsData.data) {
-                setAvailableSubjects(subjectsData.data || subjectsData.subjects || []);
+            if (prefData.success && prefData.settings) {
+                if (prefData.settings.max_hours_per_day) setMaxHoursPerDay(prefData.settings.max_hours_per_day);
+                if (prefData.settings.prefer_consecutive !== undefined) setPreferredConsecutive(prefData.settings.prefer_consecutive);
+                if (prefData.settings.time_preferences) {
+                    setTimePreferences(prefData.settings.time_preferences);
+                    return; // skip default init
+                }
             }
 
-            // Initialize time preferences
+            // Default time preferences if none saved
             const defaultPrefs = days.map(day => ({
                 day,
-                preferred_slots: timeSlots.slice(0, 4) // Default to morning slots
+                preferred_slots: timeSlots.slice(0, 4)
             }));
             setTimePreferences(defaultPrefs);
 
@@ -138,8 +164,7 @@ const PreferencesPage: React.FC = () => {
                     faculty_id: user.id,
                     subject_id: selectedSubjectId,
                     proficiency_level: proficiency,
-                    years_experience: experience,
-                    is_preferred: true
+                    is_primary_teacher: false
                 })
             });
 
@@ -182,7 +207,7 @@ const PreferencesPage: React.FC = () => {
                 },
                 body: JSON.stringify({
                     qualification_id: qualId,
-                    is_preferred: !isPreferred
+                    is_primary_teacher: !isPreferred
                 })
             });
 
@@ -316,14 +341,16 @@ const PreferencesPage: React.FC = () => {
                                         : 'border-gray-200 bg-gray-50'
                                         }`}
                                 >
-                                    <div className="flex items-start justify-between mb-3">
-                                        <div>
-                                            <h3 className="font-bold text-gray-900">{qual.subject_name}</h3>
-                                            <p className="text-sm text-gray-500">{qual.subject_code}</p>
+                                    <div className="flex items-start justify-between mb-2">
+                                        <div className="flex-1 min-w-0 pr-2">
+                                            <h3 className="font-bold text-gray-900 text-base leading-tight truncate">
+                                                {qual.subject_name}
+                                            </h3>
+                                            <p className="text-xs text-gray-500 font-mono mt-0.5">{qual.subject_code}</p>
                                         </div>
                                         <button
                                             onClick={() => togglePreferredSubject(qual.id, qual.is_preferred)}
-                                            className={`p-2 rounded-lg transition-all ${qual.is_preferred
+                                            className={`flex-shrink-0 p-2 rounded-lg transition-all ${qual.is_preferred
                                                 ? 'text-yellow-500 bg-yellow-50'
                                                 : 'text-gray-400 hover:bg-gray-100'
                                                 }`}
@@ -332,13 +359,38 @@ const PreferencesPage: React.FC = () => {
                                             <Star size={18} fill={qual.is_preferred ? 'currentColor' : 'none'} />
                                         </button>
                                     </div>
-                                    <div className="flex items-center gap-4 text-sm">
-                                        <span className="text-gray-600">
-                                            Level: <strong className="text-[#4D869C]">{qual.proficiency_level}/5</strong>
-                                        </span>
-                                        <span className="text-gray-600">
-                                            Exp: <strong>{qual.years_experience} yrs</strong>
-                                        </span>
+                                    <div className="flex flex-wrap gap-1.5 mb-2">
+                                        {qual.subject_type && (
+                                            <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full font-medium">
+                                                {qual.subject_type}
+                                            </span>
+                                        )}
+                                        {qual.can_handle_lab && (
+                                            <span className="text-xs px-2 py-0.5 bg-purple-50 text-purple-700 rounded-full font-medium">
+                                                Lab Capable
+                                            </span>
+                                        )}
+                                        {qual.is_preferred && (
+                                            <span className="text-xs px-2 py-0.5 bg-yellow-50 text-yellow-700 rounded-full font-medium">
+                                                ★ Preferred
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-1 mt-1">
+                                        <span className="text-xs text-gray-500">Proficiency:</span>
+                                        <div className="flex gap-0.5">
+                                            {Array.from({ length: 10 }, (_, i) => (
+                                                <div
+                                                    key={i}
+                                                    className={`h-1.5 w-3 rounded-full ${
+                                                        i < qual.proficiency_level
+                                                            ? 'bg-[#4D869C]'
+                                                            : 'bg-gray-200'
+                                                    }`}
+                                                />
+                                            ))}
+                                        </div>
+                                        <span className="text-xs font-semibold text-[#4D869C] ml-1">{qual.proficiency_level}/10</span>
                                     </div>
                                 </motion.div>
                             ))}

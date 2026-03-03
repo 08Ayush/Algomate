@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { asyncHandler } from '@/shared/middleware/error-handler';
 import { createClient } from '@/shared/database/server';
 import bcrypt from 'bcryptjs';
+import { getPool } from '@/lib/db';
 import { withCacheAside, invalidateCache } from '@/shared/cache/cache-helper';
 import { redisCache } from '@/shared/cache/redis-cache';
 import { requireAuth } from '@/lib/auth';
@@ -26,64 +27,62 @@ export const GET = asyncHandler(
       await invalidateCache(cacheKey);
     }
 
+    const pool = getPool();
     const students = await withCacheAside(
       { key: cacheKey, ttl: 1800 },
       async () => {
-        // Step 1: Fetch students with dept + course joins
-        const { data, error } = await supabase
-          .from('users')
-          .select(`
-            id,
-            first_name,
-            last_name,
-            email,
-            college_uid,
-            phone,
-            student_id,
-            course_id,
-            department_id,
-            current_semester,
-            admission_year,
-            is_active,
-            created_at,
-            courses (id, title, code),
-            departments (id, name, code)
-          `)
-          .eq('college_id', targetCollegeId)
-          .eq('role', 'student')
-          .order('created_at', { ascending: false });
+        // Fetch students with dept + course joins using raw SQL
+        const usersResult = await pool.query(`
+          SELECT
+            u.id, u.first_name, u.last_name, u.email, u.college_uid, u.phone,
+            u.student_id, u.course_id, u.department_id, u.current_semester,
+            u.admission_year, u.is_active, u.created_at,
+            CASE WHEN u.course_id IS NOT NULL
+              THEN json_build_object('id', c.id, 'title', c.title, 'code', c.code)
+              ELSE NULL END AS courses,
+            CASE WHEN u.department_id IS NOT NULL
+              THEN json_build_object('id', d.id, 'name', d.name, 'code', d.code)
+              ELSE NULL END AS departments
+          FROM users u
+          LEFT JOIN courses c ON c.id = u.course_id
+          LEFT JOIN departments d ON d.id = u.department_id
+          WHERE u.college_id = $1 AND u.role = 'student'
+          ORDER BY u.created_at DESC
+        `, [targetCollegeId]);
 
-        if (error) throw error;
+        const data = usersResult.rows;
         if (!data || data.length === 0) return [];
 
-        // Step 2: Fetch active batch enrollments for all students in one query
+        // Fetch active batch enrollments for all students in one query
         const studentIds = data.map((s: any) => s.id);
-        const { data: enrollments } = await supabase
-          .from('student_batch_enrollment' as any)
-          .select('student_id, batch_id, is_active, batches(id, name, semester, section)')
-          .in('student_id', studentIds)
-          .eq('is_active', true);
+        const enrollResult = await pool.query(`
+          SELECT
+            sbe.student_id, sbe.batch_id,
+            CASE WHEN b.id IS NOT NULL
+              THEN json_build_object('id', b.id, 'name', b.name, 'semester', b.semester, 'section', b.section)
+              ELSE NULL END AS batches
+          FROM student_batch_enrollment sbe
+          LEFT JOIN batches b ON b.id = sbe.batch_id
+          WHERE sbe.student_id = ANY($1) AND sbe.is_active = true
+        `, [studentIds]);
 
         // Build lookup: student_id → batch info
         const batchByStudent: Record<string, any> = {};
-        if (enrollments) {
-          for (const e of enrollments) {
-            if (e.student_id && e.batches) {
-              batchByStudent[e.student_id] = {
-                ...(e.batches as any),
-                batch_id: e.batch_id
-              };
-            }
+        for (const e of enrollResult.rows) {
+          if (e.student_id && e.batches) {
+            batchByStudent[e.student_id] = {
+              ...e.batches,
+              batch_id: e.batch_id
+            };
           }
         }
 
-        // Step 3: Merge batch into each student
+        // Merge batch into each student
         return data.map((s: any) => ({
           ...s,
           batch_id: batchByStudent[s.id]?.batch_id || null,
           batch: batchByStudent[s.id] || null
         }));
-        return data || [];
       }
     );
 

@@ -1,9 +1,7 @@
 import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRoles } from '@/lib/auth';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+import { getPool } from '@/lib/db';
 
 // GET - Fetch all registration tokens (Super Admin only)
 export async function GET(request: NextRequest) {
@@ -11,26 +9,23 @@ export async function GET(request: NextRequest) {
     const user = requireRoles(request, ['super_admin']);
     if (user instanceof NextResponse) return user;
 
-    const { data: tokens, error } = await supabase
-      .from('registration_tokens')
-      .select(`
-        *,
-        demo_request:demo_requests(
-          institution_name,
-          contact_name,
-          email,
-          phone
-        )
-      `)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching tokens:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch registration tokens' },
-        { status: 500 }
-      );
-    }
+    const pool = getPool();
+    const { rows: tokens } = await pool.query(`
+      SELECT
+        rt.*,
+        CASE WHEN dr.id IS NOT NULL
+          THEN json_build_object(
+            'institution_name', dr.institution_name,
+            'contact_name', dr.contact_name,
+            'email', dr.email,
+            'phone', dr.phone
+          )
+          ELSE NULL
+        END AS demo_request
+      FROM registration_tokens rt
+      LEFT JOIN demo_requests dr ON dr.id = rt.demo_request_id
+      ORDER BY rt.created_at DESC
+    `);
 
     return NextResponse.json({ tokens });
   } catch (error) {

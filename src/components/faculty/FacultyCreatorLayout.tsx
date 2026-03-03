@@ -95,7 +95,12 @@ const FacultyCreatorLayout: React.FC<FacultyCreatorLayoutProps> = ({ children, a
 
     const fetchDepartment = async (departmentId: string) => {
         try {
-            const res = await fetch(`/api/admin/departments/${departmentId}`);
+            const userData = localStorage.getItem('user');
+            const headers: Record<string, string> = {};
+            if (userData) {
+                headers['Authorization'] = `Bearer ${Buffer.from(userData).toString('base64')}`;
+            }
+            const res = await fetch(`/api/admin/departments/${departmentId}`, { headers });
             const data = await res.json();
             if (data.success && data.data) {
                 setDepartment({ name: data.data.name, code: data.data.code });

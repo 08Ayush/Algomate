@@ -52,9 +52,14 @@ export default function StudentSubjects() {
     const fetchSubjects = async (user: any) => {
         try {
             setLoading(true);
+            const token = btoa(JSON.stringify({
+                id: user.id, user_id: user.id, role: user.role,
+                college_id: user.college_id, department_id: user.department_id
+            }));
+            const authHeaders = { 'Authorization': `Bearer ${token}` };
 
             // First get batch info
-            const dashRes = await fetch(`/api/student/dashboard?userId=${user.id}&role=student`);
+            const dashRes = await fetch(`/api/student/dashboard?userId=${user.id}&role=student`, { headers: authHeaders });
             if (!dashRes.ok) throw new Error('Failed to fetch dashboard');
             const dashData = await dashRes.json();
 
@@ -65,19 +70,17 @@ export default function StudentSubjects() {
 
             // Fetch subjects specifically for this semester, department, and course
             const subjectsRes = await fetch(
-                `/api/student/available-subjects?studentId=${user.id}&semester=${semester}&departmentId=${departmentId || ''}&courseId=${courseId || ''}`
+                `/api/student/available-subjects?studentId=${user.id}&semester=${semester}&departmentId=${departmentId || ''}&courseId=${courseId || ''}`,
+                { headers: authHeaders }
             );
 
             let allSubjects: any[] = [];
 
             if (subjectsRes.ok) {
                 const subjectsData = await subjectsRes.json();
-                // Filter to only show subjects for the exact semester
-                // Also exclude MINOR/MAJOR subjects - they should only show when allotted
                 const filteredSubjects = (subjectsData.subjects || []).filter(
                     (s: any) => {
                         const matchesSemester = s.semester === semester || s.semester === parseInt(semester);
-                        // Hide MINOR and MAJOR subjects - they will be added separately if allotted
                         const isElectiveCategory = ['MINOR', 'MAJOR', 'OE', 'SEC', 'VAC', 'AEC'].includes(s.nep_category);
                         return matchesSemester && !isElectiveCategory;
                     }
@@ -85,15 +88,15 @@ export default function StudentSubjects() {
                 allSubjects = filteredSubjects;
             }
 
-            // Also fetch allotted subjects from elective buckets - these WILL be shown
+            // Also fetch allotted subjects from elective buckets
             if (batchId) {
                 const bucketsRes = await fetch(
-                    `/api/student/elective-buckets?studentId=${user.id}&batchId=${batchId}`
+                    `/api/student/elective-buckets?studentId=${user.id}&batchId=${batchId}`,
+                    { headers: authHeaders }
                 );
 
                 if (bucketsRes.ok) {
                     const bucketsData = await bucketsRes.json();
-                    // Get subjects that have been allotted to this student
                     (bucketsData.buckets || []).forEach((bucket: any) => {
                         const allottedChoices = (bucket.student_choices || []).filter(
                             (c: any) => c.is_allotted === true || c.allotment_status === 'allotted'
@@ -102,7 +105,6 @@ export default function StudentSubjects() {
                         allottedChoices.forEach((choice: any) => {
                             const subject = bucket.subjects.find((s: any) => s.id === choice.subject_id);
                             if (subject) {
-                                // Check if already in the list
                                 const exists = allSubjects.find((s: any) => s.id === subject.id);
                                 if (!exists) {
                                     allSubjects.push({
@@ -115,7 +117,6 @@ export default function StudentSubjects() {
                                         reason: `Allotted from ${bucket.bucket_name}`
                                     });
                                 } else {
-                                    // Mark existing subject as allotted
                                     exists.is_allotted = true;
                                     exists.allotment_bucket = bucket.bucket_name;
                                 }
@@ -185,7 +186,7 @@ export default function StudentSubjects() {
         total: subjects.length,
         theory: subjects.filter(s => s.subject_type === 'THEORY').length,
         lab: subjects.filter(s => s.subject_type === 'LAB' || s.subject_type === 'PRACTICAL').length,
-        totalCredits: subjects.reduce((sum, s) => sum + (s.credit_value || s.credits_per_week || 0), 0)
+        totalCredits: parseFloat(subjects.reduce((sum, s) => sum + (parseFloat(String(s.credit_value ?? s.credits_per_week ?? 0)) || 0), 0).toFixed(1))
     };
 
     if (loading) {

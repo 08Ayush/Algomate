@@ -1,30 +1,9 @@
-import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-// Helper function to decode and verify user from token
-function getAuthenticatedUser(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
-  }
-
-  try {
-    const token = authHeader.substring(7);
-    const decoded = JSON.parse(Buffer.from(token, 'base64').toString());
-    return decoded;
-  } catch (error) {
-    console.error('Token decode error:', error);
-    return null;
-  }
-}
+import { getPool } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   try {
-    // Verify authentication
     const user = requireAuth(request);
     if (user instanceof NextResponse) return user;
 
@@ -32,72 +11,47 @@ export async function GET(request: NextRequest) {
     const batchId = searchParams.get('batchId');
 
     if (!batchId) {
-      return NextResponse.json(
-        { success: false, error: 'Batch ID is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: 'Batch ID is required' }, { status: 400 });
     }
 
-    // Get published assignments for this batch
-    // Optimized with Joins
-    const { data: assignments, error } = await supabase
-      .from('assignments')
-      .select(`
-        *,
-        batches (name, semester, section),
-        subjects (name, code)
-      `)
-      .eq('batch_id', batchId)
-      .eq('is_published', true)
-      .order('created_at', { ascending: false });
+    const pool = getPool();
 
-    if (error) {
-      console.error('Get student assignments error:', error);
-      return NextResponse.json(
-        { success: false, error: 'Failed to fetch assignments: ' + error.message },
-        { status: 500 }
-      );
+    // Fetch published assignments with batch and subject info
+    const assignmentsResult = await pool.query(`
+      SELECT a.*,
+        CASE WHEN b.id IS NOT NULL THEN json_build_object('name', b.name, 'semester', b.semester, 'section', b.section) ELSE NULL END AS batches,
+        CASE WHEN s.id IS NOT NULL THEN json_build_object('name', s.name, 'code', s.code) ELSE NULL END AS subjects
+      FROM assignments a
+      LEFT JOIN batches b ON b.id = a.batch_id
+      LEFT JOIN subjects s ON s.id = a.subject_id
+      WHERE a.batch_id = $1 AND a.is_published = true
+      ORDER BY a.created_at DESC
+    `, [batchId]);
+
+    if (assignmentsResult.rows.length === 0) {
+      return NextResponse.json({ success: true, assignments: [] });
     }
 
-    if (!assignments || assignments.length === 0) {
-      return NextResponse.json({
-        success: true,
-        assignments: [],
-      });
-    }
+    // Bulk-fetch submissions for this student
+    const assignmentIds = assignmentsResult.rows.map((a: any) => a.id);
+    const submissionsResult = await pool.query(`
+      SELECT id, score, percentage, submission_status, submitted_at, assignment_id
+      FROM assignment_submissions
+      WHERE assignment_id = ANY($1::uuid[]) AND student_id = $2 AND submission_status = 'SUBMITTED'
+    `, [assignmentIds, user.id]);
 
-    // Bulk fetch submissions for these assignments for the current student
-    const assignmentIds = assignments.map(a => a.id);
-    const { data: submissions } = await supabase
-      .from('assignment_submissions')
-      .select('id, score, percentage, submission_status, submitted_at, assignment_id')
-      .in('assignment_id', assignmentIds)
-      .eq('student_id', user.id)
-      .eq('submission_status', 'SUBMITTED');
+    const submissionMap = new Map(submissionsResult.rows.map((s: any) => [s.assignment_id, s]));
 
-    // Map submissions to assignments in memory
-    const enrichedAssignments = assignments.map((assignment: any) => {
-      const submission = submissions?.find(s => s.assignment_id === assignment.id);
-
-      return {
-        ...assignment,
-        batches: assignment.batches, // Already joined
-        subjects: assignment.subjects, // Already joined
-        submission: submission || undefined,
-        has_submitted: !!submission
-      };
+    const enrichedAssignments = assignmentsResult.rows.map((assignment: any) => {
+      const submission = submissionMap.get(assignment.id);
+      return { ...assignment, submission: submission || undefined, has_submitted: !!submission };
     });
 
-    return NextResponse.json({
-      success: true,
-      assignments: enrichedAssignments,
-    });
+    return NextResponse.json({ success: true, assignments: enrichedAssignments });
 
   } catch (error: any) {
-    console.error('Get student assignments error:', error);
-    return NextResponse.json(
-      { success: false, error: 'Internal server error: ' + error.message },
-      { status: 500 }
-    );
+    console.error('Error in student assignments GET:', error);
+    return NextResponse.json({ success: false, error: 'Internal server error: ' + error.message }, { status: 500 });
   }
 }
+

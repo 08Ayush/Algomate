@@ -3,6 +3,7 @@
 import { serviceDb } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
+import { getPool } from '@/lib/db';
 
 interface QualifiedFaculty {
     faculty_id: string;
@@ -68,34 +69,38 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // Get batch subjects with full subject details
-        const { data: batchSubjectsRaw, error: bsError } = await supabase
-            .from('batch_subjects')
-            .select(`
-                id,
-                subject_id,
-                required_hours_per_week,
-                assigned_faculty_id,
-                assigned_lab_id,
-                priority_level,
-                is_mandatory,
-                subjects (
-                    id,
-                    name,
-                    code,
-                    subject_type,
-                    college_id,
-                    department_id,
-                    course_id,
-                    semester,
-                    credits_per_week,
-                    requires_lab,
-                    lecture_hours,
-                    practical_hours,
-                    tutorial_hours
-                )
-            `)
-            .eq('batch_id', batchId);
+        // Get batch subjects with full subject details via raw SQL
+        const pool = getPool();
+        const bsResult = await pool.query(`
+            SELECT
+                bs.id,
+                bs.subject_id,
+                bs.required_hours_per_week,
+                bs.assigned_faculty_id,
+                bs.assigned_lab_id,
+                bs.priority_level,
+                bs.is_mandatory,
+                json_build_object(
+                    'id', s.id,
+                    'name', s.name,
+                    'code', s.code,
+                    'subject_type', s.subject_type,
+                    'college_id', s.college_id,
+                    'department_id', s.department_id,
+                    'course_id', s.course_id,
+                    'semester', s.semester,
+                    'credits_per_week', s.credits_per_week,
+                    'requires_lab', s.requires_lab,
+                    'lecture_hours', s.lecture_hours,
+                    'practical_hours', s.practical_hours,
+                    'tutorial_hours', s.tutorial_hours
+                ) AS subjects
+            FROM batch_subjects bs
+            LEFT JOIN subjects s ON s.id = bs.subject_id
+            WHERE bs.batch_id = $1
+        `, [batchId]);
+        const batchSubjectsRaw = bsResult.rows;
+        const bsError = null;
 
         if (bsError) {
             console.error('Error fetching batch subjects:', bsError);
@@ -149,27 +154,45 @@ export async function GET(request: NextRequest) {
         // Get all qualified faculty for subjects in this batch from the same college
         const subjectIds = (batchSubjects || []).map(bs => bs.subject_id);
 
-        // Fetch all qualified faculty in one query for efficiency
-        const { data: allQualifiedFaculty } = await supabase
-            .from('faculty_qualified_subjects')
-            .select(`
-                faculty_id,
-                subject_id,
-                proficiency_level,
-                is_primary_teacher,
-                can_handle_lab,
-                can_handle_tutorial,
-                users!faculty_id (
-                    id,
-                    first_name,
-                    last_name,
-                    college_id,
-                    department_id,
-                    is_active,
-                    role
-                )
-            `)
-            .in('subject_id', subjectIds);
+        // Fetch all qualified faculty in one query via raw SQL
+        const qfResult = subjectIds.length > 0
+            ? await pool.query(`
+                SELECT
+                    fqs.faculty_id,
+                    fqs.subject_id,
+                    fqs.proficiency_level,
+                    fqs.is_primary_teacher,
+                    fqs.can_handle_lab,
+                    fqs.can_handle_tutorial,
+                    u.id AS u_id,
+                    u.first_name,
+                    u.last_name,
+                    u.college_id AS u_college_id,
+                    u.department_id AS u_department_id,
+                    u.is_active,
+                    u.role AS u_role
+                FROM faculty_qualified_subjects fqs
+                INNER JOIN users u ON u.id = fqs.faculty_id
+                WHERE fqs.subject_id = ANY($1)
+            `, [subjectIds])
+            : { rows: [] };
+        const allQualifiedFaculty = qfResult.rows.map((r: any) => ({
+            faculty_id: r.faculty_id,
+            subject_id: r.subject_id,
+            proficiency_level: r.proficiency_level,
+            is_primary_teacher: r.is_primary_teacher,
+            can_handle_lab: r.can_handle_lab,
+            can_handle_tutorial: r.can_handle_tutorial,
+            users: {
+                id: r.u_id,
+                first_name: r.first_name,
+                last_name: r.last_name,
+                college_id: r.u_college_id,
+                department_id: r.u_department_id,
+                is_active: r.is_active,
+                role: r.u_role
+            }
+        }));
 
         // Filter qualified faculty to only include those from the same college
         const qualifiedFacultyBySubject = new Map<string, QualifiedFaculty[]>();
@@ -228,10 +251,10 @@ export async function GET(request: NextRequest) {
             : { data: [] };
 
         const facultyNameMap = new Map(
-            (assignedFacultyData || []).map(f => [f.id, `${f.first_name} ${f.last_name}`])
+            (assignedFacultyData || []).map((f: any) => [f.id, `${f.first_name} ${f.last_name}`])
         );
         const labNameMap = new Map(
-            (assignedLabData || []).map(l => [l.id, l.name])
+            (assignedLabData || []).map((l: any) => [l.id, l.name])
         );
 
         // Build the response
@@ -253,11 +276,11 @@ export async function GET(request: NextRequest) {
                 required_hours: bs.required_hours_per_week,
                 assigned_faculty_id: bs.assigned_faculty_id,
                 assigned_faculty_name: bs.assigned_faculty_id
-                    ? facultyNameMap.get(bs.assigned_faculty_id) || null
+                    ? (facultyNameMap.get(bs.assigned_faculty_id) as string | undefined) || null
                     : null,
                 assigned_lab_id: bs.assigned_lab_id || null,
                 assigned_lab_name: bs.assigned_lab_id
-                    ? labNameMap.get(bs.assigned_lab_id) || null
+                    ? (labNameMap.get(bs.assigned_lab_id) as string | undefined) || null
                     : null,
                 qualified_faculty: qualifiedFacultyBySubject.get(bs.subject_id) || [],
                 is_lab_subject: isLabSubject

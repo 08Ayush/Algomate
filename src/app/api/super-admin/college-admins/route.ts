@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/shared/database/client';
 import bcrypt from 'bcryptjs';
 import { requireRoles } from '@/lib/auth';
+import { getPool } from '@/lib/db';
 
 interface AdminWithCollege {
   id: string;
@@ -27,44 +28,24 @@ export async function GET(request: NextRequest) {
 
     console.log('Fetching college admins from database...');
 
-    const { data: admins, error } = await supabaseAdmin
-      .from('users')
-      .select(`
-        id,
-        first_name,
-        last_name,
-        email,
-        college_uid,
-        college_id,
-        phone,
-        is_active,
-        created_at,
-        college:colleges!users_college_id_fkey(
-          id,
-          name,
-          code
-        )
-      `)
-      .eq('role', 'college_admin')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('College admins fetch error:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch college admins', details: error.message },
-        { status: 500 }
-      );
-    }
+    const pool = getPool();
+    const { rows: admins } = await pool.query(`
+      SELECT
+        u.id, u.first_name, u.last_name, u.email,
+        u.college_uid, u.college_id, u.phone, u.is_active, u.created_at,
+        CASE WHEN c.id IS NOT NULL
+          THEN json_build_object('id', c.id, 'name', c.name, 'code', c.code)
+          ELSE NULL
+        END AS college
+      FROM users u
+      LEFT JOIN colleges c ON c.id = u.college_id
+      WHERE u.role = 'college_admin'
+      ORDER BY u.created_at DESC
+    `);
 
     console.log(`Found ${admins?.length || 0} college admins`);
 
-    // Flatten the college object
-    const transformedAdmins = admins?.map(admin => ({
-      ...admin,
-      college: admin.college
-    })) || [];
-
-    return NextResponse.json({ admins: transformedAdmins });
+    return NextResponse.json({ admins: admins || [] });
 
   } catch (error: any) {
     console.error('College admins API error:', error);

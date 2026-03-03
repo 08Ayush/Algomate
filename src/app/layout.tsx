@@ -33,11 +33,10 @@ export default function RootLayout({
       >
         <ThemeProvider>
           <SemesterModeProvider>
-            {children}
+            <ConfirmDialogProvider>
+              {children}
+            </ConfirmDialogProvider>
           </SemesterModeProvider>
-          <ConfirmDialogProvider>
-            {children}
-          </ConfirmDialogProvider>
         </ThemeProvider>
       </body>
     </html>

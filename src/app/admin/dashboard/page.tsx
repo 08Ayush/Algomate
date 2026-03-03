@@ -75,16 +75,17 @@ const CollegeAdminDashboard: React.FC = () => {
       }
 
       const data = await response.json();
+      const statsData = data.stats || data;
 
       setStats({
-        departments: data.departments || 0,
-        faculty: data.faculty || 0,
-        classrooms: data.classrooms || 0,
-        batches: data.batches || 0,
-        subjects: data.subjects || 0,
-        courses: data.courses || 0,
-        students: data.students || 0,
-        constraints: data.constraints || 0
+        departments: statsData.departments || 0,
+        faculty: statsData.faculty || 0,
+        classrooms: statsData.classrooms || 0,
+        batches: statsData.batches || 0,
+        subjects: statsData.subjects || 0,
+        courses: statsData.courses || 0,
+        students: statsData.students || 0,
+        constraints: statsData.constraints || 0
       });
 
     } catch (error) {

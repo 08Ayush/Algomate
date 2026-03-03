@@ -99,16 +99,22 @@ export default function NEPElectiveSelection() {
   const fetchBuckets = async (user: any) => {
     try {
       setLoading(true);
+      const token = btoa(JSON.stringify({
+        id: user.id, user_id: user.id, role: user.role,
+        college_id: user.college_id, department_id: user.department_id
+      }));
+      const authHeaders = { 'Authorization': `Bearer ${token}` };
 
       // First get batch info
-      const dashRes = await fetch(`/api/student/dashboard?userId=${user.id}&role=student`);
+      const dashRes = await fetch(`/api/student/dashboard?userId=${user.id}&role=student`, { headers: authHeaders });
       if (!dashRes.ok) throw new Error('Failed to fetch dashboard');
       const dashData = await dashRes.json();
       const batchId = dashData.additionalData?.batchId;
 
       // Fetch elective buckets
       const response = await fetch(
-        `/api/student/elective-buckets?studentId=${user.id}&batchId=${batchId || ''}`
+        `/api/student/elective-buckets?studentId=${user.id}&batchId=${batchId || ''}`,
+        { headers: authHeaders }
       );
 
       if (response.ok) {
@@ -181,9 +187,13 @@ export default function NEPElectiveSelection() {
 
     setSubmitting(bucket.id);
     try {
+      const token = btoa(JSON.stringify({
+        id: user.id, user_id: user.id, role: user.role,
+        college_id: user.college_id, department_id: user.department_id
+      }));
       const response = await fetch('/api/student/elective-buckets', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
           student_id: user.id,
           bucket_id: bucket.id,
