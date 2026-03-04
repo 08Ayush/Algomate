@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { CardLoader } from '@/components/ui/PageLoader';
 import {
     Settings,
     Save,
@@ -193,12 +194,7 @@ const SettingsPage: React.FC = () => {
     if (loading) {
         return (
             <SuperAdminLayout activeTab="settings">
-                <div className="flex items-center justify-center py-12">
-                    <div className="text-center text-gray-500">
-                        <Clock size={48} className="mx-auto mb-4 animate-spin" />
-                        <p>Loading settings...</p>
-                    </div>
-                </div>
+                <CardLoader message="Loading Settings" subMessage="Fetching your configuration..." />
             </SuperAdminLayout>
         );
     }

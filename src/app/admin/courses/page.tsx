@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { CardLoader } from '@/components/ui/PageLoader';
 import { GraduationCap, Plus, Edit, Trash2, X, Search, RefreshCw, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
@@ -139,7 +140,7 @@ const CoursesPage: React.FC = () => {
                 </div>
 
                 <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-                    {loading ? <div className="text-center py-12 text-gray-500">Loading...</div> : filteredCourses.length === 0 ? <div className="text-center py-12 text-gray-500">No courses found</div> : (
+                    {loading ? <CardLoader message="Loading courses..." subMessage="Fetching course catalog" /> : filteredCourses.length === 0 ? <div className="text-center py-12 text-gray-500">No courses found</div> : (
                         <table className="w-full">
                             <thead className="bg-gray-50"><tr>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Title</th>

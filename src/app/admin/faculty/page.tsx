@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { CardLoader } from '@/components/ui/PageLoader';
 import {
     Users,
     Plus,
@@ -304,7 +305,7 @@ const FacultyPage: React.FC = () => {
                 {/* Table */}
                 <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
                     {loading ? (
-                        <div className="text-center py-12 text-gray-500">Loading faculty...</div>
+                        <CardLoader message="Loading faculty..." subMessage="Fetching faculty members" />
                     ) : filteredFaculty.length === 0 ? (
                         <div className="text-center py-12 text-gray-500">No faculty found</div>
                     ) : (

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { CardLoader } from '@/components/ui/PageLoader';
 import { Users, Search, RefreshCw, Mail, Phone, Award, BookOpen, Building } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
@@ -130,7 +131,7 @@ const FacultyListPage: React.FC = () => {
         {/* Faculty Grid */}
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
           {loading ? (
-            <div className="text-center py-12 text-gray-500">Loading...</div>
+            <CardLoader message="Loading faculty..." subMessage="Fetching department faculty list" />
           ) : filteredFaculty.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
               <Users size={40} className="mx-auto mb-3 text-gray-300" />

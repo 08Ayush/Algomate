@@ -51,9 +51,19 @@ export default function DashboardHeader({ user, onLogout, onToggleSidebar, isSid
     }
   }, [user]);
 
+  const getAuthHeaders = (): Record<string, string> => {
+    try {
+      const raw = localStorage.getItem('user');
+      if (!raw) return {};
+      return { 'Authorization': `Bearer ${btoa(raw)}` };
+    } catch { return {}; }
+  };
+
   const fetchNotifications = async (userId: string) => {
     try {
-      const res = await fetch(`/api/notifications?user_id=${userId}&limit=10`);
+      const res = await fetch(`/api/notifications?user_id=${userId}&limit=10`, {
+        headers: { ...getAuthHeaders() }
+      });
       const data = await res.json();
       if (data.success) {
         setNotifications(data.data || []);
@@ -68,7 +78,7 @@ export default function DashboardHeader({ user, onLogout, onToggleSidebar, isSid
       if (!user?.id) return;
       await fetch('/api/notifications', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ user_id: user.id, notification_ids: [notificationId] })
       });
       setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n));

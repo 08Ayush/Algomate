@@ -1,37 +1,6 @@
-import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-
-// Helper function to get user from Authorization header
-async function getAuthenticatedUser(request: NextRequest) {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  try {
-    const userString = Buffer.from(token, 'base64').toString();
-    const user = JSON.parse(userString);
-
-    // Verify user exists and is active admin
-    const { data: dbUser, error } = await supabase
-      .from('users')
-      .select('id, college_id, role, is_active')
-      .eq('id', user.id)
-      .eq('is_active', true)
-      .in('role', ['admin', 'college_admin'])
-      .single();
-
-    if (error || !dbUser) {
-      return null;
-    }
-
-    return dbUser;
-  } catch {
-    return null;
-  }
-}
+import { getPool } from '@/lib/db';
 
 // PUT - Update existing course
 export async function PUT(
@@ -42,80 +11,57 @@ export async function PUT(
     const user = requireAuth(request);
     if (user instanceof NextResponse) return user;
 
+    if (!['admin', 'college_admin', 'super_admin'].includes(user.role)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    }
+
     const { id } = await params;
     const { title, code, nature_of_course, intake, duration_years } = await request.json();
 
     if (!title || !code) {
-      return NextResponse.json(
-        { error: 'Title and code are required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Title and code are required' }, { status: 400 });
     }
+
+    const pool = getPool();
 
     // Verify the course belongs to the user's college
-    const { data: existingCourse } = await supabase
-      .from('courses')
-      .select('id, college_id')
-      .eq('id', id)
-      .single();
-
-    if (!existingCourse || existingCourse.college_id !== user.college_id) {
-      return NextResponse.json(
-        { error: 'Course not found or access denied' },
-        { status: 404 }
-      );
+    const existing = await pool.query(
+      `SELECT id FROM courses WHERE id = $1 AND college_id = $2`,
+      [id, user.college_id]
+    );
+    if (existing.rows.length === 0) {
+      return NextResponse.json({ error: 'Course not found or access denied' }, { status: 404 });
     }
 
-    // Check if code is being changed to an existing one
-    const { data: duplicateCourse } = await supabase
-      .from('courses')
-      .select('id')
-      .eq('code', code)
-      .eq('college_id', user.college_id)
-      .neq('id', id)
-      .single();
-
-    if (duplicateCourse) {
-      return NextResponse.json(
-        { error: 'Course code already exists in your college' },
-        { status: 400 }
-      );
+    // Check for duplicate code (exclude self)
+    const dup = await pool.query(
+      `SELECT id FROM courses WHERE code = $1 AND college_id = $2 AND id != $3`,
+      [code.toUpperCase(), user.college_id, id]
+    );
+    if (dup.rows.length > 0) {
+      return NextResponse.json({ error: 'Course code already exists in your college' }, { status: 400 });
     }
 
-    // Update course
-    const { data: updatedCourse, error } = await supabase
-      .from('courses')
-      .update({
-        title,
-        code: code.toUpperCase(),
-        nature_of_course: nature_of_course || null,
-        intake: intake || 0,
-        duration_years: duration_years || null,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select()
-      .single();
+    const result = await pool.query(`
+      UPDATE courses
+      SET title = $1, code = $2, nature_of_course = $3, intake = $4, duration_years = $5, updated_at = NOW()
+      WHERE id = $6 AND college_id = $7
+      RETURNING *
+    `, [
+      title, code.toUpperCase(), nature_of_course || null,
+      intake ?? 60, duration_years ?? null,
+      id, user.college_id
+    ]);
 
-    if (error) {
-      console.error('Course update error:', error);
-      return NextResponse.json(
-        { error: 'Failed to update course' },
-        { status: 500 }
-      );
+    if (result.rows.length === 0) {
+      return NextResponse.json({ error: 'Failed to update course' }, { status: 500 });
     }
 
-    return NextResponse.json({
-      message: 'Course updated successfully',
-      course: updatedCourse
-    });
+    return NextResponse.json({ success: true, message: 'Course updated successfully', course: result.rows[0] });
 
   } catch (error: any) {
-    console.error('Course update API error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('Course update error:', error);
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
   }
 }
 
@@ -128,59 +74,37 @@ export async function DELETE(
     const user = requireAuth(request);
     if (user instanceof NextResponse) return user;
 
+    if (!['admin', 'college_admin', 'super_admin'].includes(user.role)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    }
+
     const { id } = await params;
+    const pool = getPool();
 
     // Verify the course belongs to the user's college
-    const { data: existingCourse } = await supabase
-      .from('courses')
-      .select('id, college_id, code')
-      .eq('id', id)
-      .single();
-
-    if (!existingCourse || existingCourse.college_id !== user.college_id) {
-      return NextResponse.json(
-        { error: 'Course not found or access denied' },
-        { status: 404 }
-      );
+    const existing = await pool.query(
+      `SELECT id FROM courses WHERE id = $1 AND college_id = $2`,
+      [id, user.college_id]
+    );
+    if (existing.rows.length === 0) {
+      return NextResponse.json({ error: 'Course not found or access denied' }, { status: 404 });
     }
 
     // Check if course is being used by subjects
-    const { data: relatedSubjects } = await supabase
-      .from('subjects')
-      .select('id')
-      .eq('course_id', id)
-      .limit(1);
-
-    if (relatedSubjects && relatedSubjects.length > 0) {
-      return NextResponse.json(
-        { error: 'Cannot delete course. It is being used by subjects.' },
-        { status: 400 }
-      );
+    const subjectCheck = await pool.query(
+      `SELECT id FROM subjects WHERE course_id = $1 LIMIT 1`,
+      [id]
+    );
+    if (subjectCheck.rows.length > 0) {
+      return NextResponse.json({ error: 'Cannot delete course. It is being used by subjects.' }, { status: 400 });
     }
 
-    // Delete the course
-    const { error } = await supabase
-      .from('courses')
-      .delete()
-      .eq('id', id);
+    await pool.query(`DELETE FROM courses WHERE id = $1 AND college_id = $2`, [id, user.college_id]);
 
-    if (error) {
-      console.error('Course deletion error:', error);
-      return NextResponse.json(
-        { error: 'Failed to delete course' },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({
-      message: 'Course deleted successfully'
-    });
+    return NextResponse.json({ success: true, message: 'Course deleted successfully' });
 
   } catch (error: any) {
-    console.error('Course deletion API error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('Course deletion error:', error);
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
   }
 }

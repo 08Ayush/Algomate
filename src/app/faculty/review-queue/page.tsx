@@ -3,9 +3,11 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
-import { motion } from 'framer-motion';
-import { Eye, CheckCircle, XCircle, Clock, AlertCircle, Mail, RefreshCw, Calendar, Users } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Eye, CheckCircle, XCircle, Clock, AlertCircle, Mail, RefreshCw, Calendar } from 'lucide-react';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
+import toast from 'react-hot-toast';
+import { CardLoader } from '@/components/ui/PageLoader';
 
 interface PendingTimetable {
   id: string;
@@ -29,6 +31,10 @@ export default function ReviewQueuePage() {
   const [pendingTimetables, setPendingTimetables] = useState<PendingTimetable[]>([]);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
   const [isSendingEmail, setIsSendingEmail] = useState<string | null>(null);
+
+  // Rejection modal state
+  const [rejectModal, setRejectModal] = useState<{ open: boolean; timetable: PendingTimetable | null }>({ open: false, timetable: null });
+  const [rejectReason, setRejectReason] = useState('');
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -98,29 +104,30 @@ export default function ReviewQueuePage() {
       confirmText: 'Approve & Publish',
       onConfirm: async () => {
         setIsProcessing(timetable.id);
+        const loadingToast = toast.loading('Approving and publishing timetable...');
 
         try {
           const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
 
           const response = await fetch(`/api/timetables/${timetable.id}/approve`, {
             method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
+            headers: { 'Authorization': `Bearer ${token}` }
           });
 
           const result = await response.json();
+          toast.dismiss(loadingToast);
 
           if (!response.ok || !result.success) {
-            alert(`Failed to approve: ${result.error || 'Unknown error'}`);
+            toast.error(result.error || 'Failed to approve timetable');
             setIsProcessing(null);
             return;
           }
 
-          alert('✅ Timetable approved and published successfully!');
+          toast.success('Timetable approved and published successfully!', { duration: 5000 });
           fetchPendingTimetables();
         } catch (error: any) {
-          alert(`Error: ${error.message}`);
+          toast.dismiss(loadingToast);
+          toast.error(`Error: ${error.message}`);
         } finally {
           setIsProcessing(null);
         }
@@ -128,40 +135,52 @@ export default function ReviewQueuePage() {
     });
   };
 
-  const handleReject = async (timetableId: string, title: string) => {
-    const reason = prompt(`Enter rejection reason for "${title}":`);
-    if (!reason || reason.trim() === '') {
+  const openRejectModal = (timetable: PendingTimetable) => {
+    setRejectReason('');
+    setRejectModal({ open: true, timetable });
+  };
+
+  const handleRejectConfirm = async () => {
+    const timetable = rejectModal.timetable;
+    if (!timetable) return;
+    if (!rejectReason.trim()) {
+      toast.error('Please enter a rejection reason.');
       return;
     }
 
-    setIsProcessing(timetableId);
+    setRejectModal({ open: false, timetable: null });
+    setIsProcessing(timetable.id);
+    const loadingToast = toast.loading('Rejecting timetable...');
 
     try {
       const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
 
-      const response = await fetch(`/api/timetables/${timetableId}/reject`, {
+      const response = await fetch(`/api/timetables/${timetable.id}/reject`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ reason })
+        body: JSON.stringify({ reason: rejectReason.trim() })
       });
 
       const result = await response.json();
+      toast.dismiss(loadingToast);
 
       if (!response.ok || !result.success) {
-        alert(`Failed to reject: ${result.error || 'Unknown error'}`);
+        toast.error(result.error || 'Failed to reject timetable');
         setIsProcessing(null);
         return;
       }
 
-      alert('Timetable rejected. Creator will be notified.');
+      toast.success('Timetable rejected. Creator has been notified.');
       fetchPendingTimetables();
     } catch (error: any) {
-      alert(`Error: ${error.message}`);
+      toast.dismiss(loadingToast);
+      toast.error(`Error: ${error.message}`);
     } finally {
       setIsProcessing(null);
+      setRejectReason('');
     }
   };
 
@@ -172,16 +191,11 @@ export default function ReviewQueuePage() {
       confirmText: 'Send Notifications',
       onConfirm: async () => {
         setIsSendingEmail(timetable.id);
-
         try {
-          alert(
-            '📧 Email Notification Feature\n\n' +
-            'This feature is under development and will send notifications to:\n' +
-            '• All students enrolled in the batch\n' +
-            '• Faculty members assigned to courses\n' +
-            '• Department administrators\n\n' +
-            'Coming soon!'
-          );
+          toast('Email notification feature coming soon! It will notify all enrolled students, faculty, and department administrators.', {
+            icon: '📧',
+            duration: 5000,
+          });
         } finally {
           setIsSendingEmail(null);
         }
@@ -212,10 +226,7 @@ export default function ReviewQueuePage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-[#CDE8E5] via-[#EEF7FF] to-[#7AB2B2] flex items-center justify-center">
-        <div className="text-center bg-white rounded-2xl p-10 shadow-lg">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-[#4D869C] border-t-transparent mx-auto"></div>
-          <p className="mt-6 text-gray-600 font-medium">Loading review queue...</p>
-        </div>
+        <CardLoader message="Loading review queue..." subMessage="Fetching pending timetables for your department" size="lg" />
       </div>
     );
   }
@@ -368,7 +379,7 @@ export default function ReviewQueuePage() {
                       Approve & Publish
                     </button>
                     <button
-                      onClick={() => handleReject(timetable.id, timetable.title)}
+                      onClick={() => openRejectModal(timetable)}
                       disabled={isProcessing === timetable.id}
                       className="flex items-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 disabled:opacity-50 transition-all"
                     >
@@ -393,6 +404,68 @@ export default function ReviewQueuePage() {
           )}
         </div>
       </div>
+
+      {/* Rejection reason modal */}
+      <AnimatePresence>
+        {rejectModal.open && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setRejectModal({ open: false, timetable: null })}
+          >
+            <motion.div
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6"
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ duration: 0.22, ease: 'easeOut' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 mb-5">
+                <div className="p-2.5 rounded-xl bg-red-100">
+                  <XCircle size={22} className="text-red-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Reject Timetable</h2>
+                  <p className="text-sm text-gray-500 truncate max-w-[280px]">{rejectModal.timetable?.title}</p>
+                </div>
+              </div>
+
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Rejection Reason <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                rows={4}
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Explain why this timetable is being rejected so the creator can revise it..."
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800 resize-none focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-400 placeholder-gray-400"
+                autoFocus
+              />
+              <p className="text-xs text-gray-400 mt-1.5 mb-5">{rejectReason.length} / 500 characters</p>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setRejectModal({ open: false, timetable: null })}
+                  className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-gray-600 font-medium hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleRejectConfirm}
+                  disabled={!rejectReason.trim()}
+                  className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Reject Timetable
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </FacultyCreatorLayout>
   );
 }

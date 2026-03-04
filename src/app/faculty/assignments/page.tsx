@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { CardLoader } from '@/components/ui/PageLoader';
 import { FileText, Plus, Search, RefreshCw, Eye, Edit, Trash2, Clock, Users, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
@@ -172,7 +173,7 @@ const AssignmentsPage: React.FC = () => {
                 {/* Assignments Table */}
                 <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
                     {loading ? (
-                        <div className="text-center py-12 text-gray-500">Loading...</div>
+                        <CardLoader message="Loading assignments..." subMessage="Fetching your created assignments" />
                     ) : filteredAssignments.length === 0 ? (
                         <div className="text-center py-12 text-gray-500">
                             <FileText size={40} className="mx-auto mb-3 text-gray-300" />

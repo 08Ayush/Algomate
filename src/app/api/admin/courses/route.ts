@@ -2,18 +2,16 @@ import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import {
   GetCoursesUseCase,
-  CreateCourseUseCase,
   SupabaseCourseRepository,
-  CreateCourseDtoSchema
 } from '@/modules/course';
 import { requireAuth } from '@/lib/auth';
 import { asyncHandler } from '@/shared/middleware/error-handler';
 import { getPaginationParams, createPaginatedResponse } from '@/shared/utils/pagination';
+import { getPool } from '@/lib/db';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const courseRepo = new SupabaseCourseRepository(supabase as any);
 const getCoursesUseCase = new GetCoursesUseCase(courseRepo);
-const createCourseUseCase = new CreateCourseUseCase(courseRepo);
 
 export const GET = asyncHandler(async (request: NextRequest) => {
   try {
@@ -85,9 +83,33 @@ export const POST = asyncHandler(async (request: NextRequest) => {
     }
 
     const body = await request.json();
-    const dto = CreateCourseDtoSchema.parse(body);
+    const { title, code, nature_of_course, intake, duration_years } = body;
 
-    const result = await createCourseUseCase.execute(dto);
+    if (!title || !code) {
+      return NextResponse.json({ success: false, error: 'Title and code are required' }, { status: 400 });
+    }
+
+    const pool = getPool();
+
+    // Check for duplicate code in this college
+    const dupCheck = await pool.query(
+      `SELECT id FROM courses WHERE code = $1 AND college_id = $2`,
+      [code.toUpperCase(), user.college_id]
+    );
+    if (dupCheck.rows.length > 0) {
+      return NextResponse.json({ success: false, error: 'Course code already exists in your college' }, { status: 400 });
+    }
+
+    const result = await pool.query(`
+      INSERT INTO courses (title, code, college_id, nature_of_course, intake, duration_years)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *
+    `, [
+      title, code.toUpperCase(), user.college_id,
+      nature_of_course || null,
+      intake ?? 60,
+      duration_years ?? null
+    ]);
 
     // Invalidate cache
     const { invalidateCachePattern } = await import('@/shared/cache/cache-helper');
@@ -95,13 +117,12 @@ export const POST = asyncHandler(async (request: NextRequest) => {
     const pattern = redisCache.buildKey(user.college_id!, 'courses', 'list') + '*';
     await invalidateCachePattern(pattern);
 
-    return NextResponse.json({ success: true, course: result });
+    return NextResponse.json({ success: true, course: result.rows[0] }, { status: 201 });
   } catch (error: any) {
     console.error('Error creating course:', error);
-    const status = error.name === 'ZodError' ? 400 : 500;
     return NextResponse.json(
       { success: false, error: error.message || 'Internal server error' },
-      { status }
+      { status: 500 }
     );
   }
 });

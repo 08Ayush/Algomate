@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { CardLoader } from '@/components/ui/PageLoader';
 import {
     Settings,
     Plus,
@@ -42,7 +43,7 @@ const ConstraintsPage: React.FC = () => {
         rule_name: '',
         rule_type: 'HARD',
         description: '',
-        weight: 1.0,
+        weight: 5,
         rule_parameters: '{}'
     });
 
@@ -147,7 +148,7 @@ const ConstraintsPage: React.FC = () => {
             rule_name: '',
             rule_type: 'HARD',
             description: '',
-            weight: 1.0,
+            weight: 5,
             rule_parameters: '{}'
         });
     };
@@ -158,7 +159,7 @@ const ConstraintsPage: React.FC = () => {
             rule_name: rule.rule_name,
             rule_type: rule.rule_type as any, // Cast if necessary
             description: rule.description || '',
-            weight: rule.weight || 1.0,
+            weight: rule.weight ? Math.round(Number(rule.weight)) : 5,
             rule_parameters: JSON.stringify(rule.rule_parameters, null, 2)
         });
         setShowForm(true);
@@ -272,7 +273,7 @@ const ConstraintsPage: React.FC = () => {
                 {/* Table */}
                 <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
                     {loading ? (
-                        <div className="text-center py-12 text-gray-500">Loading constraints...</div>
+                        <CardLoader message="Loading constraints..." subMessage="Fetching constraint rules" />
                     ) : filteredConstraints.length === 0 ? (
                         <div className="text-center py-12 text-gray-500">No constraints found</div>
                     ) : (
@@ -382,16 +383,23 @@ const ConstraintsPage: React.FC = () => {
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Weight (0-10)</label>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Weight
+                                            <span className="ml-2 text-[#4D869C] font-bold">{form.weight}/10</span>
+                                        </label>
                                         <input
-                                            type="number"
-                                            step="0.1"
-                                            min="0"
+                                            type="range"
+                                            min="1"
                                             max="10"
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4D869C] outline-none"
+                                            step="1"
+                                            className="w-full accent-[#4D869C] cursor-pointer"
                                             value={form.weight}
-                                            onChange={(e) => setForm({ ...form, weight: parseFloat(e.target.value) })}
+                                            onChange={(e) => setForm({ ...form, weight: parseInt(e.target.value) })}
                                         />
+                                        <div className="flex justify-between text-xs text-gray-400 mt-1">
+                                            <span>1 (Low)</span>
+                                            <span>10 (High)</span>
+                                        </div>
                                     </div>
                                 </div>
                                 <div>

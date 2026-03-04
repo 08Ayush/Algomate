@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import SuperAdminLayout from '@/components/super-admin/SuperAdminLayout';
+import { CardLoader } from '@/components/ui/PageLoader';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface CalendarType {
@@ -220,7 +221,7 @@ const CalendarsPage: React.FC = () => {
 
                 {/* Calendars Grid */}
                 {loading ? (
-                    <div className="text-center py-12 text-gray-500">Loading calendars...</div>
+                    <CardLoader message="Loading calendars..." subMessage="Fetching calendar list" />
                 ) : calendars.length === 0 ? (
                     <div className="text-center py-12 text-gray-500">No calendars found. Add your first calendar.</div>
                 ) : (

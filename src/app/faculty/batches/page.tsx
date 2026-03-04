@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { GraduationCap, Search, RefreshCw, Users, Package, BookOpen, ChevronDown, ChevronUp, Layers } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
+import { CardLoader } from '@/components/ui/PageLoader';
 import { useSemesterMode } from '@/contexts/SemesterModeContext';
 
 interface Batch {
@@ -149,7 +150,7 @@ const BatchesPage: React.FC = () => {
         {/* Batches List */}
         <div className="space-y-4">
           {loading ? (
-            <div className="text-center py-12 text-gray-500 bg-white rounded-2xl shadow-lg">Loading...</div>
+            <CardLoader message="Loading batches..." subMessage="Fetching batch list" />
           ) : filteredBatches.length === 0 ? (
             <div className="text-center py-12 text-gray-500 bg-white rounded-2xl shadow-lg">
               <GraduationCap size={40} className="mx-auto mb-3 text-gray-300" />

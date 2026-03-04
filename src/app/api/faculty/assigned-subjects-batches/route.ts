@@ -9,9 +9,9 @@ export async function GET(request: NextRequest) {
 
     const pool = getPool();
 
+    // Fetch subjects the faculty is qualified to teach
     const { rows: subjects } = await pool.query(
-      `
-      SELECT
+      `SELECT
         s.id,
         s.name,
         s.code,
@@ -33,12 +33,29 @@ export async function GET(request: NextRequest) {
       WHERE fqs.faculty_id = $1
         AND s.college_id = $2
         AND s.is_active = true
-      ORDER BY s.name
-      `,
+      ORDER BY s.name`,
       [user.id, user.college_id]
     );
 
-    return NextResponse.json({ success: true, subjects });
+    // Fetch batches in the faculty's department (for assignment dropdown)
+    const { rows: batches } = await pool.query(
+      `SELECT
+        b.id, b.name, b.semester, b.section, b.academic_year,
+        b.expected_strength, b.actual_strength, b.department_id,
+        CASE WHEN d.id IS NOT NULL THEN
+          json_build_object('name', d.name, 'code', d.code)
+        ELSE NULL END AS departments
+      FROM batches b
+      LEFT JOIN departments d ON d.id = b.department_id
+      WHERE b.college_id = $1
+        AND b.is_active = true
+        ${user.department_id ? 'AND b.department_id = $2' : ''}
+      ORDER BY b.semester ASC, b.name ASC
+      LIMIT 200`,
+      user.department_id ? [user.college_id, user.department_id] : [user.college_id]
+    );
+
+    return NextResponse.json({ success: true, subjects, batches });
   } catch (error: any) {
     console.error('Error in GET /api/faculty/assigned-subjects-batches:', error);
     return NextResponse.json(
@@ -47,4 +64,5 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
 

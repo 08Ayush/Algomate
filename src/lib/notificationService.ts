@@ -1,4 +1,4 @@
-import { serviceDb as supabase } from '@/shared/database';
+import { getPool } from '@/lib/db';
 /**
  * Enhanced Notification Service v2
  * Comprehensive notification system for all platform events
@@ -6,11 +6,6 @@ import { serviceDb as supabase } from '@/shared/database';
  */
 
 import { randomUUID } from 'crypto';
-
-// Use serviceDb singleton directly
-function getSupabase() {
-  return supabase;
-}
 
 // ============================================================================
 // Type Definitions
@@ -94,36 +89,30 @@ export async function createNotification(
   data: NotificationData
 ): Promise<{ success: boolean; notificationId?: string; error?: string }> {
   try {
-    const supabase = getSupabase();
-
-    const { data: notification, error } = await supabase
-      .from('notifications')
-      .insert({
-        id: randomUUID(),
-        recipient_id: data.recipientId,
-        sender_id: data.senderId || null,
-        type: data.type,
-        title: data.title,
-        message: data.message,
-        timetable_id: data.timetableId || null,
-        batch_id: data.batchId || null,
-        content_type: data.contentType || null,
-        content_id: data.contentId || null,
-        priority: data.priority || 'normal',
-        action_url: data.actionUrl || null,
-        expires_at: data.expiresAt?.toISOString() || null,
-        is_read: false,
-        created_at: new Date().toISOString()
-      })
-      .select('id')
-      .single();
-
-    if (error) {
-      console.error('❌ Error creating notification:', error);
-      return { success: false, error: error.message };
-    }
-
-    return { success: true, notificationId: notification.id };
+    const pool = getPool();
+    const result = await pool.query(
+      `INSERT INTO notifications
+         (id, recipient_id, sender_id, type, title, message, timetable_id,
+          batch_id, content_type, content_id, priority, action_url, expires_at, is_read, created_at)
+       VALUES
+         (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, false, NOW())
+       RETURNING id`,
+      [
+        data.recipientId,
+        data.senderId || null,
+        data.type,
+        data.title,
+        data.message,
+        data.timetableId || null,
+        data.batchId || null,
+        data.contentType || null,
+        data.contentId || null,
+        data.priority || 'normal',
+        data.actionUrl || null,
+        data.expiresAt?.toISOString() || null
+      ]
+    );
+    return { success: true, notificationId: result.rows[0].id };
   } catch (error: any) {
     console.error('❌ Exception in createNotification:', error);
     return { success: false, error: error.message };
@@ -142,37 +131,36 @@ export async function createBulkNotifications(
       return { success: true, count: 0 };
     }
 
-    const supabase = getSupabase();
+    const pool = getPool();
 
-    const notifications = recipients.map(recipientId => ({
-      id: randomUUID(),
-      recipient_id: recipientId,
-      sender_id: notificationTemplate.senderId || null,
-      type: notificationTemplate.type,
-      title: notificationTemplate.title,
-      message: notificationTemplate.message,
-      timetable_id: notificationTemplate.timetableId || null,
-      batch_id: notificationTemplate.batchId || null,
-      content_type: notificationTemplate.contentType || null,
-      content_id: notificationTemplate.contentId || null,
-      priority: notificationTemplate.priority || 'normal',
-      action_url: notificationTemplate.actionUrl || null,
-      expires_at: notificationTemplate.expiresAt?.toISOString() || null,
-      is_read: false,
-      created_at: new Date().toISOString()
-    }));
+    // Build multi-row INSERT using unnest for efficiency
+    const ids = recipients.map(() => randomUUID());
+    await pool.query(
+      `INSERT INTO notifications
+         (id, recipient_id, sender_id, type, title, message, timetable_id,
+          batch_id, content_type, content_id, priority, action_url, expires_at, is_read, created_at)
+       SELECT
+         UNNEST($1::uuid[]), UNNEST($2::uuid[]),
+         $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, false, NOW()`,
+      [
+        ids,
+        recipients,
+        notificationTemplate.senderId || null,
+        notificationTemplate.type,
+        notificationTemplate.title,
+        notificationTemplate.message,
+        notificationTemplate.timetableId || null,
+        notificationTemplate.batchId || null,
+        notificationTemplate.contentType || null,
+        notificationTemplate.contentId || null,
+        notificationTemplate.priority || 'normal',
+        notificationTemplate.actionUrl || null,
+        notificationTemplate.expiresAt?.toISOString() || null
+      ]
+    );
 
-    const { error } = await supabase
-      .from('notifications')
-      .insert(notifications);
-
-    if (error) {
-      console.error('❌ Error creating bulk notifications:', error);
-      return { success: false, count: 0, error: error.message };
-    }
-
-    console.log(`✅ Created ${notifications.length} notification(s)`);
-    return { success: true, count: notifications.length };
+    console.log(`✅ Created ${recipients.length} notification(s)`);
+    return { success: true, count: recipients.length };
   } catch (error: any) {
     console.error('❌ Exception in createBulkNotifications:', error);
     return { success: false, count: 0, error: error.message };
@@ -188,26 +176,16 @@ export async function createBulkNotifications(
  */
 export async function getDepartmentPublishers(departmentId: string): Promise<string[]> {
   try {
-    const supabase = getSupabase();
-
-    console.log('🔍 Looking for publishers in department:', departmentId);
-
-    // Query publishers - check for role=hod, faculty_type=publisher, or explicit permissions
-    const { data: publishers, error } = await supabase
-      .from('users')
-      .select('id, role, faculty_type')
-      .eq('department_id', departmentId)
-      .eq('is_active', true)
-      .or('role.eq.hod,faculty_type.eq.publisher,can_publish_timetables.eq.true,can_approve_timetables.eq.true');
-
-    if (error) {
-      console.error('❌ Error fetching publishers:', error);
-      return [];
-    }
-
-    console.log('📋 Found publishers:', publishers);
-
-    return publishers?.map(p => p.id) || [];
+    const pool = getPool();
+    const result = await pool.query(
+      `SELECT id FROM users
+       WHERE department_id = $1 AND is_active = true
+         AND (role = 'hod' OR faculty_type = 'publisher'
+              OR can_publish_timetables = true OR can_approve_timetables = true)`,
+      [departmentId]
+    );
+    console.log('📋 Found publishers:', result.rows);
+    return result.rows.map((r: any) => r.id);
   } catch (error) {
     console.error('❌ Exception in getDepartmentPublishers:', error);
     return [];
@@ -219,20 +197,12 @@ export async function getDepartmentPublishers(departmentId: string): Promise<str
  */
 export async function getBatchStudents(batchId: string): Promise<string[]> {
   try {
-    const supabase = getSupabase();
-
-    const { data: enrollments, error } = await supabase
-      .from('student_batch_enrollment')
-      .select('student_id')
-      .eq('batch_id', batchId)
-      .eq('is_active', true);
-
-    if (error) {
-      console.error('❌ Error fetching batch students:', error);
-      return [];
-    }
-
-    return enrollments?.map(e => e.student_id) || [];
+    const pool = getPool();
+    const result = await pool.query(
+      `SELECT student_id FROM student_batch_enrollment WHERE batch_id = $1 AND is_active = true`,
+      [batchId]
+    );
+    return result.rows.map((r: any) => r.student_id);
   } catch (error) {
     console.error('❌ Exception in getBatchStudents:', error);
     return [];
@@ -244,21 +214,12 @@ export async function getBatchStudents(batchId: string): Promise<string[]> {
  */
 export async function getDepartmentFaculty(departmentId: string): Promise<string[]> {
   try {
-    const supabase = getSupabase();
-
-    const { data: faculty, error } = await supabase
-      .from('users')
-      .select('id')
-      .eq('department_id', departmentId)
-      .eq('role', 'faculty')
-      .eq('is_active', true);
-
-    if (error) {
-      console.error('❌ Error fetching department faculty:', error);
-      return [];
-    }
-
-    return faculty?.map(f => f.id) || [];
+    const pool = getPool();
+    const result = await pool.query(
+      `SELECT id FROM users WHERE department_id = $1 AND role = 'faculty' AND is_active = true`,
+      [departmentId]
+    );
+    return result.rows.map((r: any) => r.id);
   } catch (error) {
     console.error('❌ Exception in getDepartmentFaculty:', error);
     return [];
@@ -270,21 +231,12 @@ export async function getDepartmentFaculty(departmentId: string): Promise<string
  */
 export async function getCollegeAdmins(collegeId: string): Promise<string[]> {
   try {
-    const supabase = getSupabase();
-
-    const { data: admins, error } = await supabase
-      .from('users')
-      .select('id')
-      .eq('college_id', collegeId)
-      .in('role', ['admin', 'college_admin', 'super_admin'])
-      .eq('is_active', true);
-
-    if (error) {
-      console.error('❌ Error fetching college admins:', error);
-      return [];
-    }
-
-    return admins?.map(a => a.id) || [];
+    const pool = getPool();
+    const result = await pool.query(
+      `SELECT id FROM users WHERE college_id = $1 AND role IN ('admin','college_admin','super_admin') AND is_active = true`,
+      [collegeId]
+    );
+    return result.rows.map((r: any) => r.id);
   } catch (error) {
     console.error('❌ Exception in getCollegeAdmins:', error);
     return [];
@@ -671,23 +623,20 @@ export async function notifyAnnouncement(params: {
 }): Promise<{ success: boolean; count: number; error?: string }> {
   try {
     const recipients: string[] = [];
-    const supabase = getSupabase();
+    const pool = getPool();
 
     if (params.targetType === 'batch') {
       if (params.notifyStudents) {
         const students = await getBatchStudents(params.targetId);
         recipients.push(...students);
       }
-      // Get faculty teaching this batch
       if (params.notifyFaculty) {
-        const { data: batchSubjects } = await supabase
-          .from('batch_subjects')
-          .select('assigned_faculty_id')
-          .eq('batch_id', params.targetId)
-          .not('assigned_faculty_id', 'is', null);
-
-        const facultyIds = batchSubjects?.map(bs => bs.assigned_faculty_id).filter(Boolean) || [];
-        recipients.push(...facultyIds);
+        const r = await pool.query(
+          `SELECT assigned_faculty_id FROM batch_subjects
+           WHERE batch_id = $1 AND assigned_faculty_id IS NOT NULL`,
+          [params.targetId]
+        );
+        recipients.push(...r.rows.map((row: any) => row.assigned_faculty_id));
       }
     } else if (params.targetType === 'department') {
       if (params.notifyFaculty) {
@@ -695,32 +644,26 @@ export async function notifyAnnouncement(params: {
         recipients.push(...faculty);
       }
       if (params.notifyStudents) {
-        // Get all batches in department, then all students
-        const { data: batches } = await supabase
-          .from('batches')
-          .select('id')
-          .eq('department_id', params.targetId)
-          .eq('is_active', true);
-
-        for (const batch of batches || []) {
+        const batches = await pool.query(
+          `SELECT id FROM batches WHERE department_id = $1 AND is_active = true`,
+          [params.targetId]
+        );
+        for (const batch of batches.rows) {
           const students = await getBatchStudents(batch.id);
           recipients.push(...students);
         }
       }
     } else if (params.targetType === 'college') {
-      const { data: users } = await supabase
-        .from('users')
-        .select('id, role')
-        .eq('college_id', params.targetId)
-        .eq('is_active', true);
-
-      for (const user of users || []) {
-        if (params.notifyStudents && user.role === 'student') {
-          recipients.push(user.id);
-        }
-        if (params.notifyFaculty && user.role === 'faculty') {
-          recipients.push(user.id);
-        }
+      const roleFilters: string[] = [];
+      if (params.notifyStudents) roleFilters.push(`'student'`);
+      if (params.notifyFaculty) roleFilters.push(`'faculty'`);
+      if (roleFilters.length > 0) {
+        const r = await pool.query(
+          `SELECT id FROM users WHERE college_id = $1 AND is_active = true
+           AND role IN (${roleFilters.join(',')})`,
+          [params.targetId]
+        );
+        recipients.push(...r.rows.map((u: any) => u.id));
       }
     }
 
@@ -959,25 +902,20 @@ export async function notifySystemAlert(params: {
   expiresAt?: Date;
 }): Promise<{ success: boolean; count: number; error?: string }> {
   try {
-    const supabase = getSupabase();
-
-    let query = supabase
-      .from('users')
-      .select('id')
-      .eq('is_active', true);
+    const pool = getPool();
+    let query: string;
+    let queryParams: any[];
 
     if (params.collegeId) {
-      query = query.eq('college_id', params.collegeId);
+      query = `SELECT id FROM users WHERE college_id = $1 AND is_active = true`;
+      queryParams = [params.collegeId];
+    } else {
+      query = `SELECT id FROM users WHERE is_active = true`;
+      queryParams = [];
     }
 
-    const { data: users, error } = await query;
-
-    if (error) {
-      console.error('❌ Error fetching users for system alert:', error);
-      return { success: false, count: 0, error: error.message };
-    }
-
-    const recipients = users?.map(u => u.id) || [];
+    const result = await pool.query(query, queryParams);
+    const recipients = result.rows.map((u: any) => u.id);
 
     return await createBulkNotifications(recipients, {
       senderId: null,
@@ -1156,19 +1094,14 @@ export async function deleteUserNotifications(
   userId: string
 ): Promise<{ success: boolean; count: number; error?: string }> {
   try {
-    const supabase = getSupabase();
+    const pool = getPool();
 
-    const { count, error } = await supabase
-      .from('notifications')
-      .delete()
-      .eq('recipient_id', userId);
+    const result = await pool.query(
+      `DELETE FROM notifications WHERE recipient_id = $1`,
+      [userId]
+    );
 
-    if (error) {
-      console.error('❌ Error deleting notifications:', error);
-      return { success: false, count: 0, error: error.message };
-    }
-
-    return { success: true, count: count || 0 };
+    return { success: true, count: result.rowCount || 0 };
   } catch (error: any) {
     console.error('❌ Exception in deleteUserNotifications:', error);
     return { success: false, count: 0, error: error.message };
@@ -1182,23 +1115,17 @@ export async function deleteOldNotifications(
   daysOld: number = 30
 ): Promise<{ success: boolean; count: number; error?: string }> {
   try {
-    const supabase = getSupabase();
+    const pool = getPool();
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - daysOld);
 
-    const { count, error } = await supabase
-      .from('notifications')
-      .delete()
-      .eq('is_read', true)
-      .lt('created_at', cutoffDate.toISOString());
+    const result = await pool.query(
+      `DELETE FROM notifications WHERE is_read = true AND created_at < $1`,
+      [cutoffDate.toISOString()]
+    );
 
-    if (error) {
-      console.error('❌ Error deleting old notifications:', error);
-      return { success: false, count: 0, error: error.message };
-    }
-
-    console.log(`✅ Deleted ${count || 0} old notification(s)`);
-    return { success: true, count: count || 0 };
+    console.log(`✅ Deleted ${result.rowCount || 0} old notification(s)`);
+    return { success: true, count: result.rowCount || 0 };
   } catch (error: any) {
     console.error('❌ Exception in deleteOldNotifications:', error);
     return { success: false, count: 0, error: error.message };
@@ -1210,19 +1137,13 @@ export async function deleteOldNotifications(
  */
 export async function deleteExpiredNotifications(): Promise<{ success: boolean; count: number; error?: string }> {
   try {
-    const supabase = getSupabase();
+    const pool = getPool();
 
-    const { count, error } = await supabase
-      .from('notifications')
-      .delete()
-      .lt('expires_at', new Date().toISOString());
+    const result = await pool.query(
+      `DELETE FROM notifications WHERE expires_at < NOW()`
+    );
 
-    if (error) {
-      console.error('❌ Error deleting expired notifications:', error);
-      return { success: false, count: 0, error: error.message };
-    }
-
-    return { success: true, count: count || 0 };
+    return { success: true, count: result.rowCount || 0 };
   } catch (error: any) {
     console.error('❌ Exception in deleteExpiredNotifications:', error);
     return { success: false, count: 0, error: error.message };

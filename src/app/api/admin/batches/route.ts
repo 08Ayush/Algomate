@@ -21,7 +21,9 @@ export const GET = asyncHandler(async (request: NextRequest) => {
   const { withCacheAside } = await import('@/shared/cache/cache-helper');
   const { redisCache } = await import('@/shared/cache/redis-cache');
 
-  const cacheKeyParts = [collegeId, 'batches', 'list'];
+  const includeInactive = searchParams.get('include_inactive') === 'true';
+
+  const cacheKeyParts = [collegeId, 'batches', includeInactive ? 'all' : 'list'];
   if (isPaginated) cacheKeyParts.push(`p:${page}:l:${limit}`);
   const cacheKey = redisCache.buildKey(cacheKeyParts[0], cacheKeyParts[1], cacheKeyParts[2], cacheKeyParts.slice(3).join(':') || undefined);
 
@@ -35,13 +37,15 @@ export const GET = asyncHandler(async (request: NextRequest) => {
     { key: cacheKey, ttl: 1800 },
     async () => {
       const pool = getPool();
+      const activeFilter = includeInactive ? '' : 'AND is_active = true';
       const countResult = await pool.query(
-        `SELECT COUNT(*) FROM batches WHERE college_id = $1 AND is_active = true`,
+        `SELECT COUNT(*) FROM batches WHERE college_id = $1 ${activeFilter}`,
         [collegeId]
       );
       const count = parseInt(countResult.rows[0].count, 10);
 
       const params: any[] = [collegeId];
+      const activeJoinFilter = includeInactive ? '' : 'AND b.is_active = true';
       let sql = `
         SELECT b.*,
           CASE WHEN d.id IS NOT NULL
@@ -53,8 +57,8 @@ export const GET = asyncHandler(async (request: NextRequest) => {
         FROM batches b
         LEFT JOIN departments d ON d.id = b.department_id
         LEFT JOIN courses c ON c.id = b.course_id
-        WHERE b.college_id = $1 AND b.is_active = true
-        ORDER BY b.created_at DESC
+        WHERE b.college_id = $1 ${activeJoinFilter}
+        ORDER BY b.is_active DESC, b.created_at DESC
       `;
 
       if (isPaginated && page && limit) {
@@ -93,33 +97,73 @@ export const POST = asyncHandler(async (request: NextRequest) => {
   }
 
   const body = await request.json();
-  const { name, department_id, year, semester } = body;
+  const { name, department_id, course_id, semester, section, academic_year, expected_strength, actual_strength, is_active } = body;
 
-  if (!name || !department_id) {
-    return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
+  if (!department_id || !semester || !academic_year) {
+    return NextResponse.json({ success: false, error: 'department_id, semester, and academic_year are required' }, { status: 400 });
   }
 
-    const { data, error } = await supabase
-    .from('batches')
-    .insert({
-      name,
-      department_id,
-      college_id: user.college_id,
-      year: year || new Date().getFullYear(),
-      semester: semester || 1,
-      is_active: true
-    })
-    .select()
-    .single();
+  const pool = getPool();
 
-  if (error) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  // Verify department belongs to this college
+  const deptResult = await pool.query(
+    `SELECT code FROM departments WHERE id = $1 AND college_id = $2`,
+    [department_id, user.college_id]
+  );
+  if (deptResult.rows.length === 0) {
+    return NextResponse.json({ success: false, error: 'Department not found in your college' }, { status: 400 });
   }
 
-  // Invalidate cache
+  // Use provided name or auto-generate: e.g. "CSE-Sem3-A"
+  const deptCode = deptResult.rows[0].code || 'BATCH';
+  const batchSection = section || 'A';
+  const batchName = (name && name.trim()) ? name.trim() : `${deptCode}-Sem${semester}-${batchSection}`;
+
+  const insertResult = await pool.query(`
+    INSERT INTO batches
+      (name, department_id, course_id, college_id, semester, section, academic_year, expected_strength, actual_strength, is_active)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    RETURNING *
+  `, [
+    batchName, department_id, course_id || null, user.college_id,
+    semester, batchSection, academic_year,
+    expected_strength ?? 60, actual_strength ?? 0, is_active !== undefined ? is_active : true
+  ]);
+
+  // Invalidate both cache keys (list = active only, all = include inactive)
+  const { invalidateCachePattern } = await import('@/shared/cache/cache-helper');
+  const { redisCache } = await import('@/shared/cache/redis-cache');
+  await invalidateCachePattern(redisCache.buildKey(user.college_id!, 'batches', 'list') + '*');
+  await invalidateCachePattern(redisCache.buildKey(user.college_id!, 'batches', 'all') + '*');
+
+  return NextResponse.json({ success: true, batch: insertResult.rows[0] }, { status: 201 });
+});
+
+export const DELETE = asyncHandler(async (request: NextRequest) => {
+  const user = requireAuth(request);
+  if (user instanceof NextResponse) return user;
+
+  if (!['admin', 'college_admin', 'super_admin'].includes(user.role)) {
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get('id');
+  if (!id) return NextResponse.json({ success: false, error: 'Batch ID is required' }, { status: 400 });
+
+  const pool = getPool();
+  const result = await pool.query(
+    `UPDATE batches SET is_active = false, updated_at = NOW() WHERE id = $1 AND college_id = $2 RETURNING id`,
+    [id, user.college_id]
+  );
+
+  if (result.rows.length === 0) {
+    return NextResponse.json({ success: false, error: 'Batch not found' }, { status: 404 });
+  }
+
   const { invalidateCachePattern } = await import('@/shared/cache/cache-helper');
   const { redisCache } = await import('@/shared/cache/redis-cache');
   await invalidateCachePattern(redisCache.buildKey(user.college_id!, 'batches', 'list') + '*');
 
-  return NextResponse.json({ success: true, batch: data }, { status: 201 });
+  return NextResponse.json({ success: true, message: 'Batch deleted' });
 });

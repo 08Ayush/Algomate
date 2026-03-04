@@ -1,6 +1,6 @@
-import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
+import { getPool } from '@/lib/db';
 
 export async function GET(
   request: NextRequest,
@@ -8,7 +8,7 @@ export async function GET(
 ) {
   try {
     const user = requireAuth(request);
-    if (user instanceof NextResponse) return user; // Auth failed
+    if (user instanceof NextResponse) return user;
 
     const allowedRoles = ['college_admin', 'admin', 'super_admin'];
     if (!allowedRoles.includes(user.role)) {
@@ -16,22 +16,36 @@ export async function GET(
     }
 
     const { id } = await params;
+    const pool = getPool();
 
-    const { data: bucket, error } = await supabase
-      .from('elective_buckets')
-      .select(`
-        *,
-        batches:batch_id(id, name, semester, section, academic_year, department_id),
-        bucket_subjects(subject_id, subjects:subject_id(*))
-      `)
-      .eq('id', id)
-      .single();
+    const result = await pool.query(`
+      SELECT eb.*,
+        CASE WHEN b.id IS NOT NULL THEN
+          json_build_object(
+            'id', b.id, 'name', b.name, 'semester', b.semester, 'section', b.section,
+            'academic_year', b.academic_year, 'department_id', b.department_id
+          )
+        ELSE NULL END AS batches,
+        COALESCE((
+          SELECT json_agg(json_build_object(
+            'subject_id', bs.subject_id,
+            'subjects', json_build_object('id', s.id, 'code', s.code, 'name', s.name,
+              'semester', s.semester, 'department_id', s.department_id, 'credit_value', s.credit_value)
+          ))
+          FROM bucket_subjects bs
+          JOIN subjects s ON s.id = bs.subject_id
+          WHERE bs.bucket_id = eb.id
+        ), '[]'::json) AS bucket_subjects
+      FROM elective_buckets eb
+      LEFT JOIN batches b ON b.id = eb.batch_id
+      WHERE eb.id = $1
+    `, [id]);
 
-    if (error || !bucket) {
+    if (result.rows.length === 0) {
       return NextResponse.json({ error: 'Bucket not found' }, { status: 404 });
     }
 
-    return NextResponse.json(bucket);
+    return NextResponse.json(result.rows[0]);
   } catch (error: any) {
     console.error('Error fetching bucket:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -44,7 +58,7 @@ export async function PUT(
 ) {
   try {
     const user = requireAuth(request);
-    if (user instanceof NextResponse) return user; // Auth failed
+    if (user instanceof NextResponse) return user;
 
     const allowedRoles = ['college_admin', 'admin'];
     if (!allowedRoles.includes(user.role)) {
@@ -55,44 +69,32 @@ export async function PUT(
     const body = await request.json();
     const { bucket_name, batch_id, min_selection, max_selection, is_common_slot, subject_ids } = body;
 
-    // Update bucket
-    const { data: bucket, error: updateError } = await supabase
-      .from('elective_buckets')
-      .update({
-        bucket_name,
-        batch_id,
-        min_selection,
-        max_selection,
-        is_common_slot,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select()
-      .single();
+    const pool = getPool();
 
-    if (updateError) {
-      console.error('Error updating bucket:', updateError);
-      throw updateError;
+    const updateResult = await pool.query(`
+      UPDATE elective_buckets
+      SET bucket_name = $1, batch_id = $2, min_selection = $3, max_selection = $4,
+          is_common_slot = $5, updated_at = NOW()
+      WHERE id = $6
+      RETURNING *
+    `, [bucket_name, batch_id, min_selection, max_selection, is_common_slot, id]);
+
+    if (updateResult.rows.length === 0) {
+      return NextResponse.json({ error: 'Bucket not found' }, { status: 404 });
     }
 
-    // Update subjects if provided
+    const bucket = updateResult.rows[0];
+
     if (subject_ids !== undefined) {
-      // Delete existing bucket_subjects
-      await supabase
-        .from('bucket_subjects')
-        .delete()
-        .eq('bucket_id', id);
-
-      // Insert new ones
+      await pool.query(`DELETE FROM bucket_subjects WHERE bucket_id = $1`, [id]);
       if (subject_ids.length > 0) {
-        const subjectLinks = subject_ids.map((subject_id: string) => ({
-          bucket_id: id,
-          subject_id
-        }));
-
-        await supabase
-          .from('bucket_subjects')
-          .insert(subjectLinks);
+        const subjectValues = subject_ids.map((_: string, i: number) =>
+          `($1, $${i + 2})`
+        ).join(', ');
+        await pool.query(
+          `INSERT INTO bucket_subjects (bucket_id, subject_id) VALUES ${subjectValues} ON CONFLICT DO NOTHING`,
+          [id, ...subject_ids]
+        );
       }
     }
 
@@ -109,7 +111,7 @@ export async function DELETE(
 ) {
   try {
     const user = requireAuth(request);
-    if (user instanceof NextResponse) return user; // Auth failed
+    if (user instanceof NextResponse) return user;
 
     const allowedRoles = ['college_admin', 'admin'];
     if (!allowedRoles.includes(user.role)) {
@@ -117,23 +119,10 @@ export async function DELETE(
     }
 
     const { id } = await params;
+    const pool = getPool();
 
-    // Delete bucket_subjects first
-    await supabase
-      .from('bucket_subjects')
-      .delete()
-      .eq('bucket_id', id);
-
-    // Delete the bucket
-    const { error } = await supabase
-      .from('elective_buckets')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      console.error('Error deleting bucket:', error);
-      throw error;
-    }
+    await pool.query(`DELETE FROM bucket_subjects WHERE bucket_id = $1`, [id]);
+    await pool.query(`DELETE FROM elective_buckets WHERE id = $1`, [id]);
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

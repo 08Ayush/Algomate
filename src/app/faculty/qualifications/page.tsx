@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Sparkles, Search, RefreshCw, BookOpen, Users, Award, Plus, X, Trash2, GraduationCap } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
+import { CardLoader } from '@/components/ui/PageLoader';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface Qualification {
@@ -265,7 +266,7 @@ const QualificationsPage: React.FC = () => {
         {/* Qualifications by Faculty */}
         <div className="space-y-8">
           {loading ? (
-            <div className="text-center py-12 text-gray-500">Loading data...</div>
+            <CardLoader message="Loading qualifications..." subMessage="Fetching faculty qualification data" />
           ) : Object.keys(groupedByFaculty).length === 0 ? (
             <div className="text-center py-12 text-gray-500 bg-white rounded-2xl shadow-sm border border-gray-100">
               <Sparkles size={40} className="mx-auto mb-3 text-gray-300" />

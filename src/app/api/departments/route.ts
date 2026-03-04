@@ -1,100 +1,43 @@
-import { serviceDb as supabase } from '@/shared/database';
-import { NextRequest, NextResponse } from 'next/server'
-import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
+import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
+import { getPool } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   try {
     const user = requireAuth(request);
     if (user instanceof NextResponse) return user;
 
-    console.log('🔍 Testing departments API...')
-    // Get college_id from query params if provided
     const { searchParams } = new URL(request.url);
     const college_id = searchParams.get('college_id');
 
-    // Test connection first with more detailed logging
-    const { data: connectionTest, error: connectionError } = await supabase
-      .from('departments')
-      .select('count')
-      .limit(1)
+    const pool = getPool();
+    const params: any[] = [];
+    let where = 'WHERE is_active = true';
 
-    console.log('📊 Connection test result:', { connectionTest, connectionError })
-
-    if (connectionError) {
-      console.error('❌ Connection error:', connectionError)
-      return NextResponse.json({
-        error: 'Database connection failed',
-        details: connectionError,
-        code: connectionError.code,
-        message: connectionError.message
-      }, { status: 500 })
-    }
-
-    // Pagination (Dual-Mode)
-    const { page, limit, isPaginated } = getPaginationParams(request);
-
-    // Build query - filter by college_id if provided
-    let query = supabase
-      .from('departments')
-      .select(`
-        id,
-        name,
-        code,
-        description,
-        is_active,
-        college_id
-      `, { count: 'exact' })
-      .eq('is_active', true);
-
-    // Filter by college_id if provided
     if (college_id) {
-      query = query.eq('college_id', college_id);
+      params.push(college_id);
+      where += ` AND college_id = $${params.length}`;
     }
 
-    // Default sort
-    query = query.order('name');
+    const { rows: departments } = await pool.query(
+      `SELECT id, name, code, description, is_active, college_id
+       FROM departments
+       ${where}
+       ORDER BY name
+       LIMIT 500`,
+      params
+    );
 
-    // Apply Pagination or Safety Limit
-    if (isPaginated && page && limit) {
-      const { from, to } = getPaginationRange(page, limit);
-      query = query.range(from, to);
-    } else {
-      query = query.limit(500); // Safety cap
-    }
-
-    const { data: departments, count, error } = await query;
-
-    if (error) {
-      console.error('Department fetch error:', error)
-      return NextResponse.json({
-        error: 'Failed to fetch departments',
-        details: error
-      }, { status: 500 })
-    }
-
-    if (isPaginated && page && limit) {
-      const paginatedResult = createPaginatedResponse(departments || [], count || 0, page, limit);
-      return NextResponse.json({
-        success: true,
-        departments: paginatedResult.data,
-        meta: paginatedResult.meta
-      });
-    } else {
-      return NextResponse.json({
-        success: true,
-        departments: departments || [],
-        count: departments?.length || 0,
-        meta: { total: count || 0 }
-      });
-    }
-
-  } catch (error) {
-    console.error('Unexpected error:', error)
     return NextResponse.json({
-      error: 'Internal server error',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 })
+      success: true,
+      departments,
+      data: departments,
+      count: departments.length,
+      meta: { total: departments.length }
+    });
+  } catch (error: any) {
+    console.error('Department fetch error:', error);
+    return NextResponse.json({ error: 'Internal server error', details: error.message }, { status: 500 });
   }
 }
 
@@ -157,18 +100,17 @@ export async function POST(request: NextRequest) {
       }
     ]
 
-    const { data, error } = await supabase
-      .from('departments')
-      .insert(sampleDepartments)
-      .select()
+    const pool = getPool();
+    const values = sampleDepartments.map((_, i) => {
+      const o = i * 4;
+      return `(gen_random_uuid(), $${o+1}, $${o+2}, $${o+3}, $${o+4}, true)`;
+    }).join(', ');
+    const flat = sampleDepartments.flatMap(d => [d.name, d.code, d.description, d.algorithm_priority]);
 
-    if (error) {
-      console.error('Insert error:', error)
-      return NextResponse.json({
-        error: 'Failed to create departments',
-        details: error
-      }, { status: 500 })
-    }
+    const { rows: data } = await pool.query(
+      `INSERT INTO departments (id, name, code, description, algorithm_priority, is_active) VALUES ${values} RETURNING *`,
+      flat
+    );
 
     return NextResponse.json({
       message: 'Sample departments created successfully',

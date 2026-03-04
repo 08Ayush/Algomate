@@ -1,6 +1,6 @@
-import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
+import { getPool } from '@/lib/db';
 
 export async function POST(
     request: NextRequest,
@@ -8,7 +8,7 @@ export async function POST(
 ) {
     try {
         const user = requireAuth(request);
-        if (user instanceof NextResponse) return user; // Auth failed
+        if (user instanceof NextResponse) return user;
 
         const allowedRoles = ['college_admin', 'admin'];
         if (!allowedRoles.includes(user.role)) {
@@ -16,25 +16,12 @@ export async function POST(
         }
 
         const { id } = await params;
+        await getPool().query(
+            `UPDATE elective_buckets SET is_published = false, is_live_for_students = false WHERE id = $1`,
+            [id]
+        );
 
-        // Mark bucket as unpublished
-        const { error } = await supabase
-            .from('elective_buckets')
-            .update({
-                is_published: false,
-                is_live_for_students: false
-            })
-            .eq('id', id);
-
-        if (error) {
-            console.error('Error unpublishing bucket:', error);
-            throw error;
-        }
-
-        return NextResponse.json({
-            success: true,
-            message: 'Bucket unpublished successfully'
-        });
+        return NextResponse.json({ success: true, message: 'Bucket unpublished successfully' });
     } catch (error: any) {
         console.error('Error unpublishing bucket:', error);
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

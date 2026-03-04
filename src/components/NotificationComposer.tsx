@@ -107,9 +107,22 @@ export function NotificationComposer({
         payload.department_id = userDepartmentId;
       }
 
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json'
+      };
+
+      try {
+        const raw = localStorage.getItem('user');
+        if (raw) {
+          headers['Authorization'] = `Bearer ${btoa(raw)}`;
+        }
+      } catch {
+        // Skip adding auth header if localStorage fails
+      }
+
       const response = await fetch('/api/notifications', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payload)
       });
 

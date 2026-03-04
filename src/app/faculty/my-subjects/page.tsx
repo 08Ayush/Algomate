@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { CardLoader } from '@/components/ui/PageLoader';
 import { BookOpen, Search, RefreshCw, Clock, Users, GraduationCap, MapPin, Award, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
@@ -135,10 +136,7 @@ const MySubjectsPage: React.FC = () => {
                 {/* Subjects Grid */}
                 <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
                     {loading ? (
-                        <div className="text-center py-16">
-                            <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#4D869C] border-t-transparent mx-auto"></div>
-                            <p className="mt-4 text-gray-500">Loading subjects...</p>
-                        </div>
+                        <CardLoader message="Loading subjects..." subMessage="Fetching your assigned subjects" />
                     ) : filteredSubjects.length === 0 ? (
                         <div className="text-center py-16">
                             <BookOpen size={48} className="text-gray-300 mx-auto mb-4" />

@@ -1,204 +1,99 @@
-import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
+import { getPool } from '@/lib/db';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-// Helper function to get authenticated user
-async function getAuthenticatedUser(request: NextRequest) {
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  try {
-    const userString = Buffer.from(token, 'base64').toString();
-    const user = JSON.parse(userString);
-
-    // Verify user exists and is active - include department_id
-    const { data: dbUser, error } = await supabase
-      .from('users')
-      .select('id, department_id, role, is_active')
-      .eq('id', user.id)
-      .eq('is_active', true)
-      .single();
-
-    if (error || !dbUser) {
-      return null;
-    }
-
-    return dbUser;
-  } catch {
-    return null;
-  }
-}
-
-// GET - Fetch batches by department
+// GET - Fetch batches filtered by department_id, college_id, or user's own department
 export async function GET(request: NextRequest) {
   try {
-    // Get authenticated user
     const user = requireAuth(request);
     if (user instanceof NextResponse) return user;
 
     const { searchParams } = new URL(request.url);
+    const departmentId = searchParams.get('department_id');
+    const collegeId = searchParams.get('college_id');
     const departmentCode = searchParams.get('department_code');
-    let departmentId = searchParams.get('department_id');
 
-    console.log('Fetching batches with params:', { departmentCode, departmentId });
+    const pool = getPool();
+    const params: any[] = [];
+    let where = 'WHERE b.is_active = true';
 
-    let deptId = departmentId;
-
-    // For non-admin users, enforce department filtering
-    if (user.role !== 'admin' && !deptId) {
-      deptId = user.department_id;
-    }
-
-    // Get department ID from code if needed
-    if (!deptId && departmentCode) {
-      const { data: deptData, error: deptError } = await supabase
-        .from('departments')
-        .select('id')
-        .eq('code', departmentCode)
-        .single();
-
-      if (deptError) {
-        console.error('Error fetching department:', deptError);
-        return NextResponse.json({
-          success: false,
-          error: 'Department not found',
-          data: []
-        });
+    if (departmentId) {
+      params.push(departmentId);
+      where += ` AND b.department_id = $${params.length}`;
+    } else if (collegeId) {
+      params.push(collegeId);
+      where += ` AND b.college_id = $${params.length}`;
+    } else if (departmentCode) {
+      // look up department by code first
+      const { rows: deptRows } = await pool.query(
+        `SELECT id FROM departments WHERE code = $1 LIMIT 1`, [departmentCode]
+      );
+      if (deptRows[0]) {
+        params.push(deptRows[0].id);
+        where += ` AND b.department_id = $${params.length}`;
       }
-
-      deptId = deptData?.id;
+    } else if (user.role !== 'admin' && user.department_id) {
+      params.push(user.department_id);
+      where += ` AND b.department_id = $${params.length}`;
     }
 
-    // Pagination (Dual-Mode)
-    const { page, limit, isPaginated } = getPaginationParams(request);
+    const { rows } = await pool.query(
+      `SELECT
+        b.id, b.name, b.semester, b.academic_year, b.section, b.division,
+        b.department_id, b.college_id, b.course_id,
+        b.expected_strength, b.actual_strength,
+        b.actual_strength AS strength,
+        b.max_hours_per_day, b.preferred_start_time, b.preferred_end_time,
+        b.is_active, b.created_at, b.class_coordinator,
+        CASE WHEN d.id IS NOT NULL THEN
+          json_build_object('name', d.name, 'code', d.code)
+        ELSE NULL END AS departments,
+        CASE WHEN c.id IS NOT NULL THEN
+          json_build_object('title', c.title, 'code', c.code)
+        ELSE NULL END AS courses,
+        COALESCE((
+          SELECT json_agg(json_build_object(
+            'id', eb.id,
+            'bucket_name', eb.bucket_name,
+            'min_selection', eb.min_selection,
+            'max_selection', eb.max_selection,
+            'is_common_slot', eb.is_common_slot,
+            'subjects', COALESCE((
+              SELECT json_agg(json_build_object(
+                'id', s.id, 'name', s.name, 'code', s.code,
+                'credits', s.credits_per_week
+              ))
+              FROM bucket_subjects bs
+              JOIN subjects s ON s.id = bs.subject_id
+              WHERE bs.bucket_id = eb.id
+            ), '[]'::json)
+          ))
+          FROM elective_buckets eb
+          WHERE eb.batch_id = b.id
+        ), '[]'::json) AS elective_buckets
+      FROM batches b
+      LEFT JOIN departments d ON d.id = b.department_id
+      LEFT JOIN courses c ON c.id = b.course_id
+      ${where}
+      ORDER BY b.semester ASC, b.section ASC
+      LIMIT 500`,
+      params
+    );
 
-    // Build query to fetch batches
-    let query = supabase
-      .from('batches')
-      .select(`
-        id,
-        name,
-        semester,
-        academic_year,
-        section,
-        division,
-        department_id,
-        college_id,
-        course_id,
-        expected_strength,
-        actual_strength,
-        max_hours_per_day,
-        preferred_start_time,
-        preferred_end_time,
-        is_active,
-        created_at,
-        class_coordinator,
-        departments:departments(name, code),
-        courses:courses(title, code),
-        elective_buckets:elective_buckets(
-          id, 
-          bucket_name,
-          subjects:subjects(id, name, code)
-        )
-      `, { count: 'exact' })
-      .eq('is_active', true);
-
-    // Filter by department if provided
-    if (deptId) {
-      query = query.eq('department_id', deptId);
-    }
-
-    // Default sort
-    query = query.order('semester', { ascending: true }).order('section', { ascending: true });
-
-    // Apply Pagination or Safety Limit
-    if (isPaginated && page && limit) {
-      const { from, to } = getPaginationRange(page, limit);
-      query = query.range(from, to);
-    } else {
-      query = query.limit(500); // Safety cap
-    }
-
-    const { data: batchesData, count, error: batchesError } = await query;
-
-    if (batchesError) {
-      console.error('Error fetching batches:', batchesError);
-      return NextResponse.json({
-        success: false,
-        error: batchesError.message,
-        data: []
-      }, { status: 500 });
-    }
-
-    console.log(`Found ${batchesData?.length || 0} batches`);
-
-    // Transform data
-    const transformedData = batchesData?.map((batch: any) => ({
-      id: batch.id,
-      name: batch.name,
-      semester: batch.semester,
-      academic_year: batch.academic_year,
-      section: batch.section,
-      division: batch.division,
-      department_id: batch.department_id,
-      college_id: batch.college_id,
-      expected_strength: batch.expected_strength,
-      actual_strength: batch.actual_strength,
-      strength: batch.actual_strength || batch.expected_strength,
-      max_hours_per_day: batch.max_hours_per_day,
-      preferred_start_time: batch.preferred_start_time,
-      preferred_end_time: batch.preferred_end_time,
-      is_active: batch.is_active,
-      created_at: batch.created_at,
-      class_coordinator: batch.class_coordinator,
-      departments: batch.departments,
-      courses: batch.courses,
-      elective_buckets: batch.elective_buckets
-    })) || [];
-
-    // Calculate statistics (on current slice)
-    const semesterGroups = transformedData.reduce((acc: any, batch: any) => {
-      acc[batch.semester] = (acc[batch.semester] || 0) + 1;
-      return acc;
-    }, {});
-
-    const statistics = {
-      totalBatches: count || 0,
-      totalStudents: transformedData.reduce((sum: number, b: any) => sum + (b.actual_strength || 0), 0),
-      semesterGroups
-    };
-
-    if (isPaginated && page && limit) {
-      const paginatedResult = createPaginatedResponse(transformedData, count || 0, page, limit);
-      return NextResponse.json({
-        success: true,
-        data: paginatedResult.data,
-        statistics,
-        meta: paginatedResult.meta
-      });
-    } else {
-      return NextResponse.json({
-        success: true,
-        data: transformedData,
-        statistics,
-        count: transformedData.length,
-        meta: { total: count || 0 }
-      });
-    }
-  } catch (error: any) {
-    console.error('Unexpected error:', error);
     return NextResponse.json({
-      success: false,
-      error: 'Internal server error',
-      data: []
-    }, { status: 500 });
+      success: true,
+      data: rows,
+      batches: rows,
+      count: rows.length,
+      statistics: {
+        totalBatches: rows.length,
+        totalStudents: rows.reduce((s: number, b: any) => s + (b.actual_strength || 0), 0)
+      },
+      meta: { total: rows.length }
+    });
+  } catch (error: any) {
+    console.error('Error fetching batches:', error);
+    return NextResponse.json({ success: false, error: 'Internal server error', data: [] }, { status: 500 });
   }
 }
 
@@ -210,94 +105,53 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const {
-      name,
-      semester,
-      academic_year,
-      section,
-      division,
-      expected_strength,
-      actual_strength,
-      department_code,
-      department_id
+      name, semester, academic_year, section, division,
+      expected_strength, actual_strength, department_id, department_code
     } = body;
 
-    console.log('Creating batch:', body);
+    if (!name || !semester) {
+      return NextResponse.json({ success: false, error: 'name and semester are required' }, { status: 400 });
+    }
 
-    // Get department ID if code is provided
+    const pool = getPool();
     let deptId = department_id;
-    let collegeId: string | undefined;
-    if (!deptId && department_code) {
-      const { data: deptData } = await supabase
-        .from('departments')
-        .select('id, college_id')
-        .eq('code', department_code)
-        .single();
+    let colId: string | null = null;
 
-      deptId = deptData?.id;
-      collegeId = deptData?.college_id;
+    if (!deptId && department_code) {
+      const { rows } = await pool.query(
+        `SELECT id, college_id FROM departments WHERE code = $1 LIMIT 1`, [department_code]
+      );
+      if (!rows[0]) return NextResponse.json({ success: false, error: 'Department not found' }, { status: 400 });
+      deptId = rows[0].id;
+      colId = rows[0].college_id;
     }
 
     if (!deptId) {
-      return NextResponse.json({
-        success: false,
-        error: 'Department not found'
-      }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Department not found' }, { status: 400 });
     }
 
-    // Get college_id from department (only if not already fetched above)
-    if (!collegeId) {
-      const { data: deptData } = await supabase
-        .from('departments')
-        .select('college_id')
-        .eq('id', deptId)
-        .single();
-
-      collegeId = deptData?.college_id;
+    if (!colId) {
+      const { rows } = await pool.query(`SELECT college_id FROM departments WHERE id = $1`, [deptId]);
+      colId = rows[0]?.college_id || null;
     }
 
-    // Insert new batch
-    const { data: batchData, error: batchError } = await supabase
-      .from('batches')
-      .insert({
-        name,
-        college_id: collegeId,
-        department_id: deptId,
-        semester,
-        academic_year,
-        section: section || 'A',
-        division: division || null,
-        expected_strength: expected_strength || 60,
-        actual_strength: actual_strength || 0,
-        is_active: true
-      })
-      .select()
-      .single();
+    const { rows } = await pool.query(
+      `INSERT INTO batches (id, name, college_id, department_id, semester, academic_year, section, division,
+        expected_strength, actual_strength, is_active)
+       VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, true)
+       RETURNING *`,
+      [name, colId, deptId, semester, academic_year || null, section || 'A', division || null,
+       expected_strength || 60, actual_strength || 0]
+    );
 
-    if (batchError) {
-      console.error('Error creating batch:', batchError);
-      return NextResponse.json({
-        success: false,
-        error: batchError.message
-      }, { status: 500 });
-    }
-
-    console.log('Batch created successfully:', batchData);
-
-    return NextResponse.json({
-      success: true,
-      data: batchData,
-      message: 'Batch created successfully'
-    });
+    return NextResponse.json({ success: true, data: rows[0], message: 'Batch created successfully' });
   } catch (error: any) {
-    console.error('Unexpected error:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'Internal server error'
-    }, { status: 500 });
+    console.error('Error creating batch:', error);
+    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
   }
 }
 
-// DELETE - Delete a batch
+// DELETE - Soft-delete a batch
 export async function DELETE(request: NextRequest) {
   try {
     const user = requireAuth(request);
@@ -307,39 +161,15 @@ export async function DELETE(request: NextRequest) {
     const batchId = searchParams.get('id');
 
     if (!batchId) {
-      return NextResponse.json({
-        success: false,
-        error: 'Batch ID is required'
-      }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Batch ID is required' }, { status: 400 });
     }
 
-    console.log('Deleting batch:', batchId);
+    const pool = getPool();
+    await pool.query(`UPDATE batches SET is_active = false WHERE id = $1`, [batchId]);
 
-    // Soft delete by setting is_active to false
-    const { error: deleteError } = await supabase
-      .from('batches')
-      .update({ is_active: false })
-      .eq('id', batchId);
-
-    if (deleteError) {
-      console.error('Error deleting batch:', deleteError);
-      return NextResponse.json({
-        success: false,
-        error: deleteError.message
-      }, { status: 500 });
-    }
-
-    console.log('Batch deleted successfully');
-
-    return NextResponse.json({
-      success: true,
-      message: 'Batch deleted successfully'
-    });
+    return NextResponse.json({ success: true, message: 'Batch deleted successfully' });
   } catch (error: any) {
-    console.error('Unexpected error:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'Internal server error'
-    }, { status: 500 });
+    console.error('Error deleting batch:', error);
+    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
   }
 }

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter, usePathname } from 'next/navigation';
+import { PageLoader } from '@/components/ui/PageLoader';
 import {
     Home,
     Calendar,
@@ -94,9 +95,19 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children, activeTab }) =>
         }
     };
 
+    const getAuthHeaders = (): Record<string, string> => {
+        try {
+            const raw = localStorage.getItem('user');
+            if (!raw) return {};
+            return { 'Authorization': `Bearer ${btoa(raw)}` };
+        } catch { return {}; }
+    };
+
     const fetchNotifications = async (userId: string) => {
         try {
-            const res = await fetch(`/api/notifications?user_id=${userId}&limit=10`);
+            const res = await fetch(`/api/notifications?user_id=${userId}&limit=10`, {
+                headers: { ...getAuthHeaders() }
+            });
             const data = await res.json();
             if (data.success) {
                 setNotifications(data.data || []);
@@ -110,7 +121,7 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children, activeTab }) =>
         try {
             await fetch('/api/notifications', {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                 body: JSON.stringify({ user_id: user.id, notification_ids: [notificationId] })
             });
             setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n));
@@ -134,11 +145,7 @@ const StudentLayout: React.FC<StudentLayoutProps> = ({ children, activeTab }) =>
     ];
 
     if (!user) {
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-[#CDE8E5] via-[#EEF7FF] to-[#7AB2B2] flex items-center justify-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#4D869C] border-t-transparent"></div>
-            </div>
-        );
+        return <PageLoader message="Loading Student Portal" subMessage="Verifying your session..." />;
     }
 
     const unreadCount = notifications.filter(n => !n.is_read).length;

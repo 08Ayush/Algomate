@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { CardLoader } from '@/components/ui/PageLoader';
 import {
   ClipboardList,
   Search,
@@ -210,7 +211,7 @@ const DemoRequestsPage: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
-                <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-500">Loading...</td></tr>
+                <tr><td colSpan={6} className="p-0"><CardLoader message="Loading requests..." subMessage="Fetching demo requests" /></td></tr>
               ) : filteredRequests.length === 0 ? (
                 <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-500">No demo requests found</td></tr>
               ) : (

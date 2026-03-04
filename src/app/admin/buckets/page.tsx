@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { CardLoader } from '@/components/ui/PageLoader';
 import { ClipboardList, Plus, Edit, Trash2, X, Search, RefreshCw, BookOpen, Eye, CheckCircle, XCircle, Users, Pen } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
@@ -48,6 +49,17 @@ const BucketsPage: React.FC = () => {
     const [form, setForm] = useState({
         bucket_name: '', batch_id: '', min_selection: 1, max_selection: 1, is_common_slot: true
     });
+
+    // Subjects filtered by selected batch's department + semester
+    const filteredFormSubjects = React.useMemo(() => {
+        if (!form.batch_id) return subjects;
+        const batch = batches.find(b => b.id === form.batch_id);
+        if (!batch) return subjects;
+        return subjects.filter(s =>
+            s.department_id === batch.department_id &&
+            (s.semester == null || s.semester === batch.semester)
+        );
+    }, [form.batch_id, batches, subjects]);
 
     useEffect(() => { fetchData(); }, []);
 
@@ -277,7 +289,7 @@ const BucketsPage: React.FC = () => {
                 </div>
 
                 <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-                    {loading ? <div className="text-center py-12 text-gray-500">Loading...</div> : filteredBuckets.length === 0 ? <div className="text-center py-12 text-gray-500">No buckets found</div> : (
+                    {loading ? <CardLoader message="Loading buckets..." subMessage="Fetching elective buckets" /> : filteredBuckets.length === 0 ? <div className="text-center py-12 text-gray-500">No buckets found</div> : (
                         <div className="overflow-x-auto">
                             <table className="w-full">
                                 <thead className="bg-gray-50"><tr>
@@ -370,7 +382,21 @@ const BucketsPage: React.FC = () => {
                             <form onSubmit={handleSubmit} className="p-6 space-y-4">
                                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Bucket Name *</label><input className="w-full px-4 py-2 border rounded-lg" value={form.bucket_name} onChange={(e) => setForm({ ...form, bucket_name: e.target.value })} required /></div>
                                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Batch *</label>
-                                    <select className="w-full px-4 py-2 border rounded-lg" value={form.batch_id} onChange={(e) => setForm({ ...form, batch_id: e.target.value })} required>
+                                    <select className="w-full px-4 py-2 border rounded-lg" value={form.batch_id} onChange={(e) => {
+                                        const newBatchId = e.target.value;
+                                        const newBatch = batches.find(b => b.id === newBatchId);
+                                        // Clear subjects that don't belong to the new batch
+                                        if (newBatch) {
+                                            setSelectedSubjects(prev => prev.filter(sid => {
+                                                const s = subjects.find(s => s.id === sid);
+                                                return s && s.department_id === newBatch.department_id &&
+                                                    (s.semester == null || s.semester === newBatch.semester);
+                                            }));
+                                        } else {
+                                            setSelectedSubjects([]);
+                                        }
+                                        setForm({ ...form, batch_id: newBatchId });
+                                    }} required>
                                         <option value="">Select Batch</option>
                                         {batches.map(b => <option key={b.id} value={b.id}>{b.name} - Sem {b.semester} ({b.academic_year})</option>)}
                                     </select>
@@ -385,11 +411,17 @@ const BucketsPage: React.FC = () => {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">Select Subjects</label>
+                                    {form.batch_id && (
+                                        <p className="text-xs text-gray-500 mb-2">
+                                            Showing subjects for selected batch's department &amp; semester
+                                            {filteredFormSubjects.length === 0 && ' — no matching subjects found'}
+                                        </p>
+                                    )}
                                     <div className="border rounded-lg p-4 max-h-48 overflow-y-auto space-y-2">
-                                        {subjects.length === 0 ? (
-                                            <p className="text-gray-400 text-sm text-center py-4">No subjects available</p>
+                                        {filteredFormSubjects.length === 0 ? (
+                                            <p className="text-gray-400 text-sm text-center py-4">No subjects available{form.batch_id ? ' for this batch' : ''}</p>
                                         ) : (
-                                            subjects.map(s => (
+                                            filteredFormSubjects.map(s => (
                                                 <label key={s.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
                                                     <input type="checkbox" checked={selectedSubjects.includes(s.id)} onChange={(e) => {
                                                         if (e.target.checked) setSelectedSubjects(prev => [...prev, s.id]);

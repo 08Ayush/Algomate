@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/shared/database/client';
 import { requireAuth } from '@/lib/auth';
+import { getPool } from '@/lib/db';
 
 /**
  * Make Bucket Live for Creators API
@@ -22,52 +22,39 @@ export async function POST(
     const body = await request.json();
     const { is_live, admin_id } = body;
 
-    // Validate admin_id
-    if (!admin_id) {
-      return NextResponse.json({ error: 'Admin ID is required' }, { status: 400 });
-    }
-    // Use admin_id from body if provided, otherwise use authenticated user id
-    const adminId = admin_id || user.id;
-
-    const updateData: any = {
-      is_live_for_creators: is_live,
-      updated_at: new Date().toISOString()
-    };
+    const pool = getPool();
 
     if (is_live) {
-      updateData.creator_live_at = new Date().toISOString();
-      updateData.creator_live_by = admin_id;
+      await pool.query(
+        `UPDATE elective_buckets
+         SET is_live_for_creators = true, creator_live_at = NOW(), creator_live_by = $1, updated_at = NOW()
+         WHERE id = $2`,
+        [admin_id || user.id, id]
+      );
     } else {
-      // Making it not live for creators
-      updateData.creator_live_at = null;
-      updateData.creator_live_by = null;
+      await pool.query(
+        `UPDATE elective_buckets
+         SET is_live_for_creators = false, creator_live_at = NULL, creator_live_by = NULL, updated_at = NOW()
+         WHERE id = $1`,
+        [id]
+      );
     }
 
-    const { data: bucket, error } = await supabaseAdmin
-      .from('elective_buckets')
-      .update(updateData)
-      .eq('id', id)
-      .select(`
-        *,
-        batches:batches!elective_buckets_batch_id_fkey (
-          id,
-          name,
-          semester,
-          section,
-          academic_year,
-          course_id,
-          department_id,
-          departments:departments (id, name, code),
-          courses:courses (id, title, code)
-        ),
-        subjects:subjects!subjects_course_group_id_fkey (id, code, name)
-      `)
-      .single();
+    // Re-fetch with joins
+    const result = await pool.query(`
+      SELECT eb.*,
+        json_build_object('id', b.id, 'name', b.name, 'semester', b.semester, 'section', b.section,
+          'academic_year', b.academic_year, 'department_id', b.department_id, 'course_id', b.course_id,
+          'departments', json_build_object('id', d.id, 'name', d.name, 'code', d.code),
+          'courses', json_build_object('id', c.id, 'title', c.title, 'code', c.code)) AS batches
+      FROM elective_buckets eb
+      LEFT JOIN batches b ON b.id = eb.batch_id
+      LEFT JOIN departments d ON d.id = b.department_id
+      LEFT JOIN courses c ON c.id = b.course_id
+      WHERE eb.id = $1
+    `, [id]);
 
-    if (error) {
-      console.error('Error updating bucket creator status:', error);
-      return NextResponse.json({ error: 'Failed to update bucket' }, { status: 500 });
-    }
+    const bucket = result.rows[0] || null;
 
     return NextResponse.json({
       bucket,

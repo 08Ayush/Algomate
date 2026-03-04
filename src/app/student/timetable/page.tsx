@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import StudentLayout from '@/components/student/StudentLayout';
+import { CardLoader } from '@/components/ui/PageLoader';
 
 interface TimetableClass {
     id: string;
@@ -231,9 +232,7 @@ export default function StudentTimetable() {
     if (loading) {
         return (
             <StudentLayout activeTab="timetable">
-                <div className="flex items-center justify-center min-h-[60vh]">
-                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#4D869C] border-t-transparent"></div>
-                </div>
+                <CardLoader message="Loading your timetable..." subMessage="Fetching scheduled classes and slots" />
             </StudentLayout>
         );
     }

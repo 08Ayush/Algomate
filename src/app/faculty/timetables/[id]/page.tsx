@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
 import { motion } from 'framer-motion';
+import { PageLoader } from '@/components/ui/PageLoader';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
@@ -262,14 +263,7 @@ export default function ViewTimetablePage() {
     };
 
     if (loading) {
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-[#CDE8E5] via-[#EEF7FF] to-[#7AB2B2] flex items-center justify-center">
-                <div className="text-center bg-white rounded-2xl p-10 shadow-lg">
-                    <div className="animate-spin rounded-full h-16 w-16 border-4 border-[#4D869C] border-t-transparent mx-auto"></div>
-                    <p className="mt-6 text-gray-600 font-medium">Loading timetable...</p>
-                </div>
-            </div>
-        );
+        return <PageLoader message="Loading Timetable" subMessage="Fetching schedule details and classes..." />;
     }
 
     if (error || !timetable) {

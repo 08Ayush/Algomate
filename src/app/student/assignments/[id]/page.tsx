@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { PageLoader } from '@/components/ui/PageLoader';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -300,14 +301,7 @@ export default function AssignmentPage() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4D869C] mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading assignment...</p>
-        </div>
-      </div>
-    );
+    return <PageLoader message="Loading Assignment" subMessage="Fetching questions and details..." />;
   }
 
   if (!assignment || questions.length === 0) {

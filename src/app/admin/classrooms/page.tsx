@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { CardLoader } from '@/components/ui/PageLoader';
 import {
     DoorOpen,
     Plus,
@@ -298,7 +299,7 @@ const ClassroomsPage: React.FC = () => {
                 </div>
 
                 <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-                    {loading ? <div className="text-center py-12 text-gray-500">Loading...</div> : filteredClassrooms.length === 0 ? <div className="text-center py-12 text-gray-500">No classrooms found</div> : (
+                    {loading ? <CardLoader message="Loading classrooms..." subMessage="Fetching classroom inventory" /> : filteredClassrooms.length === 0 ? <div className="text-center py-12 text-gray-500">No classrooms found</div> : (
                         <table className="w-full">
                             <thead className="bg-gray-50">
                                 <tr>

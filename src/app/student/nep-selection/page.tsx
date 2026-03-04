@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, Reorder } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { CardLoader } from '@/components/ui/PageLoader';
 import {
   BookOpen,
   Lock,
@@ -236,12 +237,7 @@ export default function NEPElectiveSelection() {
   if (loading) {
     return (
       <StudentLayout activeTab="nep-selection">
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#4D869C] border-t-transparent mx-auto mb-4"></div>
-            <p className="text-gray-500">Loading elective buckets...</p>
-          </div>
-        </div>
+        <CardLoader message="Loading Elective Buckets" subMessage="Fetching your NEP subject choices..." />
       </StudentLayout>
     );
   }

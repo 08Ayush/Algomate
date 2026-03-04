@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { CheckSquare, RefreshCw, Search, Eye, EyeOff, Download, Play, AlertCircle, CheckCircle, Users, BookOpen, Undo2, FileText, FileSpreadsheet } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
+import { CardLoader } from '@/components/ui/PageLoader';
 import { useSemesterMode } from '@/contexts/SemesterModeContext';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
 
@@ -523,7 +524,7 @@ const SubjectAllotmentPage: React.FC = () => {
 
             {/* Allotments Table */}
             {loadingAllotments ? (
-              <div className="text-center py-12 text-gray-500">Loading allotments...</div>
+              <CardLoader message="Loading allotments..." subMessage="Fetching subject allotment data" />
             ) : filteredAllotments.length === 0 ? (
               <div className="text-center py-12 text-gray-500">
                 <CheckSquare size={40} className="mx-auto mb-3 text-gray-300" />
@@ -613,7 +614,7 @@ const SubjectAllotmentPage: React.FC = () => {
 
             {/* Choices Table */}
             {loadingChoices ? (
-              <div className="text-center py-12 text-gray-500">Loading submissions...</div>
+              <CardLoader message="Loading submissions..." subMessage="Fetching student choices" />
             ) : filteredChoices.length === 0 ? (
               <div className="text-center py-12 text-gray-500">
                 <Users size={40} className="mx-auto mb-3 text-gray-300" />

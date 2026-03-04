@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
+import { CardLoader } from '@/components/ui/PageLoader';
 import { ArrowLeft, Plus, Trash2, FileText, Clock, HelpCircle, Save, Send, CheckCircle, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
@@ -242,12 +243,7 @@ export default function EditAssignment() {
     if (loading) {
         return (
             <FacultyCreatorLayout activeTab="assignments">
-                <div className="flex items-center justify-center min-h-[60vh]">
-                    <div className="text-center bg-white rounded-2xl p-10 shadow-lg">
-                        <div className="animate-spin rounded-full h-16 w-16 border-4 border-[#4D869C] border-t-transparent mx-auto"></div>
-                        <p className="mt-6 text-gray-600 font-medium">Loading assignment...</p>
-                    </div>
-                </div>
+                <CardLoader message="Loading Assignment" subMessage="Fetching assignment details..." />
             </FacultyCreatorLayout>
         );
     }

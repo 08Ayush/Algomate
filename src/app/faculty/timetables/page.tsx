@@ -11,6 +11,7 @@ import toast from 'react-hot-toast';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
 import { useSemesterMode } from '@/contexts/SemesterModeContext';
 import { useConfirm } from '@/components/ui/ConfirmDialog';
+import { CardLoader } from '@/components/ui/PageLoader';
 
 interface Timetable {
     id: string;
@@ -320,10 +321,7 @@ const TimetablesPage: React.FC = () => {
                 {/* Timetables List */}
                 <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
                     {loading ? (
-                        <div className="text-center py-16">
-                            <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#4D869C] border-t-transparent mx-auto"></div>
-                            <p className="mt-4 text-gray-500">Loading timetables...</p>
-                        </div>
+                        <CardLoader message="Loading timetables..." subMessage="Fetching your scheduled timetables" />
                     ) : filteredTimetables.length === 0 ? (
                         <div className="text-center py-16 text-gray-500">
                             <CalendarDays size={48} className="mx-auto mb-4 text-gray-300" />

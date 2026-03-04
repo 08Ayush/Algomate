@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
+import { PageLoader } from '@/components/ui/PageLoader';
 import { motion } from 'framer-motion';
 import { Zap, Settings, Play, CheckCircle, AlertCircle, Clock, Save, Send, Eye, ChevronDown, ChevronUp } from 'lucide-react';
 import { useSemesterMode } from '@/contexts/SemesterModeContext';
@@ -513,14 +514,7 @@ export default function HybridSchedulerPage() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-[#CDE8E5] via-[#EEF7FF] to-[#7AB2B2] flex items-center justify-center">
-        <div className="text-center bg-white rounded-2xl p-10 shadow-lg">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-[#4D869C] border-t-transparent mx-auto"></div>
-          <p className="mt-6 text-gray-600 font-medium">Loading Hybrid Scheduler...</p>
-        </div>
-      </div>
-    );
+    return <PageLoader message="Loading Hybrid Scheduler" subMessage="Setting up your scheduling environment..." />;
   }
 
   if (!user) return null;

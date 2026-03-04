@@ -1,6 +1,7 @@
 import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
+import { getPool } from '@/lib/db';
 
 // Helper function to get user from Authorization header
 async function getAuthenticatedUser(request: NextRequest) {
@@ -126,44 +127,43 @@ export async function PUT(
       );
     }
 
-    // Update faculty
-    const { data: updatedFaculty, error } = await supabase
-      .from('users')
-      .update({
-        first_name,
-        last_name,
-        email,
-        phone: phone || null,
-        role: actualRole,
-        faculty_type: actualFacultyType,
-        department_id,
-        college_id: user.college_id,  // Maintain user's college_id
-        is_active: is_active !== undefined ? is_active : true
-      })
-      .eq('id', id)
-      .eq('college_id', user.college_id)
-      .select(`
-        id,
-        first_name,
-        last_name,
-        email,
-        college_uid,
-        phone,
-        role,
-        faculty_type,
-        department_id,
-        college_id,
-        is_active,
-        departments!users_department_id_fkey(id, name, code)
-      `)
-      .single();
+    // Update faculty using raw SQL to avoid embedded-relation issues
+    const pool = getPool();
+    const updateResult = await pool.query(
+      `UPDATE users SET
+         first_name = $1, last_name = $2, email = $3, phone = $4,
+         role = $5, faculty_type = $6, department_id = $7,
+         is_active = $8, updated_at = NOW()
+       WHERE id = $9 AND college_id = $10
+       RETURNING id`,
+      [
+        first_name, last_name, email, phone || null,
+        actualRole, actualFacultyType, department_id,
+        is_active !== undefined ? is_active : true,
+        id, user.college_id
+      ]
+    );
 
-    if (error) {
-      console.error('Faculty update error:', error);
-      return NextResponse.json(
-        { error: 'Failed to update faculty' },
-        { status: 500 }
-      );
+    if (updateResult.rows.length === 0) {
+      return NextResponse.json({ error: 'Faculty not found in your college' }, { status: 404 });
+    }
+
+    // Re-fetch with department JOIN
+    const fetchResult = await pool.query(`
+      SELECT u.id, u.first_name, u.last_name, u.email, u.college_uid, u.phone,
+        u.role, u.faculty_type, u.department_id, u.college_id, u.is_active,
+        CASE WHEN d.id IS NOT NULL
+          THEN json_build_object('id', d.id, 'name', d.name, 'code', d.code)
+          ELSE NULL END AS departments
+      FROM users u
+      LEFT JOIN departments d ON d.id = u.department_id
+      WHERE u.id = $1
+    `, [id]);
+
+    const updatedFaculty = fetchResult.rows[0];
+
+    if (fetchResult.rows.length === 0) {
+      return NextResponse.json({ error: 'Failed to fetch updated faculty' }, { status: 500 });
     }
 
     // Map faculty_type back to role for display (reverse the mapping)

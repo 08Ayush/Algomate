@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { CardLoader } from '@/components/ui/PageLoader';
 import {
     FileText,
     Calendar,
@@ -182,12 +183,7 @@ export default function StudentAssignments() {
     if (loading) {
         return (
             <StudentLayout activeTab="assignments">
-                <div className="flex items-center justify-center min-h-[60vh]">
-                    <div className="text-center">
-                        <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#4D869C] border-t-transparent mx-auto mb-4"></div>
-                        <p className="text-gray-500">Loading assignments...</p>
-                    </div>
-                </div>
+                <CardLoader message="Loading Assignments" subMessage="Fetching your tasks and submissions..." />
             </StudentLayout>
         );
     }

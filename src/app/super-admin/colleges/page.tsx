@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { CardLoader } from '@/components/ui/PageLoader';
 import {
     Building2,
     Plus,
@@ -337,7 +338,7 @@ const CollegesPage: React.FC = () => {
                         <tbody className="divide-y divide-gray-100">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-12 text-center text-gray-500">Loading...</td>
+                                    <td colSpan={5} className="p-0"><CardLoader message="Loading colleges..." subMessage="Fetching registered institutions" /></td>
                                 </tr>
                             ) : filteredColleges.length === 0 ? (
                                 <tr>

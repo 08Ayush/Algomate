@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { CardLoader } from '@/components/ui/PageLoader';
 import { Settings, BookOpen, Save, RefreshCw, Star, Clock, CheckCircle, Plus, X, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
@@ -320,9 +321,7 @@ const PreferencesPage: React.FC = () => {
                     </div>
 
                     {loading ? (
-                        <div className="text-center py-8">
-                            <div className="animate-spin rounded-full h-10 w-10 border-4 border-[#4D869C] border-t-transparent mx-auto"></div>
-                        </div>
+                        <CardLoader message="Loading qualifications..." subMessage="Fetching your teaching subjects" size="sm" />
                     ) : qualifications.length === 0 ? (
                         <div className="text-center py-12 bg-gray-50 rounded-xl">
                             <BookOpen size={40} className="text-gray-300 mx-auto mb-3" />

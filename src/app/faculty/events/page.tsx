@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { CardLoader } from '@/components/ui/PageLoader';
 import {
   Calendar, Plus, Edit, Trash2, X, Search, RefreshCw, Clock, MapPin, Users,
   ChevronLeft, ChevronRight, List, CheckCircle, AlertCircle, FileText, Building2
@@ -383,10 +384,7 @@ const EventsPage: React.FC = () => {
             </div>
 
             {loading ? (
-              <div className="text-center py-16">
-                <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#4D869C] border-t-transparent mx-auto"></div>
-                <p className="mt-4 text-gray-500">Loading events...</p>
-              </div>
+              <CardLoader message="Loading events..." subMessage="Fetching upcoming events" />
             ) : filteredEvents.length === 0 ? (
               <div className="text-center py-16 text-gray-500">
                 <Calendar size={48} className="mx-auto mb-4 text-gray-300" />

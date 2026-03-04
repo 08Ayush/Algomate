@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { CardLoader } from '@/components/ui/PageLoader';
 import {
     BookOpen,
     Clock,
@@ -192,9 +193,7 @@ export default function StudentSubjects() {
     if (loading) {
         return (
             <StudentLayout activeTab="subjects">
-                <div className="flex items-center justify-center min-h-[60vh]">
-                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#4D869C] border-t-transparent"></div>
-                </div>
+                <CardLoader message="Loading Subjects" subMessage="Fetching your enrolled subjects..." />
             </StudentLayout>
         );
     }

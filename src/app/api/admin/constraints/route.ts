@@ -1,10 +1,6 @@
-import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+import { getPool } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
     try {
@@ -14,47 +10,22 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
         }
 
-        // Pagination (Dual-Mode)
-        const { page, limit, isPaginated } = getPaginationParams(request);
+        const pool = getPool();
+        const result = await pool.query(
+            `SELECT * FROM constraint_rules
+             WHERE college_id = $1
+             ORDER BY created_at DESC
+             LIMIT 500`,
+            [user.college_id]
+        );
 
-        // Use college_id directly as confirmed by the User's schema update
-        let query = supabase
-            .from('constraint_rules')
-            .select('*', { count: 'exact' })
-            .eq('college_id', user.college_id)
-            .order('created_at', { ascending: false });
-
-        // Apply Pagination or Safety Limit
-        if (isPaginated && page && limit) {
-            const { from, to } = getPaginationRange(page, limit);
-            query = query.range(from, to);
-        } else {
-            query = query.limit(500); // Safety cap
-        }
-
-        const { data: constraints, count, error } = await query;
-
-        if (error) {
-            console.error('Error fetching constraints:', error);
-            return NextResponse.json({ success: false, error: 'Failed to fetch constraints' }, { status: 500 });
-        }
-
-        if (isPaginated && page && limit) {
-            const paginatedResult = createPaginatedResponse(constraints || [], count || 0, page, limit);
-            return NextResponse.json({
-                success: true,
-                data: paginatedResult.data,
-                meta: paginatedResult.meta
-            });
-        } else {
-            return NextResponse.json({
-                success: true,
-                data: constraints || [],
-                meta: { total: count || 0 }
-            });
-        }
+        return NextResponse.json({
+            success: true,
+            data: result.rows,
+            meta: { total: result.rowCount ?? 0 }
+        });
     } catch (error: any) {
-        console.error('SERVER ERROR in constraints route:', error);
+        console.error('Error fetching constraints:', error);
         return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
     }
 }
@@ -70,30 +41,32 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const { rule_name, rule_type, description, rule_parameters, weight, is_active } = body;
 
-        const { data, error } = await supabase
-            .from('constraint_rules')
-            .insert([
-                {
-                    rule_name,
-                    rule_type,
-                    description,
-                    rule_parameters: rule_parameters || {},
-                    weight: weight || 1.0,
-                    is_active: is_active !== undefined ? is_active : true,
-                    created_by: user.id,
-                    college_id: user.college_id // Added field
-                }
-            ])
-            .select()
-            .single();
-
-        if (error) {
-            console.error('Error creating constraint:', error);
-            return NextResponse.json({ success: false, error: 'Failed to create constraint' }, { status: 500 });
+        if (!rule_name) {
+            return NextResponse.json({ success: false, error: 'Rule name is required' }, { status: 400 });
         }
 
-        return NextResponse.json({ success: true, data });
+        const pool = getPool();
+        const result = await pool.query(
+            `INSERT INTO constraint_rules
+               (id, rule_name, rule_type, description, rule_parameters, weight, is_active, created_by, college_id, created_at, updated_at)
+             VALUES
+               (gen_random_uuid(), $1, $2, $3, $4::jsonb, $5, $6, $7, $8, NOW(), NOW())
+             RETURNING *`,
+            [
+                rule_name,
+                rule_type || 'HARD',
+                description || null,
+                JSON.stringify(rule_parameters || {}),
+                weight ?? 5,
+                is_active !== undefined ? is_active : true,
+                user.id,
+                user.college_id
+            ]
+        );
+
+        return NextResponse.json({ success: true, data: result.rows[0] });
     } catch (error: any) {
+        console.error('Error creating constraint:', error);
         return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
     }
 }
@@ -102,7 +75,7 @@ export async function PUT(request: NextRequest) {
     try {
         const user = requireAuth(request);
         if (user instanceof NextResponse) return user;
-        if (!user.id) {
+        if (!user.id || !user.college_id) {
             return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -111,28 +84,32 @@ export async function PUT(request: NextRequest) {
 
         if (!id) return NextResponse.json({ success: false, error: 'ID required' }, { status: 400 });
 
-        const { data, error } = await supabase
-            .from('constraint_rules')
-            .update({
+        const pool = getPool();
+        const result = await pool.query(
+            `UPDATE constraint_rules
+             SET rule_name = $1, rule_type = $2, description = $3,
+                 rule_parameters = $4::jsonb, weight = $5, is_active = $6, updated_at = NOW()
+             WHERE id = $7 AND college_id = $8
+             RETURNING *`,
+            [
                 rule_name,
                 rule_type,
-                description,
-                rule_parameters,
+                description || null,
+                JSON.stringify(rule_parameters || {}),
                 weight,
                 is_active,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', id)
-            .select()
-            .single();
+                id,
+                user.college_id
+            ]
+        );
 
-        if (error) {
-            console.error('Error updating constraint:', error);
-            return NextResponse.json({ success: false, error: 'Failed to update constraint' }, { status: 500 });
+        if (result.rows.length === 0) {
+            return NextResponse.json({ success: false, error: 'Constraint not found' }, { status: 404 });
         }
 
-        return NextResponse.json({ success: true, data });
+        return NextResponse.json({ success: true, data: result.rows[0] });
     } catch (error: any) {
+        console.error('Error updating constraint:', error);
         return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
     }
 }
@@ -141,7 +118,7 @@ export async function DELETE(request: NextRequest) {
     try {
         const user = requireAuth(request);
         if (user instanceof NextResponse) return user;
-        if (!user.id) {
+        if (!user.id || !user.college_id) {
             return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -150,18 +127,15 @@ export async function DELETE(request: NextRequest) {
 
         if (!id) return NextResponse.json({ success: false, error: 'ID required' }, { status: 400 });
 
-        const { error } = await supabase
-            .from('constraint_rules')
-            .delete()
-            .eq('id', id);
-
-        if (error) {
-            console.error('Error deleting constraint:', error);
-            return NextResponse.json({ success: false, error: 'Failed to delete constraint' }, { status: 500 });
-        }
+        const pool = getPool();
+        await pool.query(
+            `DELETE FROM constraint_rules WHERE id = $1 AND college_id = $2`,
+            [id, user.college_id]
+        );
 
         return NextResponse.json({ success: true, message: 'Constraint deleted successfully' });
     } catch (error: any) {
+        console.error('Error deleting constraint:', error);
         return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
     }
 }

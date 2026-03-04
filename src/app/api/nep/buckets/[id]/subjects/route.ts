@@ -1,9 +1,6 @@
-import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
-import { SupabaseElectiveBucketRepository } from '@/modules/elective';
 import { requireAuth } from '@/lib/auth';
-
-const bucketRepo = new SupabaseElectiveBucketRepository(supabase);
+import { getPool } from '@/lib/db';
 
 // POST - Add subjects to bucket
 export async function POST(
@@ -12,37 +9,35 @@ export async function POST(
 ) {
   try {
     const user = requireAuth(request);
-    if (user instanceof NextResponse) return user; // Auth failed
+    if (user instanceof NextResponse) return user;
 
     const params = await context.params;
     const body = await request.json();
     const { subjectIds } = body;
 
     if (!Array.isArray(subjectIds) || subjectIds.length === 0) {
-      return NextResponse.json(
-        { error: 'subjectIds must be a non-empty array' },
-        { status: 400 }
+      return NextResponse.json({ error: 'subjectIds must be a non-empty array' }, { status: 400 });
+    }
+
+    const pool = getPool();
+
+    // Insert each subject into bucket_subjects, ignore duplicates
+    for (const subjectId of subjectIds) {
+      await pool.query(
+        `INSERT INTO bucket_subjects (bucket_id, subject_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [params.id, subjectId]
       );
     }
 
-    // Link subjects to bucket
-    await bucketRepo.linkSubjects(params.id, subjectIds);
-
-    // Notify Admin
+    // Get bucket name for notification
     try {
       if (user.id && user.college_id) {
-        // Fetch bucket name
-        const bucket = await bucketRepo.findById(params.id);
-        const bucketName = bucket ? (bucket as any).bucket_name : 'Elective Bucket'; // bucket entity might use snake_case or come from JSON
-        // Note: bucketRepo.findById usually returns Domain Entity (camelCase) or database row (snake_case).
-        // Based on buckets/[id]/route.ts it calls toJson which exposes properties.
-        // I'll try 'bucket_name' or 'name'. If accessing raw Repo result, check type.
-        // Safety fallback.
-
+        const bucketRow = await pool.query(`SELECT bucket_name FROM elective_buckets WHERE id = $1`, [params.id]);
+        const bucketName = bucketRow.rows[0]?.bucket_name || 'Elective Bucket';
         const { notifySubjectsAddedToBucket } = await import('@/lib/notificationService');
         await notifySubjectsAddedToBucket({
           bucketId: params.id,
-          bucketName: bucketName || 'Elective Bucket',
+          bucketName,
           subjectCount: subjectIds.length,
           facultyId: user.id,
           facultyName: `${user.first_name || 'Faculty'} ${user.last_name || ''}`.trim(),
@@ -53,10 +48,7 @@ export async function POST(
       console.error('Subject Notification Error:', subErr);
     }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Subjects added to bucket successfully'
-    });
+    return NextResponse.json({ success: true, message: 'Subjects added to bucket successfully' });
 
   } catch (error: any) {
     console.error('Error adding subjects:', error);
@@ -71,26 +63,22 @@ export async function DELETE(
 ) {
   try {
     const user = requireAuth(request);
-    if (user instanceof NextResponse) return user; // Auth failed
+    if (user instanceof NextResponse) return user;
 
     const params = await context.params;
     const { searchParams } = new URL(request.url);
     const subjectId = searchParams.get('subjectId');
 
     if (!subjectId) {
-      return NextResponse.json(
-        { error: 'subjectId query parameter is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'subjectId query parameter is required' }, { status: 400 });
     }
 
-    // Unlink subject from bucket
-    await bucketRepo.unlinkSubjects([subjectId]);
+    await getPool().query(
+      `DELETE FROM bucket_subjects WHERE bucket_id = $1 AND subject_id = $2`,
+      [params.id, subjectId]
+    );
 
-    return NextResponse.json({
-      success: true,
-      message: 'Subject removed from bucket successfully'
-    });
+    return NextResponse.json({ success: true, message: 'Subject removed from bucket successfully' });
 
   } catch (error: any) {
     console.error('Error removing subject:', error);
@@ -105,26 +93,29 @@ export async function PUT(
 ) {
   try {
     const user = requireAuth(request);
-    if (user instanceof NextResponse) return user; // Auth failed
+    if (user instanceof NextResponse) return user;
 
     const params = await context.params;
     const body = await request.json();
     const { subject_ids } = body;
 
     if (!Array.isArray(subject_ids)) {
-      return NextResponse.json(
-        { error: 'subject_ids must be an array' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'subject_ids must be an array' }, { status: 400 });
     }
 
-    // Link subjects to bucket
-    await bucketRepo.linkSubjects(params.id, subject_ids);
+    const pool = getPool();
+    await pool.query(`DELETE FROM bucket_subjects WHERE bucket_id = $1`, [params.id]);
 
-    return NextResponse.json({
-      success: true,
-      message: 'Subjects linked to bucket successfully'
-    });
+    if (subject_ids.length > 0) {
+      for (const subjectId of subject_ids) {
+        await pool.query(
+          `INSERT INTO bucket_subjects (bucket_id, subject_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [params.id, subjectId]
+        );
+      }
+    }
+
+    return NextResponse.json({ success: true, message: 'Subjects linked to bucket successfully' });
 
   } catch (error: any) {
     console.error('Error linking subjects:', error);

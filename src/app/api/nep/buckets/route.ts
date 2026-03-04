@@ -1,19 +1,11 @@
-import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
-import { SupabaseElectiveBucketRepository } from '../../../../modules/elective/infrastructure/persistence/SupabaseElectiveBucketRepository';
-import { GetBucketsForBatchUseCase } from '../../../../modules/elective/application/use-cases/GetBucketsForBatchUseCase';
-import { CreateElectiveBucketUseCase } from '../../../../modules/elective/application/use-cases/CreateElectiveBucketUseCase';
-import { CreateElectiveBucketDtoSchema } from '../../../../modules/elective/application/dto/ElectiveBucketDto';
 import { requireAuth } from '@/lib/auth';
-
-const bucketRepo = new SupabaseElectiveBucketRepository(supabase);
-const getBucketsUseCase = new GetBucketsForBatchUseCase(bucketRepo);
-const createBucketUseCase = new CreateElectiveBucketUseCase(bucketRepo);
+import { getPool } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   try {
     const user = requireAuth(request);
-    if (user instanceof NextResponse) return user; // Auth failed
+    if (user instanceof NextResponse) return user;
 
     const { searchParams } = new URL(request.url);
     const batchId = searchParams.get('batchId');
@@ -22,152 +14,83 @@ export async function GET(request: NextRequest) {
     const departmentId = searchParams.get('departmentId');
     const fetchAll = searchParams.get('fetchAll');
 
-    // Fetch all buckets for college admin
+    const pool = getPool();
+
+    // Admin: fetch all buckets for the college
     if (fetchAll === 'true') {
-      if (user.role !== 'college_admin' && user.role !== 'admin') {
+      if (!['college_admin', 'admin', 'super_admin'].includes(user.role)) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
       }
 
-      // Optimized: Fetch buckets with subjects in a single query
-      const { data: buckets, error } = await supabase
-        .from('elective_buckets')
-        .select(`
-          *,
-          subjects (*)
-        `)
-        .eq('college_id', user.college_id);
+      const { rows } = await pool.query(`
+        SELECT eb.*,
+          COALESCE((
+            SELECT json_agg(json_build_object('id', s.id, 'code', s.code, 'name', s.name,
+              'credits_per_week', s.credits_per_week, 'semester', s.semester,
+              'subject_type', s.subject_type, 'nep_category', s.nep_category))
+            FROM bucket_subjects bs JOIN subjects s ON s.id = bs.subject_id
+            WHERE bs.bucket_id = eb.id
+          ), '[]'::json) AS subjects
+        FROM elective_buckets eb
+        WHERE eb.college_id = $1
+        ORDER BY eb.created_at DESC
+      `, [user.college_id]);
 
-      if (error) {
-        throw error;
+      return NextResponse.json(rows);
+    }
+
+    // Creator faculty: resolve batches by departmentId + semester (+optional courseId)
+    // Show only buckets where is_live_for_creators = true
+    const params: any[] = [user.college_id];
+    let batchFilter = '';
+
+    if (batchId) {
+      params.push(batchId);
+      batchFilter = `AND b.id = $${params.length}`;
+    } else {
+      if (departmentId) {
+        params.push(departmentId);
+        batchFilter += ` AND b.department_id = $${params.length}`;
       }
-
-      // Transform to match expected items format if necessary, 
-      // but usually subjects array from join is compatible with the "enriched" logic
-      const enriched = buckets.map((bucket: any) => ({
-        ...bucket,
-        subjects: bucket.subjects || []
-      }));
-
-      return NextResponse.json(enriched);
-    }
-
-    // Find batch by various methods
-    let resolvedBatchId = batchId;
-
-    if (!resolvedBatchId && courseId && semester) {
-      const { data: batch } = await supabase
-        .from('batches')
-        .select('id')
-        .eq('college_id', user.college_id)
-        .eq('course_id', courseId)
-        .eq('semester', parseInt(semester))
-        .eq('is_active', true)
-        .maybeSingle();
-
-      resolvedBatchId = batch?.id;
-    }
-
-    // NEP 2020 Approach: If no batch found, try direct lookup with college_id + course code + semester
-    if (!resolvedBatchId && courseId && semester) {
-      console.log('[NEP Buckets] Trying NEP 2020 lookup...');
-      console.log('[NEP Buckets] Course ID:', courseId);
-
-      // Get course code from course ID
-      const { data: course, error: courseError } = await supabase
-        .from('courses')
-        .select('code')
-        .eq('id', courseId)
-        .single();
-
-      console.log('[NEP Buckets] Course lookup result:', course, courseError);
-
-      if (course?.code) {
-        console.log('[NEP Buckets] Looking for buckets with:', {
-          college_id: user.college_id,
-          course: course.code,
-          semester: parseInt(semester)
-        });
-
-        // Query buckets directly using NEP 2020 fields
-        const { data: nepBuckets, error: bucketsError } = await supabase
-          .from('elective_buckets')
-          .select(`
-            *,
-            batches:batch_id (
-              id,
-              name,
-              semester,
-              section,
-              academic_year,
-              course_id,
-              department_id,
-              is_active,
-              courses:course_id (id, title, code),
-              departments:department_id (id, name, code)
-            )
-          `)
-          .eq('college_id', user.college_id)
-          .eq('course', course.code)
-          .eq('semester', parseInt(semester));
-
-        console.log('[NEP Buckets] Query result:', nepBuckets?.length || 0, 'buckets', bucketsError);
-
-        if (nepBuckets && nepBuckets.length > 0) {
-          // Enrich with subjects
-          // Optimized: Fetch all subjects for these buckets in one query
-          const bucketIds = nepBuckets.map(b => b.id);
-          const { data: allSubjects } = await supabase
-            .from('subjects')
-            .select('*')
-            .in('course_group_id', bucketIds)
-            .eq('college_id', user.college_id);
-
-          // Map subjects to buckets in memory
-          const enriched = nepBuckets.map((bucket: any) => {
-            const bucketSubjects = allSubjects?.filter(s => s.course_group_id === bucket.id) || [];
-            return {
-              id: bucket.id,
-              bucket_name: bucket.bucket_name,
-              is_common_slot: bucket.is_common_slot,
-              min_selection: bucket.min_selection,
-              max_selection: bucket.max_selection,
-              batch_id: bucket.batch_id,
-              created_at: bucket.created_at,
-              batch_info: bucket.batches,
-              subjects: bucketSubjects
-            };
-          });
-
-          return NextResponse.json(enriched);
-        }
+      if (semester) {
+        params.push(parseInt(semester));
+        batchFilter += ` AND b.semester = $${params.length}`;
+      }
+      if (courseId) {
+        params.push(courseId);
+        batchFilter += ` AND b.course_id = $${params.length}`;
       }
     }
 
-    if (!resolvedBatchId) {
-      return NextResponse.json([]);
-    }
+    const { rows: buckets } = await pool.query(`
+      SELECT eb.*,
+        json_build_object(
+          'id', b.id, 'name', b.name, 'semester', b.semester, 'section', b.section,
+          'academic_year', b.academic_year, 'course_id', b.course_id, 'department_id', b.department_id,
+          'is_active', b.is_active,
+          'courses', CASE WHEN c.id IS NOT NULL THEN json_build_object('id', c.id, 'title', c.title, 'code', c.code) ELSE NULL END,
+          'departments', CASE WHEN d.id IS NOT NULL THEN json_build_object('id', d.id, 'name', d.name, 'code', d.code) ELSE NULL END
+        ) AS batch_info,
+        COALESCE((
+          SELECT json_agg(json_build_object('id', s.id, 'code', s.code, 'name', s.name,
+            'credits_per_week', s.credits_per_week, 'semester', s.semester,
+            'subject_type', s.subject_type, 'nep_category', s.nep_category, 'course_group_id', s.course_group_id))
+          FROM bucket_subjects bs JOIN subjects s ON s.id = bs.subject_id
+          WHERE bs.bucket_id = eb.id
+        ), '[]'::json) AS subjects
+      FROM elective_buckets eb
+      JOIN batches b ON b.id = eb.batch_id
+      LEFT JOIN courses c ON c.id = b.course_id
+      LEFT JOIN departments d ON d.id = b.department_id
+      WHERE eb.college_id = $1
+        AND eb.is_live_for_creators = true
+        AND b.is_active = true
+        ${batchFilter}
+      ORDER BY eb.created_at DESC
+    `, params);
 
-    const result = await getBucketsUseCase.execute(resolvedBatchId);
+    return NextResponse.json(buckets);
 
-    // Enrich with subjects
-    // Optimized: Fetch all subjects for the found buckets
-    const bucketIds = result.buckets.map(b => b.id);
-    const { data: allSubjects } = await supabase
-      .from('subjects')
-      .select('*')
-      .in('course_group_id', bucketIds)
-      .eq('college_id', user.college_id);
-
-    // Enrich in memory
-    const enriched = result.buckets.map((bucket: any) => {
-      const bucketSubjects = allSubjects?.filter(s => s.course_group_id === bucket.id) || [];
-      return {
-        ...bucket,
-        subjects: bucketSubjects
-      };
-    });
-
-    return NextResponse.json(enriched);
   } catch (error: any) {
     console.error('Error in GET /api/nep/buckets:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -177,43 +100,54 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const user = requireAuth(request);
-    if (user instanceof NextResponse) return user; // Auth failed
+    if (user instanceof NextResponse) return user;
+
+    if (!['admin', 'college_admin', 'super_admin'].includes(user.role)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    }
 
     const body = await request.json();
+    const { bucket_name, batch_id, min_selection, max_selection, is_common_slot } = body;
 
-    // Validate DTO
-    const dto = CreateElectiveBucketDtoSchema.parse(body);
+    if (!bucket_name || !batch_id) {
+      return NextResponse.json({ error: 'bucket_name and batch_id are required' }, { status: 400 });
+    }
 
-    const result = await createBucketUseCase.execute(dto);
+    const pool = getPool();
 
-    // Notify Department Faculty
+    const result = await pool.query(`
+      INSERT INTO elective_buckets
+        (bucket_name, batch_id, college_id, min_selection, max_selection, is_common_slot,
+         is_published, is_live_for_creators, is_live_for_students, created_by)
+      VALUES ($1, $2, $3, $4, $5, $6, false, false, false, $7)
+      RETURNING *
+    `, [
+      bucket_name, batch_id, user.college_id,
+      min_selection || 1, max_selection || 1,
+      is_common_slot !== false, user.id
+    ]);
+
+    const bucket = result.rows[0];
+
     try {
-      if (user.id) {
-        // Fallback to user department if not in result
-        const departmentId = (result as any).department_id || user.department_id;
-        if (departmentId) {
-          const { notifyNEPBucketCreated } = await import('@/lib/notificationService');
-          await notifyNEPBucketCreated({
-            bucketId: (result as any).id,
-            bucketName: (result as any).bucket_name,
-            departmentId: departmentId,
-            creatorId: user.id,
-            creatorName: `${user.first_name || 'Admin'} ${user.last_name || ''}`.trim()
-          });
-        }
+      if (user.department_id) {
+        const { notifyNEPBucketCreated } = await import('@/lib/notificationService');
+        await notifyNEPBucketCreated({
+          bucketId: bucket.id,
+          bucketName: bucket.bucket_name,
+          departmentId: user.department_id,
+          creatorId: user.id,
+          creatorName: `${user.first_name || 'Admin'} ${user.last_name || ''}`.trim()
+        });
       }
     } catch (notifError) {
       console.error('Failed to send bucket creation notification:', notifError);
     }
 
-    return NextResponse.json(result);
+    return NextResponse.json(bucket);
 
   } catch (error: any) {
     console.error('Error in POST /api/nep/buckets:', error);
-    const status = error.name === 'ZodError' ? 400 : 500;
-    return NextResponse.json(
-      { error: error.message || 'Internal server error' },
-      { status }
-    );
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
   }
 }

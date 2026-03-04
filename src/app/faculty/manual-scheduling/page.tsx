@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/DashboardLayout';
+import { PageLoader } from '@/components/ui/PageLoader';
 import ManualSchedulingComponent from '@/components/ManualSchedulingComponent';
 
 export default function ManualSchedulingPage() {
@@ -39,11 +40,7 @@ export default function ManualSchedulingPage() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-      </div>
-    );
+    return <PageLoader message="Loading Manual Scheduler" subMessage="Preparing scheduling interface..." />;
   }
 
   if (!user) {

@@ -1,24 +1,9 @@
-import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import {
-  BroadcastNotificationUseCase,
-  GetNotificationsUseCase,
-  MarkAsReadUseCase,
-  SupabaseNotificationRepository,
-  BroadcastNotificationDtoSchema,
-  MarkAsReadDtoSchema
-} from '@/modules/notifications';
-
-const notificationRepo = new SupabaseNotificationRepository(supabase);
-
-const broadcastUseCase = new BroadcastNotificationUseCase(notificationRepo, supabase);
-const getNotificationsUseCase = new GetNotificationsUseCase(notificationRepo);
-const markAsReadUseCase = new MarkAsReadUseCase(notificationRepo);
+import { getPool } from '@/lib/db';
 
 /**
  * GET /api/notifications?user_id={id}&unread_only={true/false}&limit={number}
- * Fetches notifications for a user
  */
 export async function GET(request: NextRequest) {
   try {
@@ -26,37 +11,44 @@ export async function GET(request: NextRequest) {
     if (user instanceof NextResponse) return user;
 
     const searchParams = request.nextUrl.searchParams;
-    const userId = searchParams.get('user_id');
-    // limit and unread_only are implementation details handled by UseCase if complex, 
-    // but for now our UseCase just fetches all by user. 
-    // TODO: Add pagination/filtering to UseCase for parity if needed, but 'findByUser' does logic.
+    const userId = searchParams.get('user_id') || user.id;
+    const unreadOnly = searchParams.get('unread_only') === 'true';
+    const limit = parseInt(searchParams.get('limit') || '50');
 
     if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'user_id is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: 'user_id is required' }, { status: 400 });
     }
 
-    const result = await getNotificationsUseCase.execute(userId);
+    const pool = getPool();
+    const params: any[] = [userId];
+    let filter = '';
+    if (unreadOnly) {
+      filter = ' AND is_read = false';
+    }
+
+    const result = await pool.query(
+      `SELECT * FROM notifications WHERE recipient_id = $1${filter}
+       ORDER BY created_at DESC LIMIT $2`,
+      [...params, limit]
+    );
+
+    const unreadCount = result.rows.filter((n: any) => !n.is_read).length;
 
     return NextResponse.json({
       success: true,
-      data: result.notifications,
-      unread_count: result.unreadCount
+      data: result.rows,
+      unread_count: unreadCount
     });
   } catch (error: any) {
-    console.error('❌ Error in notifications API:', error);
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
+    console.error('❌ Error in notifications GET:', error);
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
 /**
  * PATCH /api/notifications
  * Mark notification(s) as read
+ * Body: { notification_ids?: string[], user_id?: string, mark_all_read?: boolean }
  */
 export async function PATCH(request: NextRequest) {
   try {
@@ -64,32 +56,34 @@ export async function PATCH(request: NextRequest) {
     if (user instanceof NextResponse) return user;
 
     const body = await request.json();
+    const { notification_ids, user_id, mark_all_read } = body;
 
-    // Validate DTO
-    // We construct a DTO manually to match what the UseCase expects if needed, or validate directly
-    // The Schema we exported matches the expected body structure roughly
+    const pool = getPool();
+    const targetUserId = user_id || user.id;
 
-    // Manually mapping or validating
-    // The legacy body: { notification_ids, user_id, mark_all_read }
-    // Our DTO: { notification_ids?, user_id?, mark_all_read? }
-
-    const dto = MarkAsReadDtoSchema.parse(body);
-
-    await markAsReadUseCase.execute(dto);
+    if (mark_all_read) {
+      await pool.query(
+        `UPDATE notifications SET is_read = true, read_at = NOW() WHERE recipient_id = $1 AND is_read = false`,
+        [targetUserId]
+      );
+    } else if (notification_ids && notification_ids.length > 0) {
+      await pool.query(
+        `UPDATE notifications SET is_read = true, read_at = NOW()
+         WHERE id = ANY($1::uuid[]) AND recipient_id = $2`,
+        [notification_ids, targetUserId]
+      );
+    }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('❌ Error in notifications PATCH:', error);
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
 
 /**
  * POST /api/notifications
- * Create a new notification (broadcast)
+ * Broadcast a notification to recipients
  */
 export async function POST(request: NextRequest) {
   try {
@@ -97,23 +91,33 @@ export async function POST(request: NextRequest) {
     if (user instanceof NextResponse) return user;
 
     const body = await request.json();
+    const { recipient_ids, title, message, type, priority, action_url, batch_id } = body;
 
-    // Validate with Zod
-    const dto = BroadcastNotificationDtoSchema.parse(body);
+    if (!recipient_ids || !Array.isArray(recipient_ids) || recipient_ids.length === 0) {
+      return NextResponse.json({ success: false, error: 'recipient_ids array is required' }, { status: 400 });
+    }
+    if (!title || !message || !type) {
+      return NextResponse.json({ success: false, error: 'title, message, type are required' }, { status: 400 });
+    }
 
-    const result = await broadcastUseCase.execute(dto);
+    const pool = getPool();
+    await pool.query(
+      `INSERT INTO notifications
+         (id, recipient_id, sender_id, type, title, message, batch_id, priority, action_url, is_read, created_at)
+       SELECT gen_random_uuid(), UNNEST($1::uuid[]), $2, $3, $4, $5, $6, $7, $8, false, NOW()`,
+      [recipient_ids, user.id, type, title, message, batch_id || null, priority || 'normal', action_url || null]
+    );
 
     return NextResponse.json({
       success: true,
-      message: `Notification sent to ${result.recipients_count} recipient(s)`,
-      recipients_count: result.recipients_count,
-      data: [] // Legacy returned created notifications, but for bulk it might be too large. Returning empty array for now or we can update UseCase to return them.
+      message: `Notification sent to ${recipient_ids.length} recipient(s)`,
+      recipients_count: recipient_ids.length,
+      data: []
     });
   } catch (error: any) {
     console.error('❌ Error in notifications POST:', error);
-    return NextResponse.json(
-      { success: false, error: error.message || 'Internal Server Error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+
+

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
+import { CardLoader } from '@/components/ui/PageLoader';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
 import {
   ArrowLeft,
@@ -169,12 +170,7 @@ export default function AssignmentReportPage() {
   if (loading) {
     return (
       <FacultyCreatorLayout activeTab="assignments">
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="text-center bg-white rounded-2xl p-10 shadow-lg">
-            <div className="animate-spin rounded-full h-16 w-16 border-4 border-[#4D869C] border-t-transparent mx-auto"></div>
-            <p className="mt-6 text-gray-600 font-medium">Loading report...</p>
-          </div>
-        </div>
+        <CardLoader message="Loading Report" subMessage="Fetching assignment results..." />
       </FacultyCreatorLayout>
     );
   }

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { CardLoader } from '@/components/ui/PageLoader';
 import { Settings, User, Bell, Lock, Palette, Clock, Save, Camera, Briefcase, Calendar } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
@@ -135,9 +136,7 @@ const SettingsPage: React.FC = () => {
   if (fetching) {
     return (
       <FacultyCreatorLayout activeTab="settings">
-        <div className="flex justify-center items-center h-full">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#4D869C] border-t-transparent"></div>
-        </div>
+        <CardLoader message="Loading Settings" subMessage="Fetching your preferences..." />
       </FacultyCreatorLayout>
     );
   }

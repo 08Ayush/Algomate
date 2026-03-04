@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { MapPin, Search, RefreshCw, Users, Monitor, Building } from 'lucide-react';
 import toast from 'react-hot-toast';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
+import { CardLoader } from '@/components/ui/PageLoader';
 
 interface Classroom {
   id: string;
@@ -134,7 +135,7 @@ const ClassroomsPage: React.FC = () => {
         {/* Classrooms Grid */}
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
           {loading ? (
-            <div className="text-center py-12 text-gray-500">Loading...</div>
+            <CardLoader message="Loading classrooms..." subMessage="Fetching room inventory" />
           ) : filteredClassrooms.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
               <MapPin size={40} className="mx-auto mb-3 text-gray-300" />

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { CardLoader } from '@/components/ui/PageLoader';
 import { Users, Plus, Edit, Trash2, X, Search, RefreshCw, GraduationCap, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
@@ -126,7 +127,7 @@ const StudentsPage: React.FC = () => {
         } catch { toast.error('Error'); } finally { setSubmitting(false); }
     };
 
-    const resetForm = () => setForm({ first_name: '', last_name: '', email: '', phone: '', student_id: '', password: '', admission_year: new Date().getFullYear(), current_semester: 1, course_id: '', department_id: '', batch_id: '', is_active: true });
+    const resetForm = () => { setEditingStudent(null); setForm({ first_name: '', last_name: '', email: '', phone: '', student_id: '', password: '', admission_year: new Date().getFullYear(), current_semester: 1, course_id: '', department_id: '', batch_id: '', is_active: true }); };
 
     const handleEdit = (student: Student) => {
         setEditingStudent(student);
@@ -215,7 +216,7 @@ const StudentsPage: React.FC = () => {
                 </div>
 
                 <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-                    {loading ? <div className="text-center py-12 text-gray-500">Loading...</div> : filteredStudents.length === 0 ? <div className="text-center py-12 text-gray-500">No students found</div> : (
+                    {loading ? <CardLoader message="Loading students..." subMessage="Fetching enrolled students" /> : filteredStudents.length === 0 ? <div className="text-center py-12 text-gray-500">No students found</div> : (
                         <table className="w-full">
                             <thead className="bg-gray-50"><tr>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Name</th>
@@ -263,12 +264,12 @@ const StudentsPage: React.FC = () => {
                                     <div><label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label><input className="w-full px-4 py-2 border rounded-lg" value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} required /></div>
                                     <div><label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label><input className="w-full px-4 py-2 border rounded-lg" value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} required /></div>
                                 </div>
-                                <div><label className="block text-sm font-medium text-gray-700 mb-1">Email *</label><input type="email" className="w-full px-4 py-2 border rounded-lg" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required /></div>
+                                <div><label className="block text-sm font-medium text-gray-700 mb-1">Email *</label><input type="email" autoComplete="off" className="w-full px-4 py-2 border rounded-lg" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required /></div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div><label className="block text-sm font-medium text-gray-700 mb-1">Phone</label><input className="w-full px-4 py-2 border rounded-lg" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
                                     <div><label className="block text-sm font-medium text-gray-700 mb-1">Student ID</label><input className="w-full px-4 py-2 border rounded-lg" value={form.student_id} onChange={(e) => setForm({ ...form, student_id: e.target.value })} /></div>
                                 </div>
-                                {!editingStudent && <div><label className="block text-sm font-medium text-gray-700 mb-1">Password *</label><input type="password" className="w-full px-4 py-2 border rounded-lg" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required={!editingStudent} /></div>}
+                                {!editingStudent && <div><label className="block text-sm font-medium text-gray-700 mb-1">Password *</label><input type="password" autoComplete="new-password" className="w-full px-4 py-2 border rounded-lg" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required={!editingStudent} /></div>}
                                 <div className="grid grid-cols-2 gap-4">
                                     <div><label className="block text-sm font-medium text-gray-700 mb-1">Admission Year</label><input type="number" className="w-full px-4 py-2 border rounded-lg" value={form.admission_year} onChange={(e) => setForm({ ...form, admission_year: parseInt(e.target.value) })} /></div>
                                     <div><label className="block text-sm font-medium text-gray-700 mb-1">Semester</label><input type="number" min="1" max="8" className="w-full px-4 py-2 border rounded-lg" value={form.current_semester} onChange={(e) => setForm({ ...form, current_semester: parseInt(e.target.value) })} /></div>

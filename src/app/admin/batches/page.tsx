@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
-import { Layers, Plus, Edit, Trash2, X, Search, RefreshCw, GraduationCap } from 'lucide-react';
+import { CardLoader } from '@/components/ui/PageLoader';
+import { Layers, Plus, Edit, Trash2, X, Search, RefreshCw, GraduationCap, ToggleLeft, ToggleRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
 import { useSemesterMode } from '@/contexts/SemesterModeContext';
@@ -36,11 +37,13 @@ const BatchesPage: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [departmentFilter, setDepartmentFilter] = useState('all');
     const [semesterFilter, setSemesterFilter] = useState('all');
+    const [statusFilter, setStatusFilter] = useState('all');
     const [showForm, setShowForm] = useState(false);
     const [editingBatch, setEditingBatch] = useState<Batch | null>(null);
     const [submitting, setSubmitting] = useState(false);
 
     const [form, setForm] = useState({
+        name: '',
         department_id: '',
         course_id: '',
         semester: 1,
@@ -69,7 +72,7 @@ const BatchesPage: React.FC = () => {
             const user = JSON.parse(userData);
             const headers = getAuthHeaders();
             if (!headers) return;
-            const q = user.college_id ? `?college_id=${user.college_id}&refresh=1` : '?refresh=1';
+            const q = user.college_id ? `?college_id=${user.college_id}&refresh=1&include_inactive=true` : '?refresh=1&include_inactive=true';
             const [batchRes, deptRes, courseRes] = await Promise.all([
                 fetch(`/api/admin/batches${q}`, { headers }),
                 fetch(`/api/admin/departments${q}`, { headers }),
@@ -95,29 +98,50 @@ const BatchesPage: React.FC = () => {
         } catch { toast.error('Error'); } finally { setSubmitting(false); }
     };
 
-    const resetForm = () => setForm({ department_id: '', course_id: '', semester: 1, section: 'A', academic_year: '2025-26', expected_strength: 60, actual_strength: 0, is_active: true });
+    const resetForm = () => setForm({ name: '', department_id: '', course_id: '', semester: 1, section: 'A', academic_year: '2025-26', expected_strength: 60, actual_strength: 0, is_active: true });
 
     const handleEdit = (batch: Batch) => {
         setEditingBatch(batch);
-        setForm({ department_id: batch.department_id, course_id: batch.course_id || '', semester: batch.semester, section: batch.section, academic_year: batch.academic_year, expected_strength: batch.expected_strength, actual_strength: batch.actual_strength, is_active: batch.is_active });
+        setForm({ name: batch.name, department_id: batch.department_id, course_id: batch.course_id || '', semester: batch.semester, section: batch.section, academic_year: batch.academic_year, expected_strength: batch.expected_strength, actual_strength: batch.actual_strength, is_active: batch.is_active });
         setShowForm(true);
     };
 
     const { showConfirm } = useConfirm();
 
+    const handleToggleActive = async (batch: Batch) => {
+        try {
+            const headers = getAuthHeaders();
+            if (!headers) return;
+            const newStatus = !batch.is_active;
+            const res = await fetch(`/api/admin/batches/${batch.id}`, {
+                method: 'PATCH', headers, body: JSON.stringify({ is_active: newStatus })
+            });
+            if (res.ok) {
+                toast.success(newStatus ? 'Batch activated' : 'Batch deactivated');
+                setBatches(prev => prev.map(b => b.id === batch.id ? { ...b, is_active: newStatus } : b));
+            } else {
+                const err = await res.json();
+                toast.error(err.error || 'Failed to update status');
+            }
+        } catch { toast.error('Error updating status'); }
+    };
+
     const handleDeleteBatch = (batch: Batch) => {
         showConfirm({
-            title: 'Delete Batch',
-            message: `Are you sure you want to delete batch "${batch.name}"? This action cannot be undone.`,
-            confirmText: 'Delete',
+            title: 'Permanently Delete Batch',
+            message: `Are you sure you want to permanently delete batch "${batch.name}"? This cannot be undone. If the batch has timetable data, deactivate it instead.`,
+            confirmText: 'Delete Permanently',
             onConfirm: async () => {
                 try {
                     const headers = getAuthHeaders();
                     if (!headers) return;
-                    const res = await fetch(`/api/admin/batches?id=${batch.id}`, { method: 'DELETE', headers });
+                    const res = await fetch(`/api/admin/batches/${batch.id}`, { method: 'DELETE', headers });
                     if (res.ok) {
-                        toast.success('Deleted');
+                        toast.success('Batch permanently deleted');
                         setBatches(prev => prev.filter(b => b.id !== batch.id));
+                    } else {
+                        const err = await res.json();
+                        toast.error(err.error || 'Failed to delete');
                     }
                 } catch {
                     toast.error('Error');
@@ -135,7 +159,8 @@ const BatchesPage: React.FC = () => {
         const matchesDept = departmentFilter === 'all' || b.department_id === departmentFilter;
         const matchesSem = semesterFilter === 'all' || b.semester.toString() === semesterFilter;
         const matchesMode = semesterMode === 'all' || activeSemesters.includes(b.semester);
-        return matchesSearch && matchesDept && matchesSem && matchesMode;
+        const matchesStatus = statusFilter === 'all' || (statusFilter === 'active' ? b.is_active : !b.is_active);
+        return matchesSearch && matchesDept && matchesSem && matchesMode && matchesStatus;
     });
 
     return (
@@ -163,6 +188,11 @@ const BatchesPage: React.FC = () => {
                             <option value="all">All Semesters</option>
                             {uniqueSemesters.map(sem => <option key={sem} value={sem.toString()}>Semester {sem}</option>)}
                         </select>
+                        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-4 py-3 border border-gray-200 rounded-xl min-w-[150px]">
+                            <option value="all">All Status</option>
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
                     </div>
                     {semesterMode !== 'all' && (
                         <div className={`mt-3 flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium ${semesterMode === 'odd' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-violet-50 text-violet-700 border border-violet-200'
@@ -186,7 +216,7 @@ const BatchesPage: React.FC = () => {
                 </div>
 
                 <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-                    {loading ? <div className="text-center py-12 text-gray-500">Loading...</div> : filteredBatches.length === 0 ? <div className="text-center py-12 text-gray-500">No batches found</div> : (
+                    {loading ? <CardLoader message="Loading batches..." subMessage="Fetching student batches" /> : filteredBatches.length === 0 ? <div className="text-center py-12 text-gray-500">No batches found</div> : (
                         <table className="w-full">
                             <thead className="bg-gray-50"><tr>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Name</th>
@@ -207,8 +237,11 @@ const BatchesPage: React.FC = () => {
                                         <td className="px-6 py-4 text-gray-600">{batch.actual_strength}/{batch.expected_strength}</td>
                                         <td className="px-6 py-4"><span className={`px-3 py-1 rounded-full text-xs font-bold ${batch.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{batch.is_active ? 'Active' : 'Inactive'}</span></td>
                                         <td className="px-6 py-4"><div className="flex gap-2">
-                                            <button onClick={() => handleEdit(batch)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={16} /></button>
-                                            <button onClick={() => handleDeleteBatch(batch)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
+                                            <button onClick={() => handleEdit(batch)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit"><Edit size={16} /></button>
+                                            <button onClick={() => handleToggleActive(batch)} className={`p-2 rounded-lg ${batch.is_active ? 'text-green-600 hover:bg-green-50' : 'text-gray-400 hover:bg-gray-100'}`} title={batch.is_active ? 'Deactivate' : 'Activate'}>
+                                                {batch.is_active ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
+                                            </button>
+                                            <button onClick={() => handleDeleteBatch(batch)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Delete permanently"><Trash2 size={16} /></button>
                                         </div></td>
                                     </motion.tr>
                                 ))}
@@ -225,6 +258,9 @@ const BatchesPage: React.FC = () => {
                                 <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
                             </div>
                             <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                                <div><label className="block text-sm font-medium text-gray-700 mb-1">Batch Name <span className="text-gray-400 font-normal">(optional – auto-generated if empty)</span></label>
+                                    <input className="w-full px-4 py-2 border rounded-lg" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. CSE-Sem3-A" />
+                                </div>
                                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Department *</label>
                                     <select className="w-full px-4 py-2 border rounded-lg" value={form.department_id} onChange={(e) => setForm({ ...form, department_id: e.target.value })} required>
                                         <option value="">Select</option>{departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -243,6 +279,17 @@ const BatchesPage: React.FC = () => {
                                     <div><label className="block text-sm font-medium text-gray-700 mb-1">Expected Strength</label><input type="number" className="w-full px-4 py-2 border rounded-lg" value={form.expected_strength} onChange={(e) => setForm({ ...form, expected_strength: parseInt(e.target.value) })} placeholder="Expected strength" /></div>
                                     <div><label className="block text-sm font-medium text-gray-700 mb-1">Academic Year</label><input className="w-full px-4 py-2 border rounded-lg" value={form.academic_year} onChange={(e) => setForm({ ...form, academic_year: e.target.value })} placeholder="Academic year" /></div>
                                 </div>
+                                {editingBatch && (
+                                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                                        <span className="text-sm font-medium text-gray-700">Status</span>
+                                        <button type="button" onClick={() => setForm(f => ({ ...f, is_active: !f.is_active }))} className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${
+                                            form.is_active ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-red-100 text-red-700 hover:bg-red-200'
+                                        }`}>
+                                            {form.is_active ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+                                            {form.is_active ? 'Active' : 'Inactive'}
+                                        </button>
+                                    </div>
+                                )}
                                 <div className="flex justify-end gap-3 pt-4">
                                     <button type="button" onClick={() => setShowForm(false)} className="px-6 py-2.5 text-gray-600 hover:bg-gray-100 rounded-xl">Cancel</button>
                                     <button type="submit" disabled={submitting} className="px-8 py-2.5 bg-[#4D869C] text-white font-bold rounded-xl disabled:opacity-50">{submitting ? 'Saving...' : editingBatch ? 'Update' : 'Add'}</button>

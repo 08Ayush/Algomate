@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { CardLoader } from '@/components/ui/PageLoader';
 import { useRouter } from 'next/navigation';
 import {
   Bell, CheckCircle, AlertCircle, Calendar, RefreshCw, CheckCheck,
@@ -93,10 +94,20 @@ const FacultyNotificationsPage: React.FC = () => {
     }
   };
 
+  const getAuthHeaders = (): Record<string, string> => {
+    try {
+      const raw = localStorage.getItem('user');
+      if (!raw) return {};
+      return { 'Authorization': `Bearer ${btoa(raw)}` };
+    } catch { return {}; }
+  };
+
   const fetchNotifications = async (userId: string) => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/notifications?user_id=${userId}&limit=50`);
+      const response = await fetch(`/api/notifications?user_id=${userId}&limit=50`, {
+        headers: { ...getAuthHeaders() }
+      });
       const data = await response.json();
       if (data.success) {
         setNotifications(data.data || []);
@@ -114,7 +125,7 @@ const FacultyNotificationsPage: React.FC = () => {
     try {
       const response = await fetch('/api/notifications', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ user_id: user.id, notification_ids: notificationIds })
       });
       if (response.ok) {
@@ -133,7 +144,7 @@ const FacultyNotificationsPage: React.FC = () => {
     try {
       const response = await fetch('/api/notifications', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ user_id: user.id, mark_all_read: true })
       });
       if (response.ok) {
@@ -476,10 +487,7 @@ const FacultyNotificationsPage: React.FC = () => {
         {/* Notifications List */}
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
           {loading ? (
-            <div className="text-center py-16">
-              <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#4D869C] border-t-transparent mx-auto"></div>
-              <p className="mt-4 text-gray-500">Loading notifications...</p>
-            </div>
+            <CardLoader message="Loading notifications..." subMessage="Fetching your latest updates" />
           ) : filteredNotifications.length === 0 ? (
             <div className="text-center py-16">
               <Bell size={48} className="text-gray-300 mx-auto mb-4" />

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { PageLoader } from '@/components/ui/PageLoader';
 import { motion } from 'framer-motion';
 import { NotificationComposer } from '@/components/NotificationComposer';
 import {
@@ -101,10 +102,20 @@ export default function NotificationsPage() {
     }
   }, [router]);
 
+  const getAuthHeaders = (): Record<string, string> => {
+    try {
+      const raw = localStorage.getItem('user');
+      if (!raw) return {};
+      return { 'Authorization': `Bearer ${btoa(raw)}` };
+    } catch { return {}; }
+  };
+
   const fetchNotifications = async (userId: string) => {
     try {
       setRefreshing(true);
-      const response = await fetch(`/api/notifications?user_id=${userId}&limit=50`);
+      const response = await fetch(`/api/notifications?user_id=${userId}&limit=50`, {
+        headers: { ...getAuthHeaders() }
+      });
       const data = await response.json();
 
       if (data.success) {
@@ -131,7 +142,7 @@ export default function NotificationsPage() {
     try {
       const response = await fetch('/api/notifications', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           user_id: user.id,
           notification_ids: notificationIds
@@ -158,7 +169,7 @@ export default function NotificationsPage() {
     try {
       const response = await fetch('/api/notifications', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           user_id: user.id,
           mark_all_read: true
@@ -325,14 +336,7 @@ export default function NotificationsPage() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-[#CDE8E5] via-[#EEF7FF] to-[#7AB2B2] flex items-center justify-center">
-        <div className="text-center bg-white rounded-2xl p-10 shadow-lg">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-[#4D869C] border-t-transparent mx-auto"></div>
-          <p className="mt-6 text-gray-600 font-medium">Loading notifications...</p>
-        </div>
-      </div>
-    );
+    return <PageLoader message="Loading Notifications" subMessage="Fetching your latest notifications..." />;
   }
 
   return (

@@ -1,20 +1,18 @@
-import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
-import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
+import { getPaginationParams, createPaginatedResponse } from '@/shared/utils/pagination';
+import { getPool } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
   try {
     const user = requireAuth(request);
-    if (user instanceof NextResponse) return user; // Auth failed
+    if (user instanceof NextResponse) return user;
 
-    // Allow college_admin, admin, and super_admin
     const allowedRoles = ['college_admin', 'admin', 'super_admin'];
     if (!allowedRoles.includes(user.role)) {
       return NextResponse.json({ error: 'Unauthorized - Admin access required' }, { status: 401 });
     }
 
-    // Get college_id from query params (for super_admin) or from user
     const { searchParams } = new URL(request.url);
     const queryCollegeId = searchParams.get('college_id');
     const collegeId = user.role === 'super_admin' ? queryCollegeId : user.college_id;
@@ -23,46 +21,61 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'College ID is required' }, { status: 400 });
     }
 
-    // Fetch buckets with related data using joins
-    let query = supabase
-      .from('elective_buckets')
-      .select(`
-        *,
-        batches:batch_id(id, name, semester, section, academic_year, department_id, departments:department_id(id, name)),
-        bucket_subjects(subject_id, subjects:subject_id(*))
-      `, { count: 'exact' })
-      .eq('college_id', collegeId)
-      .order('created_at', { ascending: false });
-
-    // Pagination (Dual-Mode)
+    const pool = getPool();
     const { page, limit, isPaginated } = getPaginationParams(request);
 
+    const countResult = await pool.query(
+      `SELECT COUNT(*) FROM elective_buckets WHERE college_id = $1`,
+      [collegeId]
+    );
+    const total = parseInt(countResult.rows[0].count, 10);
+
+    const params: any[] = [collegeId];
+    let sql = `
+      SELECT eb.*,
+        CASE WHEN b.id IS NOT NULL THEN
+          json_build_object(
+            'id', b.id, 'name', b.name, 'semester', b.semester, 'section', b.section,
+            'academic_year', b.academic_year, 'department_id', b.department_id,
+            'departments', CASE WHEN d.id IS NOT NULL THEN
+              json_build_object('id', d.id, 'name', d.name, 'code', d.code)
+            ELSE NULL END
+          )
+        ELSE NULL END AS batches,
+        COALESCE((
+          SELECT json_agg(json_build_object(
+            'subject_id', bs.subject_id,
+            'subjects', json_build_object('id', s.id, 'code', s.code, 'name', s.name,
+              'semester', s.semester, 'department_id', s.department_id)
+          ))
+          FROM bucket_subjects bs
+          JOIN subjects s ON s.id = bs.subject_id
+          WHERE bs.bucket_id = eb.id
+        ), '[]'::json) AS bucket_subjects
+      FROM elective_buckets eb
+      LEFT JOIN batches b ON b.id = eb.batch_id
+      LEFT JOIN departments d ON d.id = b.department_id
+      WHERE eb.college_id = $1
+      ORDER BY eb.created_at DESC
+    `;
+
     if (isPaginated && page && limit) {
-      const { from, to } = getPaginationRange(page, limit);
-      query = query.range(from, to);
+      const offset = (page - 1) * limit;
+      sql += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      params.push(limit, offset);
     } else {
-      query = query.limit(500); // Safety cap
+      sql += ` LIMIT 500`;
     }
 
-    const { data: buckets, count, error } = await query;
-
-    if (error) {
-      console.error('Error fetching buckets:', error);
-      throw error;
-    }
+    const { rows: buckets } = await pool.query(sql, params);
 
     if (isPaginated && page && limit) {
-      const paginatedResult = createPaginatedResponse(buckets || [], count || 0, page, limit);
-      return NextResponse.json({
-        buckets: paginatedResult.data,
-        meta: paginatedResult.meta
-      });
-    } else {
-      return NextResponse.json({
-        buckets: buckets || [],
-        meta: { total: buckets?.length || 0 }
-      });
+      const paginatedResult = createPaginatedResponse(buckets, total, page, limit);
+      return NextResponse.json({ buckets: paginatedResult.data, meta: paginatedResult.meta });
     }
+
+    return NextResponse.json({ buckets, meta: { total } });
+
   } catch (error: any) {
     console.error('Error fetching admin buckets:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -72,9 +85,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const user = requireAuth(request);
-    if (user instanceof NextResponse) return user; // Auth failed
+    if (user instanceof NextResponse) return user;
 
-    // Allow college_admin, admin
     const allowedRoles = ['college_admin', 'admin'];
     if (!allowedRoles.includes(user.role)) {
       return NextResponse.json({ error: 'Unauthorized - Admin access required' }, { status: 401 });
@@ -87,43 +99,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Bucket name and batch are required' }, { status: 400 });
     }
 
-    // Create the bucket
-    const { data: bucket, error: bucketError } = await supabase
-      .from('elective_buckets')
-      .insert({
-        bucket_name,
-        batch_id,
-        college_id: user.college_id,
-        min_selection: min_selection || 1,
-        max_selection: max_selection || 1,
-        is_common_slot: is_common_slot !== false,
-        is_published: false,
-        is_live_for_creators: false,
-        is_live_for_students: false,
-        created_by: user.id
-      })
-      .select()
-      .single();
+    const pool = getPool();
 
-    if (bucketError) {
-      console.error('Error creating bucket:', bucketError);
-      throw bucketError;
-    }
+    const insertResult = await pool.query(`
+      INSERT INTO elective_buckets
+        (bucket_name, batch_id, college_id, min_selection, max_selection, is_common_slot,
+         is_published, is_live_for_creators, is_live_for_students, created_by)
+      VALUES ($1, $2, $3, $4, $5, $6, false, false, false, $7)
+      RETURNING *
+    `, [
+      bucket_name, batch_id, user.college_id,
+      min_selection || 1, max_selection || 1,
+      is_common_slot !== false,
+      user.id
+    ]);
 
-    // Add subjects if provided
+    const bucket = insertResult.rows[0];
+
     if (subject_ids && subject_ids.length > 0) {
-      const subjectLinks = subject_ids.map((subject_id: string) => ({
-        bucket_id: bucket.id,
-        subject_id
-      }));
-
-      const { error: subjectError } = await supabase
-        .from('bucket_subjects')
-        .insert(subjectLinks);
-
-      if (subjectError) {
-        console.error('Error adding bucket subjects:', subjectError);
-      }
+      const subjectValues = subject_ids.map((_: string, i: number) =>
+        `($1, $${i + 2})`
+      ).join(', ');
+      await pool.query(
+        `INSERT INTO bucket_subjects (bucket_id, subject_id) VALUES ${subjectValues} ON CONFLICT DO NOTHING`,
+        [bucket.id, ...subject_ids]
+      );
     }
 
     return NextResponse.json({ success: true, bucket });

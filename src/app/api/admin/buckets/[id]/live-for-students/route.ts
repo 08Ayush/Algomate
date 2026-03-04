@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/shared/database/client';
 import { requireAuth } from '@/lib/auth';
+import { getPool } from '@/lib/db';
 
 /**
  * Make Bucket Live for Students API
@@ -19,99 +19,69 @@ export async function POST(
     const body = await request.json();
     const { is_live, admin_id } = body;
 
-    // Validate admin_id
-    if (!admin_id) {
-      return NextResponse.json({ error: 'Admin ID is required' }, { status: 400 });
-    }
-    // Use admin_id from body if provided, otherwise use authenticated user id
-    const adminId = admin_id || user.id;
-
-    // First, check if bucket has subjects added (using bucket_subjects table for new workflow)
-    const { data: bucketSubjects, error: checkError } = await supabaseAdmin
-      .from('bucket_subjects')
-      .select('id')
-      .eq('bucket_id', id);
-
-    if (checkError) {
-      console.error('Error checking bucket subjects:', checkError);
-      return NextResponse.json({ error: 'Failed to check bucket subjects' }, { status: 500 });
-    }
-
-    // Also check old subjects table for backwards compatibility
-    const { data: oldSubjects, error: oldError } = await supabaseAdmin
-      .from('subjects')
-      .select('id')
-      .eq('course_group_id', id);
-
-    const hasSubjects = (bucketSubjects && bucketSubjects.length > 0) || (oldSubjects && oldSubjects.length > 0);
-
-    // Validate that bucket has subjects before making it live for students
-    if (is_live && !hasSubjects) {
-      return NextResponse.json({
-        error: 'Cannot make bucket live for students. No subjects have been added to this bucket yet. Please make it live for creators first so they can add subjects.'
-      }, { status: 400 });
-    }
-
-    const updateData: any = {
-      is_live_for_students: is_live,
-      is_published: is_live, // Also set is_published when making live for students
-      updated_at: new Date().toISOString()
-    };
+    const pool = getPool();
 
     if (is_live) {
-      updateData.student_live_at = new Date().toISOString();
-      updateData.student_live_by = admin_id;
-      updateData.published_at = new Date().toISOString();
-      updateData.published_by = admin_id;
+      // Check if bucket has any subjects (bucket_subjects or legacy subjects table)
+      const subjectCount = await pool.query(
+        `SELECT (
+          SELECT COUNT(*) FROM bucket_subjects WHERE bucket_id = $1
+        ) + (
+          SELECT COUNT(*) FROM subjects WHERE course_group_id = $1
+        ) AS total`,
+        [id]
+      );
+      const total = parseInt(subjectCount.rows[0]?.total ?? '0');
+      if (total === 0) {
+        return NextResponse.json({
+          error: 'Cannot make bucket live for students. No subjects have been added to this bucket yet. Please make it live for creators first so they can add subjects.'
+        }, { status: 400 });
+      }
+
+      await pool.query(
+        `UPDATE elective_buckets
+         SET is_live_for_students = true, is_published = true,
+             student_live_at = NOW(), student_live_by = $1,
+             published_at = NOW(), published_by = $1, updated_at = NOW()
+         WHERE id = $2`,
+        [admin_id || user.id, id]
+      );
     } else {
-      // Making it not live for students
-      updateData.student_live_at = null;
-      updateData.student_live_by = null;
+      await pool.query(
+        `UPDATE elective_buckets
+         SET is_live_for_students = false, student_live_at = NULL, student_live_by = NULL, updated_at = NOW()
+         WHERE id = $1`,
+        [id]
+      );
     }
 
-    const { data: bucket, error } = await supabaseAdmin
-      .from('elective_buckets')
-      .update(updateData)
-      .eq('id', id)
-      .select(`
-        *,
-        batches:batches!elective_buckets_batch_id_fkey (
-          id,
-          name,
-          semester,
-          section,
-          academic_year,
-          course_id,
-          department_id,
-          departments:departments (id, name, code),
-          courses:courses (id, title, code)
-        ),
-        subjects:subjects!subjects_course_group_id_fkey (id, code, name)
-      `)
-      .single();
+    // Re-fetch with joins
+    const result = await pool.query(`
+      SELECT eb.*,
+        json_build_object('id', b.id, 'name', b.name, 'semester', b.semester, 'section', b.section,
+          'academic_year', b.academic_year, 'department_id', b.department_id, 'course_id', b.course_id,
+          'departments', json_build_object('id', d.id, 'name', d.name, 'code', d.code),
+          'courses', json_build_object('id', c.id, 'title', c.title, 'code', c.code)) AS batches
+      FROM elective_buckets eb
+      LEFT JOIN batches b ON b.id = eb.batch_id
+      LEFT JOIN departments d ON d.id = b.department_id
+      LEFT JOIN courses c ON c.id = b.course_id
+      WHERE eb.id = $1
+    `, [id]);
 
-    if (error) {
-      console.error('Error updating bucket student status:', error);
-      return NextResponse.json({ error: 'Failed to update bucket' }, { status: 500 });
-    }
+    const bucket = result.rows[0] || null;
 
-    const isPublished = is_live && !bucket.student_live_at; // Only notify if it wasn't live before? Or just always if is_live is true?
-    // The update logic overwrites. If student_live_at was null, it's a new publish.
-    // But we don't know if it was null before update.
-    // However, usually this toggle is significant.
-
-    if (is_live) {
-      // Send Notification
+    if (is_live && bucket) {
       try {
-        const batchId = (bucket.batches as any)?.id || bucket.batch_id;
+        const batchId = bucket.batch_id;
         if (batchId) {
           const { notifyNEPBucketPublished } = await import('@/lib/notificationService');
           await notifyNEPBucketPublished({
             bucketId: bucket.id,
             bucketName: bucket.bucket_name,
-            batchId: batchId,
-            publisherId: admin_id,
-            publisherName: 'College Admin' // Placeholder as we don't have name readily available
+            batchId,
+            publisherId: admin_id || user.id,
+            publisherName: 'College Admin'
           });
         }
       } catch (nErr) {

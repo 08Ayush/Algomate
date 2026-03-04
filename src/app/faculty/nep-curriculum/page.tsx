@@ -3,6 +3,7 @@
 import { serviceDb as supabase } from '@/shared/database';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { PageLoader } from '@/components/ui/PageLoader';
 import FacultyCreatorLayout from '@/components/faculty/FacultyCreatorLayout';
 import { motion } from 'framer-motion';
 import { useSemesterMode } from '@/contexts/SemesterModeContext';
@@ -368,14 +369,7 @@ export default function NEPCurriculumPage() {
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#CDE8E5] via-[#EEF7FF] to-[#7AB2B2]">
-        <div className="text-center bg-white rounded-2xl p-10 shadow-lg">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-[#4D869C] border-t-transparent mx-auto"></div>
-          <p className="mt-6 text-gray-600 font-medium">Loading NEP Subject Assignment...</p>
-        </div>
-      </div>
-    );
+    return <PageLoader message="Loading NEP Curriculum" subMessage="Fetching subject assignment data..." />;
   }
 
   if (!user) {

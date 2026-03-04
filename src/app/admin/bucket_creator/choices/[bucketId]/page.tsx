@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
+import { PageLoader } from '@/components/ui/PageLoader';
 import { Header } from '@/components/Header';
 import { ArrowLeft, Users, BookOpen, Download, Search, Filter, RefreshCw } from 'lucide-react';
 import { createBrowserClient } from '@/shared/database/client';
@@ -261,14 +262,7 @@ export default function StudentChoicesPage() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading student choices...</p>
-        </div>
-      </div>
-    );
+    return <PageLoader message="Loading Student Choices" subMessage="Fetching elective selections..." />;
   }
 
   return (

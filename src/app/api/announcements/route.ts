@@ -1,12 +1,7 @@
-import { serviceDb as supabase } from '@/shared/database';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
+import { getPool } from '@/lib/db';
 import { notifyAnnouncement } from '@/lib/notificationService';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-// Helper function to decode and verify user from token
 
 /**
  * POST /api/announcements
@@ -65,29 +60,26 @@ export async function POST(request: NextRequest) {
         }
 
         // Insert announcement
-        const { data: announcement, error: announcementError } = await supabase
-            .from('announcements')
-            .insert({
-                college_id: user.college_id,
-                created_by: user.id,
-                title,
-                content,
-                target_type: targetType,
-                target_id: actualTargetId,
-                priority,
-                is_pinned: isPinned,
-                expires_at: expiresAt || null,
-                attachments: attachments.length > 0 ? attachments : null,
-                is_published: true,
-                created_at: new Date().toISOString()
-            })
-            .select('id')
-            .single();
+        const pool = getPool();
+        const insertResult = await pool.query(
+            `INSERT INTO announcements
+               (id, college_id, created_by, title, content, target_type, target_id, priority,
+                is_pinned, expires_at, attachments, is_published, created_at, updated_at)
+             VALUES
+               (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true, NOW(), NOW())
+             RETURNING id`,
+            [
+                user.college_id, user.id, title, content, targetType, actualTargetId,
+                priority, isPinned,
+                expiresAt || null,
+                attachments.length > 0 ? JSON.stringify(attachments) : null
+            ]
+        );
 
-        if (announcementError) {
-            console.error('Announcement creation error:', announcementError);
+        const announcement = insertResult.rows[0];
+        if (!announcement) {
             return NextResponse.json(
-                { success: false, error: 'Failed to create announcement: ' + announcementError.message },
+                { success: false, error: 'Failed to create announcement' },
                 { status: 500 }
             );
         }
@@ -136,48 +128,46 @@ export async function GET(request: NextRequest) {
         if (user instanceof NextResponse) return user;
 
         const { searchParams } = new URL(request.url);
-
         const limit = parseInt(searchParams.get('limit') || '20');
         const page = parseInt(searchParams.get('page') || '1');
         const offset = (page - 1) * limit;
         const targetType = searchParams.get('target_type');
 
-        // Build query
-        let query = supabase
-            .from('announcements')
-            .select(`
-        *,
-        users:created_by (id, first_name, last_name)
-      `, { count: 'exact' })
-            .eq('college_id', user.college_id)
-            .eq('is_published', true);
+        const pool = getPool();
+        const params: any[] = [user.college_id];
+        let whereExtra = '';
 
-        // Filter by target type if specified
         if (targetType) {
-            query = query.eq('target_type', targetType);
+            params.push(targetType);
+            whereExtra += ` AND a.target_type = $${params.length}`;
         }
 
-        // Filter out expired announcements
-        query = query.or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`);
+        const countResult = await pool.query(
+            `SELECT COUNT(*) FROM announcements a
+             WHERE a.college_id = $1 AND a.is_published = true
+               AND (a.expires_at IS NULL OR a.expires_at > NOW())
+               ${whereExtra}`,
+            params
+        );
+        const total = parseInt(countResult.rows[0].count, 10);
 
-        // Order by pinned first, then by created_at
-        query = query
-            .order('is_pinned', { ascending: false })
-            .order('created_at', { ascending: false })
-            .range(offset, offset + limit - 1);
+        params.push(limit, offset);
+        const result = await pool.query(
+            `SELECT a.*,
+               CASE WHEN u.id IS NOT NULL THEN
+                 json_build_object('id', u.id, 'first_name', u.first_name, 'last_name', u.last_name)
+               ELSE NULL END AS users
+             FROM announcements a
+             LEFT JOIN users u ON u.id = a.created_by
+             WHERE a.college_id = $1 AND a.is_published = true
+               AND (a.expires_at IS NULL OR a.expires_at > NOW())
+               ${whereExtra}
+             ORDER BY a.is_pinned DESC, a.created_at DESC
+             LIMIT $${params.length - 1} OFFSET $${params.length}`,
+            params
+        );
 
-        const { data: announcements, count, error } = await query;
-
-        if (error) {
-            console.error('Get announcements error:', error);
-            return NextResponse.json(
-                { success: false, error: 'Failed to fetch announcements: ' + error.message },
-                { status: 500 }
-            );
-        }
-
-        // Format announcements
-        const formattedAnnouncements = (announcements || []).map((a: any) => ({
+        const formattedAnnouncements = result.rows.map((a: any) => ({
             ...a,
             creator: a.users ? {
                 id: a.users.id,
@@ -188,12 +178,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
             success: true,
             announcements: formattedAnnouncements,
-            meta: {
-                total: count || 0,
-                page,
-                limit,
-                totalPages: Math.ceil((count || 0) / limit)
-            }
+            meta: { total, page, limit, totalPages: Math.ceil(total / limit) }
         });
 
     } catch (error: any) {

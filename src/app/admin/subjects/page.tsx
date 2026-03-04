@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { CardLoader } from '@/components/ui/PageLoader';
 import { BookOpen, Plus, Edit, Trash2, X, Search, RefreshCw, Award } from 'lucide-react';
 import toast from 'react-hot-toast';
 import CollegeAdminLayout from '@/components/admin/CollegeAdminLayout';
@@ -242,7 +243,7 @@ const SubjectsPage: React.FC = () => {
                 </div>
 
                 <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-                    {loading ? <div className="text-center py-12 text-gray-500">Loading...</div> : filteredSubjects.length === 0 ? <div className="text-center py-12 text-gray-500">No subjects found</div> : (
+                    {loading ? <CardLoader message="Loading subjects..." subMessage="Fetching subject list" /> : filteredSubjects.length === 0 ? <div className="text-center py-12 text-gray-500">No subjects found</div> : (
                         <table className="w-full">
                             <thead className="bg-gray-50"><tr>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Code</th>

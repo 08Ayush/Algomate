@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { CardLoader } from '@/components/ui/PageLoader';
 import {
   Building2,
   Users,
@@ -366,7 +367,7 @@ const ManagePage: React.FC = () => {
     const data = getFilteredData();
 
     if (loading) {
-      return <div className="p-12 text-center text-gray-500">Loading...</div>;
+      return <CardLoader message="Loading data..." subMessage="Fetching platform records" />;
     }
 
     if (data.length === 0) {
