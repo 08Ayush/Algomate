@@ -25,12 +25,14 @@ export async function PUT(
       code,
       name,
       credits_per_week,
+      credit_value,
       semester,
       department_id,
       course_id,
       category,
       subject_type,
-      is_active
+      is_active,
+      batch_ids
     } = body;
 
     // Verify subject belongs to user's college
@@ -89,6 +91,7 @@ export async function PUT(
     if (code) updateData.code = code;
     if (name) updateData.name = name;
     if (credits_per_week) updateData.credits_per_week = credits_per_week;
+    if (credit_value !== undefined) updateData.credit_value = credit_value;
     if (semester) updateData.semester = semester;
     if (department_id) updateData.department_id = department_id;
     if (course_id !== undefined) updateData.course_id = course_id && course_id.trim() !== '' ? course_id : null;
@@ -116,8 +119,8 @@ export async function PUT(
     }
 
     // ---------------------------------------------------------------
-    // Sync batch_subjects: re-map the subject to the correct batches
-    // whenever department, semester, course, or credits are changed.
+    // Sync batch_subjects: explicit batch_ids from frontend, or
+    // auto-detect based on dept/semester when batch_ids is not sent.
     // ---------------------------------------------------------------
     try {
       const effectiveDeptId = department_id || existingSubject.department_id;
@@ -128,56 +131,27 @@ export async function PUT(
           : existingSubject.course_id;
       const effectiveCredits = credits_per_week || existingSubject.credits_per_week || 3;
 
-      // Find all active batches that should have this subject
-      let matchQuery = supabase
-        .from('batches')
-        .select('id')
-        .eq('college_id', user.college_id)
-        .eq('department_id', effectiveDeptId)
-        .eq('semester', effectiveSemester)
-        .eq('is_active', true);
-
-      if (effectiveCourseId) {
-        matchQuery = matchQuery.eq('course_id', effectiveCourseId);
-      }
-
-      const { data: matchingBatches, error: matchErr } = await matchQuery;
-
-      if (!matchErr) {
-        if (matchingBatches && matchingBatches.length > 0) {
-          const matchingBatchIds = matchingBatches.map((b: { id: string }) => b.id);
-
-          // Remove stale entries (subject moved to different dept/semester)
+      if (Array.isArray(batch_ids)) {
+        // Explicit sync: use exactly the IDs chosen by the admin in the UI
+        if (batch_ids.length === 0) {
+          await supabase.from('batch_subjects').delete().eq('subject_id', subjectId);
+        } else {
           await supabase
             .from('batch_subjects')
             .delete()
             .eq('subject_id', subjectId)
-            .not('batch_id', 'in', `(${matchingBatchIds.join(',')})`);
+            .not('batch_id', 'in', `(${batch_ids.join(',')})`);
 
-          // Sync batch_subjects without overwriting existing PKs:
-          // 1. Fetch which batches already have a row for this subject.
           const { data: existingRows } = await supabase
             .from('batch_subjects')
             .select('id, batch_id')
             .eq('subject_id', subjectId)
-            .in('batch_id', matchingBatchIds);
+            .in('batch_id', batch_ids);
 
-          const existingByBatchId = new Map(
-            (existingRows || []).map((r: { id: string; batch_id: string }) => [r.batch_id, r.id])
+          const existingBatchSet = new Set(
+            (existingRows || []).map((r: { batch_id: string }) => r.batch_id)
           );
-
-          // 2. Update required_hours_per_week for already-existing rows.
-          for (const [, rowId] of existingByBatchId) {
-            await supabase
-              .from('batch_subjects')
-              .update({ required_hours_per_week: effectiveCredits })
-              .eq('id', rowId);
-          }
-
-          // 3. Insert rows for batches that don't have this subject yet.
-          const newBatchIds = matchingBatchIds.filter(
-            (bId: string) => !existingByBatchId.has(bId)
-          );
+          const newBatchIds = batch_ids.filter((id: string) => !existingBatchSet.has(id));
           if (newBatchIds.length > 0) {
             const insertRows = newBatchIds.map((bId: string) => ({
               id: crypto.randomUUID(),
@@ -190,24 +164,100 @@ export async function PUT(
               .from('batch_subjects')
               .insert(insertRows);
             if (insertErr) {
-              console.error('batch_subjects insert error during subject update:', insertErr);
+              console.error('batch_subjects insert error (explicit sync):', insertErr);
             }
           }
-        } else {
-          // No batches match anymore (e.g. no active batch for this dept/semester)
-          // Remove all existing batch_subjects for this subject
-          await supabase
-            .from('batch_subjects')
-            .delete()
-            .eq('subject_id', subjectId);
         }
       } else {
-        console.error('Error fetching batches for batch_subjects sync:', matchErr);
+        // Auto-sync based on dept/semester (fallback when batch_ids not provided)
+        let matchQuery = supabase
+          .from('batches')
+          .select('id')
+          .eq('college_id', user.college_id)
+          .eq('department_id', effectiveDeptId)
+          .eq('semester', effectiveSemester)
+          .eq('is_active', true);
+
+        if (effectiveCourseId) {
+          matchQuery = matchQuery.eq('course_id', effectiveCourseId);
+        }
+
+        const { data: matchingBatches, error: matchErr } = await matchQuery;
+
+        if (!matchErr) {
+          if (matchingBatches && matchingBatches.length > 0) {
+            const matchingBatchIds = matchingBatches.map((b: { id: string }) => b.id);
+
+            // Remove stale entries (subject moved to different dept/semester)
+            await supabase
+              .from('batch_subjects')
+              .delete()
+              .eq('subject_id', subjectId)
+              .not('batch_id', 'in', `(${matchingBatchIds.join(',')})`);
+
+            // Sync batch_subjects without overwriting existing PKs:
+            // 1. Fetch which batches already have a row for this subject.
+            const { data: existingRows } = await supabase
+              .from('batch_subjects')
+              .select('id, batch_id')
+              .eq('subject_id', subjectId)
+              .in('batch_id', matchingBatchIds);
+
+            const existingByBatchId = new Map(
+              (existingRows || []).map((r: { id: string; batch_id: string }) => [r.batch_id, r.id])
+            );
+
+            // 2. Update required_hours_per_week for already-existing rows.
+            for (const [, rowId] of existingByBatchId) {
+              await supabase
+                .from('batch_subjects')
+                .update({ required_hours_per_week: effectiveCredits })
+                .eq('id', rowId);
+            }
+
+            // 3. Insert rows for batches that don't have this subject yet.
+            const newBatchIds = matchingBatchIds.filter(
+              (bId: string) => !existingByBatchId.has(bId)
+            );
+            if (newBatchIds.length > 0) {
+              const insertRows = newBatchIds.map((bId: string) => ({
+                id: crypto.randomUUID(),
+                batch_id: bId,
+                subject_id: subjectId,
+                required_hours_per_week: effectiveCredits,
+                is_mandatory: true,
+              }));
+              const { error: insertErr } = await supabase
+                .from('batch_subjects')
+                .insert(insertRows);
+              if (insertErr) {
+                console.error('batch_subjects insert error during subject update:', insertErr);
+              }
+            }
+          } else {
+            // No batches match anymore (e.g. no active batch for this dept/semester)
+            // Remove all existing batch_subjects for this subject
+            await supabase
+              .from('batch_subjects')
+              .delete()
+              .eq('subject_id', subjectId);
+          }
+        } else {
+          console.error('Error fetching batches for batch_subjects sync:', matchErr);
+        }
       }
     } catch (syncErr) {
       // Non-fatal: log but still return success for the subject update
       console.error('batch_subjects sync error (non-fatal):', syncErr);
     }
+
+    // Invalidate subjects list cache so UI reflects updated batch assignments immediately
+    try {
+      const { invalidateCache } = await import('@/shared/cache/cache-helper');
+      const { redisCache } = await import('@/shared/cache/redis-cache');
+      const cacheKey = redisCache.buildKey(user.college_id!, 'subjects', 'list-v2');
+      await invalidateCache(cacheKey);
+    } catch { /* non-fatal */ }
 
     return NextResponse.json({
       subject: updatedSubject,

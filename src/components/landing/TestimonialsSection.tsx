@@ -8,7 +8,7 @@ const testimonials = [
         name: 'Dr. Rajesh Kumar',
         role: 'Principal, XYZ Engineering College',
         image: '👨‍🎓',
-        quote: 'Academic Compass transformed our scheduling process. What used to take weeks now takes hours!',
+        quote: 'Algomate transformed our scheduling process. What used to take weeks now takes hours!',
         rating: 5
     },
     {

@@ -17,8 +17,9 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+import json as _json
 from core.models import ConstraintType, Solution
-from storage.supabase_client import get_supabase_client
+from storage.supabase_client import _query as _db_query, _execute as _db_execute, _execute_many as _db_execute_many
 from .quality import DataQualityReport
 from utils.runtime_logger import get_runtime_logger
 
@@ -36,7 +37,8 @@ class Loader:
     """
 
     def __init__(self, client=None):
-        self.client = client or get_supabase_client()
+        # client param kept for API compatibility; ignored — psycopg2 is used directly
+        self._client = client
 
     # ------------------------------------------------------------------
     # Public API
@@ -118,26 +120,43 @@ class Loader:
     ) -> bool:
         meta = solution.metadata or {}
         try:
-            self.client.table("generated_timetables").insert({
-                "id": timetable_id,
-                "generation_task_id": task_id,
-                "batch_id": batch_id,
-                "college_id": college_id,
-                "title": f"Optimized Timetable - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-                "academic_year": str(meta.get("academic_year", "2025-26")),
-                "semester": int(meta.get("semester", 1)),
-                "fitness_score": float(solution.quality_score),
-                "hard_constraint_violations": hard_count,
-                "constraint_violations": _json_safe(violations_json),
-                "optimization_metrics": _json_safe(meta),
-                "generation_method": "HYBRID",
-                "algorithm_source": "optimized_ensemble",
-                "status": "draft",
-                "created_by": str(meta.get("user_id", college_id)),
-                "is_active": False,
-                "is_published": False,
-                "version": 1,
-            }).execute()
+            _db_execute(
+                """
+                INSERT INTO generated_timetables (
+                    id, generation_task_id, batch_id, college_id, title,
+                    academic_year, semester, fitness_score,
+                    hard_constraint_violations, constraint_violations,
+                    optimization_metrics, generation_method, algorithm_source,
+                    status, created_by, is_active, is_published, version
+                ) VALUES (
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s::jsonb,
+                    %s::jsonb, %s, %s,
+                    %s, %s, %s, %s, %s
+                )
+                """,
+                (
+                    timetable_id,
+                    task_id,
+                    batch_id,
+                    college_id,
+                    f"Optimized Timetable - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                    str(meta.get("academic_year", "2025-26")),
+                    int(meta.get("semester", 1)),
+                    float(solution.quality_score),
+                    hard_count,
+                    _json.dumps(_json_safe(violations_json)),
+                    _json.dumps(_json_safe(meta)),
+                    "HYBRID",
+                    "optimized_ensemble",
+                    "draft",
+                    str(meta.get("user_id", college_id)),
+                    False,
+                    False,
+                    1,
+                ),
+            )
             logger.info(f"Inserted generated_timetables: {timetable_id}")
             return True
         except Exception as exc:
@@ -201,22 +220,16 @@ class Loader:
                         hour_end_time = f"{(current_hour + 1):02d}:{start_minute:02d}:00"
                         
                         # Find matching 1-hour time slot in database
-                        time_slot_result = (
-                            self.client.table("time_slots")
-                            .select("id")
-                            .eq("college_id", college_id)
-                            .eq("day", day_name)
-                            .eq("start_time", hour_start_time)
-                            .eq("end_time", hour_end_time)
-                            .limit(1)
-                            .execute()
+                        ts_rows = _db_query(
+                            "SELECT id FROM time_slots WHERE college_id=%s AND day=%s "
+                            "AND start_time=%s AND end_time=%s LIMIT 1",
+                            (college_id, day_name, hour_start_time, hour_end_time),
                         )
-                        
-                        if not time_slot_result.data:
+                        if not ts_rows:
                             logger.warning(f"No time slot found for {day_name} {hour_start_time}-{hour_end_time}")
                             hour_time_slot_id = asgn.time_slot.id
                         else:
-                            hour_time_slot_id = time_slot_result.data[0]["id"]
+                            hour_time_slot_id = ts_rows[0]["id"]
                         
                         # Increment counter for this specific hour
                         if asgn.subject_id not in subject_hour_counters:
@@ -307,14 +320,27 @@ class Loader:
             return True  # not a fatal error
 
         try:
+            _SC_SQL = (
+                "INSERT INTO scheduled_classes "
+                "(id, timetable_id, batch_id, subject_id, faculty_id, classroom_id, "
+                "time_slot_id, is_lab, is_continuation, session_number, credit_hour_number, class_type) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            )
+            tuples = [
+                (
+                    r["id"], r["timetable_id"], r["batch_id"], r["subject_id"],
+                    r["faculty_id"], r["classroom_id"], r["time_slot_id"],
+                    r["is_lab"], r.get("is_continuation", False),
+                    r.get("session_number", 1), r["credit_hour_number"], r["class_type"],
+                )
+                for r in records
+            ]
             batch_size = 50
             total_inserted = 0
-            for i in range(0, len(records), batch_size):
-                chunk = records[i: i + batch_size]
-                self.client.table("scheduled_classes").insert(chunk).execute()
-                total_inserted += len(chunk)
-            
-            # Log breakdown
+            for i in range(0, len(tuples), batch_size):
+                _db_execute_many(_SC_SQL, tuples[i: i + batch_size])
+                total_inserted += min(batch_size, len(tuples) - i)
+
             lab_count = sum(1 for r in records if r.get("is_lab"))
             continuation_count = sum(1 for r in records if r.get("is_continuation"))
             runtime_logger.info(f"📊 Inserted {total_inserted} scheduled_classes ({lab_count} labs, {continuation_count} continuations)")
@@ -337,23 +363,32 @@ class Loader:
         report: DataQualityReport,
     ):
         try:
-            self.client.table("algorithm_execution_metrics").insert({
-                "generation_task_id": task_id,
-                "total_execution_time_ms": int(execution_time * 1000),
-                "final_score": float(solution.quality_score),
-                "solutions_found": 1,
-                "hard_constraint_violations": hard_count,
-                "soft_constraint_violations": soft_count,
-                "metrics_json": _json_safe({
-                    "solver_name": solution.solver_name,
-                    "is_valid": solution.is_valid,
-                    "hard_constraint_score": solution.hard_constraint_score,
-                    "soft_constraint_score": solution.soft_constraint_score,
-                    "num_assignments": len(solution.assignments),
-                    "violations": len(solution.constraint_violations),
-                    "iterations": (solution.metadata or {}).get("iterations", 0),
-                }),
-            }).execute()
+            _db_execute(
+                """
+                INSERT INTO algorithm_execution_metrics (
+                    generation_task_id, total_execution_time_ms, final_score,
+                    solutions_found, hard_constraint_violations, soft_constraint_violations,
+                    metrics_json
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
+                """,
+                (
+                    task_id,
+                    int(execution_time * 1000),
+                    float(solution.quality_score),
+                    1,
+                    hard_count,
+                    soft_count,
+                    _json.dumps(_json_safe({
+                        "solver_name": solution.solver_name,
+                        "is_valid": solution.is_valid,
+                        "hard_constraint_score": solution.hard_constraint_score,
+                        "soft_constraint_score": solution.soft_constraint_score,
+                        "num_assignments": len(solution.assignments),
+                        "violations": len(solution.constraint_violations),
+                        "iterations": (solution.metadata or {}).get("iterations", 0),
+                    })),
+                ),
+            )
             logger.info("Inserted algorithm_execution_metrics")
         except Exception as exc:
             logger.error(f"FAILED inserting metrics (non-fatal): {exc}")
@@ -366,7 +401,7 @@ class Loader:
     def _rollback_timetable(self, timetable_id: str):
         """Delete partially created timetable on failure."""
         try:
-            self.client.table("generated_timetables").delete().eq("id", timetable_id).execute()
+            _db_execute("DELETE FROM generated_timetables WHERE id = %s", (timetable_id,))
             logger.warning(f"Rolled back timetable {timetable_id}")
         except Exception as exc:
             logger.error(f"Rollback failed for {timetable_id}: {exc}")
@@ -374,15 +409,12 @@ class Loader:
     def _existing_timetable_for_task(self, task_id: str) -> Optional[str]:
         """Return timetable ID if one already exists for this task."""
         try:
-            result = (
-                self.client.table("generated_timetables")
-                .select("id")
-                .eq("generation_task_id", task_id)
-                .limit(1)
-                .execute()
+            rows = _db_query(
+                "SELECT id FROM generated_timetables WHERE generation_task_id = %s LIMIT 1",
+                (task_id,),
             )
-            if result.data:
-                return result.data[0]["id"]
+            if rows:
+                return rows[0]["id"]
         except Exception:
             pass
         return None

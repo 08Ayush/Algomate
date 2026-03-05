@@ -356,7 +356,7 @@ export default function NotificationsPage() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-white">Notifications</h1>
-              <p className="text-xs text-white/70">Academic Compass</p>
+              <p className="text-xs text-white/70">Algomate</p>
             </div>
           </div>
         </div>

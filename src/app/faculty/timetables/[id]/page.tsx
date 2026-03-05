@@ -347,7 +347,7 @@ export default function ViewTimetablePage() {
                     <div className="flex gap-3 mt-6">
                         {timetable.status === 'draft' && (
                             <button
-                                onClick={() => router.push('/faculty/ai-timetable-creator')}
+                                onClick={() => router.push(`/faculty/timetables/${timetableId}/edit`)}
                                 className="flex items-center gap-2 px-4 py-2.5 bg-white text-[#4D869C] rounded-xl font-medium hover:shadow-lg transition-all"
                             >
                                 <Edit size={16} /> Edit Timetable

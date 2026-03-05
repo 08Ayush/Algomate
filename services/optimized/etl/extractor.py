@@ -15,7 +15,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional
 
-from storage.supabase_client import get_supabase_client
+from storage.supabase_client import _query as _db_query
 from .quality import DataQualityReport
 
 logger = logging.getLogger("optimized.etl.extract")
@@ -30,7 +30,8 @@ class Extractor:
     """
 
     def __init__(self, client=None):
-        self.client = client or get_supabase_client()
+        # client param kept for test injection; production uses psycopg2 via _db_query
+        self._client = client
 
     # ------------------------------------------------------------------
     # Public API
@@ -171,14 +172,11 @@ class Extractor:
 
     def _fetch_batch(self, batch_id: str, report: DataQualityReport) -> Optional[dict]:
         try:
-            result = (
-                self.client.table("batches")
-                .select("*, department_id")
-                .eq("id", batch_id)
-                .single()
-                .execute()
+            rows = _db_query(
+                "SELECT *, department_id FROM batches WHERE id = %s LIMIT 1",
+                (batch_id,),
             )
-            return result.data
+            return rows[0] if rows else None
         except Exception as exc:
             report.add_error("fetch_failed", "batch", f"Batch fetch error: {exc}")
             return None
@@ -192,14 +190,25 @@ class Extractor:
            to catch any subjects that exist in the curriculum but were not
            added to batch_subjects (data entry gap).
         """
+        import json as _json
         # Step 1: batch_subjects join (primary source)
-        bs_result = (
-            self.client.table("batch_subjects")
-            .select("subject_id, assigned_faculty_id, required_hours_per_week, subjects(*)")
-            .eq("batch_id", batch_id)
-            .execute()
+        raw_bs = _db_query(
+            """
+            SELECT bs.subject_id, bs.assigned_faculty_id, bs.required_hours_per_week,
+                   row_to_json(s) AS subjects
+            FROM batch_subjects bs
+            JOIN subjects s ON s.id = bs.subject_id
+            WHERE bs.batch_id = %s
+            """,
+            (batch_id,),
         )
-        bs_rows = bs_result.data or []
+        bs_rows = []
+        for r in raw_bs:
+            subj = r.get("subjects")
+            if isinstance(subj, str):
+                subj = _json.loads(subj)
+            r["subjects"] = subj
+            bs_rows.append(r)
 
         # Build set of already-fetched subject IDs
         fetched_ids: set = set()
@@ -210,25 +219,18 @@ class Extractor:
 
         # Step 2: fallback — get batch info (dept + semester) to query subjects directly
         try:
-            batch_info = (
-                self.client.table("batches")
-                .select("department_id, semester")
-                .eq("id", batch_id)
-                .single()
-                .execute()
+            bi_rows = _db_query(
+                "SELECT department_id, semester FROM batches WHERE id = %s LIMIT 1",
+                (batch_id,),
             )
-            dept_id = batch_info.data.get("department_id")
-            semester = batch_info.data.get("semester")
+            dept_id = bi_rows[0].get("department_id") if bi_rows else None
+            semester = bi_rows[0].get("semester") if bi_rows else None
 
             if dept_id and semester:
-                direct_result = (
-                    self.client.table("subjects")
-                    .select("*")
-                    .eq("department_id", dept_id)
-                    .eq("semester", semester)
-                    .execute()
+                direct_subjects = _db_query(
+                    "SELECT * FROM subjects WHERE department_id = %s AND semester = %s",
+                    (dept_id, semester),
                 )
-                direct_subjects = direct_result.data or []
 
                 # Add any subjects not already in batch_subjects
                 added = 0
@@ -264,37 +266,16 @@ class Extractor:
         """
         Fetch classrooms scoped to the batch's department.
         Falls back to all college classrooms if no department_id is given.
-        Includes both regular classrooms and lab rooms.
         """
-        query = (
-            self.client.table("classrooms")
-            .select("*")
-            .eq("college_id", college_id)
-            .eq("is_available", True)
-        )
         if department_id:
-            # Fetch classrooms that belong to this department OR are shared (no department)
-            # First: department-specific rooms
-            dept_result = (
-                self.client.table("classrooms")
-                .select("*")
-                .eq("college_id", college_id)
-                .eq("is_available", True)
-                .eq("department_id", department_id)
-                .execute()
+            dept_rooms = _db_query(
+                "SELECT * FROM classrooms WHERE college_id=%s AND is_available=TRUE AND department_id=%s",
+                (college_id, department_id),
             )
-            # Second: shared rooms (no department restriction)
-            shared_result = (
-                self.client.table("classrooms")
-                .select("*")
-                .eq("college_id", college_id)
-                .eq("is_available", True)
-                .is_("department_id", "null")
-                .execute()
+            shared_rooms = _db_query(
+                "SELECT * FROM classrooms WHERE college_id=%s AND is_available=TRUE AND department_id IS NULL",
+                (college_id,),
             )
-            dept_rooms = dept_result.data or []
-            shared_rooms = shared_result.data or []
-            # Merge, deduplicate by id
             all_rooms = {r["id"]: r for r in dept_rooms + shared_rooms}
             rooms = list(all_rooms.values())
             logger.info(
@@ -302,8 +283,10 @@ class Extractor:
                 f"{len(shared_rooms)} shared = {len(rooms)} total"
             )
             return rooms
-        result = query.execute()
-        return result.data or []
+        return _db_query(
+            "SELECT * FROM classrooms WHERE college_id=%s AND is_available=TRUE",
+            (college_id,),
+        )
 
     def _fetch_time_slots(self, college_id: str) -> List[dict]:
         """
@@ -318,38 +301,53 @@ class Extractor:
         (duration < 60 min or designated lunch periods).
 
         Result: 36 clean slots (6 days × 6 periods/day).
-        """
-        WORKING_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
-        result = (
-            self.client.table("time_slots")
-            .select("*")
-            .eq("college_id", college_id)
-            .eq("is_active", True)
-            .in_("day", WORKING_DAYS)
-            .execute()
-        )
-        raw_slots = result.data or []
 
-        # Filter: keep only 1-hour teaching slots (duration = 60 min)
-        # Exclude: multi-hour lab slots (is_lab_slot=True with duration > 60)
-        # Exclude: breaks/short periods (duration < 60, e.g. 15-min break)
+        NOTE: psycopg2 returns TIME columns as datetime.time objects, not strings.
+        We handle both representations so the code works regardless of driver quirks.
+        """
+        import datetime as _dt
+
+        WORKING_DAYS = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
+
+        # Fetch all time slots for this college; day/active filtering done in Python
+        # to avoid ANY(%s)/array-cast issues across psycopg2 versions.
+        raw_slots = _db_query(
+            "SELECT * FROM time_slots WHERE college_id = %s",
+            (college_id,),
+        )
+
+        def _to_minutes(val) -> int:
+            """Convert a TIME column value (str or datetime.time) to total minutes."""
+            if val is None:
+                return 0
+            if isinstance(val, _dt.time):
+                return val.hour * 60 + val.minute
+            # string: "HH:MM:SS" or "HH:MM"
+            try:
+                parts = str(val).split(":")
+                return int(parts[0]) * 60 + int(parts[1])
+            except (ValueError, IndexError):
+                return 0
+
         filtered = []
         for slot in raw_slots:
-            # Calculate duration
-            st = slot.get("start_time", "")
-            et = slot.get("end_time", "")
-            try:
-                sp = st.split(":")
-                ep = et.split(":")
-                dur = (int(ep[0]) * 60 + int(ep[1])) - (int(sp[0]) * 60 + int(sp[1]))
-            except (ValueError, IndexError):
-                dur = 60  # fallback
+            # Skip inactive slots
+            if slot.get("is_active") is False:
+                continue
 
-            # Skip multi-hour lab slots (the solver composites them from 1-hr blocks)
+            # Skip non-working days
+            day = slot.get("day", "")
+            if day not in WORKING_DAYS:
+                continue
+
+            # Calculate duration in minutes
+            dur = _to_minutes(slot.get("end_time")) - _to_minutes(slot.get("start_time"))
+
+            # Skip multi-hour lab slots (solver composites them from 1-hr blocks)
             if slot.get("is_lab_slot") and dur > 60:
                 continue
 
-            # Skip short break / lunch periods (< 60 min, e.g. 11:00-11:15)
+            # Skip short break / lunch periods (< 60 min)
             if dur < 60:
                 continue
 
@@ -376,58 +374,52 @@ class Extractor:
         faculty_dict: Dict[str, dict] = {}
         qual_rows: List[dict] = []
 
-        # Assigned faculty (always include regardless of department — they are explicitly assigned)
+        import json as _json
+        # Assigned faculty (always include regardless of department)
         if assigned_map:
             assigned_ids = list(set(assigned_map.values()))
             try:
-                result = (
-                    self.client.table("users")
-                    .select("*")
-                    .in_("id", assigned_ids)
-                    .execute()
-                )
-                for u in (result.data or []):
+                for u in _db_query(
+                    "SELECT * FROM users WHERE id = ANY(%s::uuid[])",
+                    (assigned_ids,),
+                ):
                     faculty_dict[u["id"]] = u
             except Exception as exc:
-                report.add_warning(
-                    "fetch_failed", "faculty",
-                    f"Could not fetch assigned faculty: {exc}",
-                )
+                report.add_warning("fetch_failed", "faculty",
+                                   f"Could not fetch assigned faculty: {exc}")
 
         # Qualified faculty — further restricted to the batch's department
         if subject_ids:
             try:
-                qual_query = (
-                    self.client.table("faculty_qualified_subjects")
-                    .select("faculty_id, subject_id, users!faculty_id(*)")
-                    .in_("subject_id", subject_ids)
+                raw_q = _db_query(
+                    """
+                    SELECT fqs.faculty_id, fqs.subject_id, row_to_json(u) AS users
+                    FROM faculty_qualified_subjects fqs
+                    JOIN users u ON u.id = fqs.faculty_id
+                    WHERE fqs.subject_id = ANY(%s::uuid[])
+                    """,
+                    (subject_ids,),
                 )
-                result = qual_query.execute()
-                qual_rows = result.data or []
-
-                for fq in qual_rows:
+                qual_rows = []
+                for fq in raw_q:
                     user = fq.get("users")
+                    if isinstance(user, str):
+                        user = _json.loads(user)
+                    fq["users"] = user
+                    qual_rows.append(fq)
                     if not user:
                         continue
                     fid = user["id"]
                     if fid in faculty_dict:
-                        continue  # already included (assigned faculty)
-                    # Department filter: only include if no department_id restriction,
-                    # or if this faculty belongs to the batch's department
+                        continue
                     faculty_dept = user.get("department_id", "")
                     if department_id and faculty_dept and faculty_dept != department_id:
-                        logger.debug(
-                            f"Skipping faculty {fid} — dept {faculty_dept} "
-                            f"≠ batch dept {department_id}"
-                        )
+                        logger.debug(f"Skipping faculty {fid} — dept {faculty_dept} != batch dept {department_id}")
                         continue
                     faculty_dict[fid] = user
-
             except Exception as exc:
-                report.add_warning(
-                    "fetch_failed", "qualifications",
-                    f"Could not fetch faculty qualifications: {exc}",
-                )
+                report.add_warning("fetch_failed", "qualifications",
+                                   f"Could not fetch faculty qualifications: {exc}")
 
         logger.info(
             f"Faculty fetched: {len(faculty_dict)} total "
@@ -445,13 +437,11 @@ class Extractor:
         if not faculty_ids:
             return []
         try:
-            result = (
-                self.client.table("faculty_availability")
-                .select("faculty_id, time_slot_id, is_available, availability_type, preference_weight")
-                .in_("faculty_id", faculty_ids)
-                .execute()
+            rows = _db_query(
+                "SELECT faculty_id, time_slot_id, is_available, availability_type, preference_weight "
+                "FROM faculty_availability WHERE faculty_id = ANY(%s::uuid[])",
+                (faculty_ids,),
             )
-            rows = result.data or []
             logger.info(f"Faculty availability rows: {len(rows)}")
             return rows
         except Exception as exc:
@@ -465,13 +455,7 @@ class Extractor:
         they apply to) is handled downstream by the solver.
         """
         try:
-            result = (
-                self.client.table("constraint_rules")
-                .select("*")
-                .eq("is_active", True)
-                .execute()
-            )
-            rows = result.data or []
+            rows = _db_query("SELECT * FROM constraint_rules WHERE is_active = TRUE")
             logger.info(f"Constraint rules fetched: {len(rows)} active")
             return rows
         except Exception as exc:

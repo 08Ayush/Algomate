@@ -105,7 +105,7 @@ export function HeroSection() {
                     >
                         <img
                             src="/hero-collage.png"
-                            alt="Academic Compass Platform Overview"
+                            alt="Algomate Platform Overview"
                             className="w-full h-auto rounded-2xl shadow-2xl"
                         />
                     </motion.div>

@@ -1,4 +1,5 @@
 import { serviceDb as supabase } from '@/shared/database';
+import { getPool } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { Database } from '@/shared/database';
@@ -58,60 +59,67 @@ export async function GET(request: NextRequest) {
     const semester = searchParams.get('semester') ? parseInt(searchParams.get('semester')!) : undefined;
     const status = searchParams.get('status') || undefined;
     const academicYear = searchParams.get('academicYear') || undefined;
-
-    // For filtering by department if explicitly requested
     const departmentId = searchParams.get('department_id') || searchParams.get('departmentId') || undefined;
 
-    // Pagination (Dual-Mode)
     const { page, limit, isPaginated } = getPaginationParams(request);
+    const pool = getPool();
 
-    // Optimized efficient fetch with embedded resources (Joins)
-    let query = supabase
-      .from('generated_timetables')
-      .select(`
-        *,
-        batch:batches(id, name, semester, section, department_id),
-        created_by_user:users!created_by(first_name, last_name, email),
-        generation_task:timetable_generation_tasks!generation_task_id(task_name, status, progress)
-      `, { count: 'exact' });
+    // Build dynamic WHERE conditions
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+    let idx = 1;
 
-    // Apply filters
     if (user.role !== 'super_admin') {
-      query = query.eq('college_id', user.college_id ?? '');
+      conditions.push(`gt.college_id = $${idx++}`);
+      params.push(user.college_id);
     }
+    if (batchId)      { conditions.push(`gt.batch_id = $${idx++}`);      params.push(batchId); }
+    if (semester)     { conditions.push(`gt.semester = $${idx++}`);      params.push(semester); }
+    if (status)       { conditions.push(`gt.status = $${idx++}`);        params.push(status); }
+    if (academicYear) { conditions.push(`gt.academic_year = $${idx++}`); params.push(academicYear); }
+    if (departmentId) { conditions.push(`gt.department_id = $${idx++}`); params.push(departmentId); }
 
-    if (batchId) query = query.eq('batch_id', batchId);
-    if (semester) query = query.eq('semester', semester);
-    if (status) query = query.eq('status', status);
-    if (academicYear) query = query.eq('academic_year', academicYear);
-    if (departmentId) query = query.eq('department_id', departmentId as string);
+    const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    // Default sort
-    query = query.order('created_at', { ascending: false });
+    // Count total matching rows
+    const countResult = await pool.query(
+      `SELECT COUNT(*) FROM generated_timetables gt ${whereClause}`,
+      params
+    );
+    const total = parseInt(countResult.rows[0].count, 10);
 
-    // Apply Pagination if requested
+    // Build pagination clause
+    const dataParams = [...params];
+    let paginationClause = '';
     if (isPaginated && page && limit) {
       const { from, to } = getPaginationRange(page, limit);
-      query = query.range(from, to);
-    } else {
-      // Safety: Limit "Fetch All" to reasonable number (e.g., 500) to prevent crash
-      // unless strictly filtered (e.g. by batchId)
-      if (!batchId) {
-        query = query.limit(500);
-      }
+      paginationClause = ` LIMIT $${idx++} OFFSET $${idx++}`;
+      dataParams.push(to - from + 1, from);
+    } else if (!batchId) {
+      paginationClause = ' LIMIT 500';
     }
 
-    const { data: enrichedTimetables, count, error: queryError } = await query;
+    // Fetch with SQL JOIN so batch data is always populated
+    const dataResult = await pool.query(
+      `SELECT gt.*,
+         CASE WHEN b.id IS NOT NULL
+           THEN json_build_object('id', b.id, 'name', b.name, 'semester', b.semester,
+                                  'section', b.section, 'department_id', b.department_id)
+           ELSE NULL END AS batch,
+         CASE WHEN u.id IS NOT NULL
+           THEN json_build_object('first_name', u.first_name, 'last_name', u.last_name, 'email', u.email)
+           ELSE NULL END AS created_by_user
+       FROM generated_timetables gt
+       LEFT JOIN batches b ON b.id = gt.batch_id
+       LEFT JOIN users   u ON u.id = gt.created_by
+       ${whereClause}
+       ORDER BY gt.created_at DESC${paginationClause}`,
+      dataParams
+    );
 
-    if (queryError) {
-      throw queryError;
-    }
-
-    // Quick mapper to ensure frontend compatibility
-    const mappedData = (enrichedTimetables || []).map((item: any) => ({
+    const mappedData = dataResult.rows.map((item: any) => ({
       id: item.id,
       title: item.title,
-      // Snake case
       department_id: item.department_id,
       batch_id: item.batch_id,
       college_id: item.college_id,
@@ -123,7 +131,6 @@ export async function GET(request: NextRequest) {
       published_at: item.published_at,
       created_at: item.created_at,
       updated_at: item.updated_at,
-      // CamelCase
       departmentId: item.department_id,
       batchId: item.batch_id,
       collegeId: item.college_id,
@@ -137,27 +144,20 @@ export async function GET(request: NextRequest) {
       publishedAt: item.published_at,
       createdAt: item.created_at,
       updatedAt: item.updated_at,
-      // Relations
-      batch: item.batch,
-      batch_name: item.batch?.name,
-      created_by_user: item.created_by_user,
-      generation_task: item.generation_task
+      batch: item.batch || null,
+      batch_name: item.batch?.name || null,
+      created_by_user: item.created_by_user || null,
     }));
 
     let meta;
     if (isPaginated && page && limit) {
-      const paginatedResult = createPaginatedResponse(mappedData, count || 0, page, limit);
+      const paginatedResult = createPaginatedResponse(mappedData, total, page, limit);
       meta = paginatedResult.meta;
     } else {
-      meta = {
-        total: mappedData.length, // approximation since we might have safety limit
-        page: 1,
-        limit: mappedData.length
-      };
+      meta = { total: mappedData.length, page: 1, limit: mappedData.length };
     }
 
     return NextResponse.json({ success: true, data: mappedData, meta });
-
 
   } catch (error) {
     return handleError(error);

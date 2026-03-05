@@ -46,8 +46,10 @@ CREATE INDEX IF NOT EXISTS idx_subjects_dept_semester_active
 
 -- 1D. student_subject_choices(student_id, bucket_id) — 3 queries, zero indexes
 --     Elective choice listing, delete-before-reinsert pattern.
-CREATE INDEX IF NOT EXISTS idx_student_subject_choices_student_bucket
-  ON student_subject_choices(student_id, bucket_id);
+--     NOTE: Table 'student_subject_choices' does not exist in the current schema.
+--     Commented out to prevent runtime error. Uncomment if/when the table is added.
+-- CREATE INDEX IF NOT EXISTS idx_student_subject_choices_student_bucket
+--   ON student_subject_choices(student_id, bucket_id);
 
 -- 1E. faculty_qualified_subjects(subject_id) — 2+ queries do `.in('subject_id', ...)`
 --     Batch-faculty assignment page loads all qualifications for a set of subjects.
@@ -114,6 +116,8 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_classes_faculty
 --     `.eq('recipient_id', ...).eq('is_read', false).order('created_at', {ascending:false})`
 --     Existing idx_notifications_recipient_unread only has (recipient_id, is_read) WHERE is_read = FALSE
 --     Adding created_at DESC allows index-only scan + sort elimination.
+--     Also drop the broader idx_notifications_recipient (redundant after the new covering indexes below).
+DROP INDEX IF EXISTS idx_notifications_recipient;
 DROP INDEX IF EXISTS idx_notifications_recipient_unread;
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient_unread
   ON notifications(recipient_id, created_at DESC)

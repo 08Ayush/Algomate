@@ -10,7 +10,7 @@ export default function DashboardFooter() {
           {/* Left side - Copyright */}
           <div className="flex items-center space-x-4">
             <p className="text-sm text-gray-600">
-              © {currentYear} The Academic Compass. All rights reserved.
+              © {currentYear} Algomate. All rights reserved.
             </p>
           </div>
 

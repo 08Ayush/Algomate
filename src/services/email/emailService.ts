@@ -69,14 +69,14 @@ class EmailService {
       <head><meta charset="utf-8"/></head>
       <body style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px;">
         <div style="background:#4D869C;color:white;padding:20px;border-radius:8px 8px 0 0;">
-          <h1 style="margin:0;font-size:22px;">Academic Compass</h1>
+          <h1 style="margin:0;font-size:22px;">Algomate</h1>
           <p style="margin:4px 0 0;opacity:0.8;font-size:13px;">Template: ${template}</p>
         </div>
         <div style="border:1px solid #e0e0e0;border-top:none;padding:20px;border-radius:0 0 8px 8px;">
           <table style="width:100%;border-collapse:collapse;">${entries}</table>
         </div>
         <p style="font-size:11px;color:#999;text-align:center;margin-top:16px;">
-          This is an automated message from Academic Compass. Please do not reply.
+          This is an automated message from Algomate. Please do not reply.
         </p>
       </body>
       </html>
@@ -86,8 +86,8 @@ class EmailService {
   async sendEmail(options: SendEmailOptions): Promise<SendEmailResult> {
     try {
       const transporter = this.getTransporter();
-      const fromName = process.env.SMTP_FROM_NAME || 'Academic Compass';
-      const fromEmail = process.env.SMTP_USER || 'noreply@academiccompass.app';
+      const fromName = process.env.SMTP_FROM_NAME || 'Algomate';
+      const fromEmail = process.env.SMTP_USER || 'noreply@algomate.io';
 
       const html = options.html || this.buildHtml(options.template, options.data);
       const text =

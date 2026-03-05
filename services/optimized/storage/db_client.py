@@ -1,4 +1,4 @@
-"""Database client for Supabase integration."""
+"""Database client (legacy - backed by Neon/psycopg2 after Supabase migration)."""
 
 import asyncio
 import time
@@ -6,8 +6,12 @@ import functools
 from typing import List, Dict, Optional, Any
 from datetime import datetime, timedelta
 import logging
-from supabase import create_client, Client
 from functools import lru_cache
+
+# Supabase removed - legacy stub so tests that import DatabaseClient still work
+Client = None
+def create_client(url, key):  # noqa: F811
+    return None
 
 from core.models import (
     TimeSlot,
@@ -69,11 +73,9 @@ class DatabaseClient:
         self.config = config
         self.logger = logging.getLogger(__name__)
         
-        if not config.url or not config.api_key:
-            self.logger.warning("Database credentials not provided. Running in offline mode.")
-            self.client: Optional[Client] = None
-        else:
-            self.client = create_client(config.url, config.api_key)
+        # Always run in offline mode - production uses SupabaseSchedulerClient (psycopg2)
+        self.logger.info("DatabaseClient: running in offline mode (use SupabaseSchedulerClient for Neon)")
+        self.client: Optional[object] = None
         
         self._cache: Dict[str, tuple[Any, datetime]] = {}
     

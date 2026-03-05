@@ -311,7 +311,7 @@ export default function DemoRequestPage() {
                 transition={{ delay: 0.3 }}
                 className="text-5xl lg:text-6xl font-extrabold text-gray-900 leading-tight mb-6"
               >
-                Experience Academic Compass
+                Experience Algomate
                 <br />
                 <span className="bg-gradient-to-r from-[#4D869C] to-[#7AB2B2] bg-clip-text text-transparent">
                   In Action
@@ -324,7 +324,7 @@ export default function DemoRequestPage() {
                 transition={{ delay: 0.4 }}
                 className="text-xl text-gray-600 mb-10 leading-relaxed"
               >
-                See how Academic Compass can transform your institution's academic management.
+                See how Algomate can transform your institution's academic management.
                 Schedule a personalized demo with our experts and discover the perfect solution
                 for your needs.
               </motion.p>
@@ -748,7 +748,7 @@ export default function DemoRequestPage() {
             className="text-center mb-16"
           >
             <h2 className="text-4xl font-extrabold text-gray-900 mb-4">Why Schedule a Demo?</h2>
-            <p className="text-xl text-gray-600">Discover how Academic Compass can benefit your institution</p>
+            <p className="text-xl text-gray-600">Discover how Algomate can benefit your institution</p>
           </motion.div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -834,7 +834,7 @@ export default function DemoRequestPage() {
           className="max-w-4xl mx-auto px-6 text-center relative z-10"
         >
           <h2 className="text-4xl lg:text-5xl font-extrabold text-white mb-6">Ready to Transform Your Institution?</h2>
-          <p className="text-xl text-white/90 mb-10">Join hundreds of institutions already using Academic Compass</p>
+          <p className="text-xl text-white/90 mb-10">Join hundreds of institutions already using Algomate</p>
           <button
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
             className="inline-flex items-center gap-3 px-10 py-5 bg-white text-[#4D869C] rounded-2xl font-bold text-lg hover:shadow-2xl hover:scale-105 transition-all"

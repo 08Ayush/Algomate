@@ -205,13 +205,13 @@ export async function POST(request: NextRequest) {
       });
 
       await transporter.sendMail({
-        from: process.env.SMTP_FROM || 'noreply@academiccompass.com',
+        from: process.env.SMTP_FROM || 'noreply@algomate.io',
         to: data.adminEmail,
-        subject: `Welcome to Academic Compass - ${data.collegeName}`,
+        subject: `Welcome to Algomate - ${data.collegeName}`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <div style="background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
-              <h1 style="color: white; margin: 0;">Welcome to Academic Compass!</h1>
+              <h1 style="color: white; margin: 0;">Welcome to Algomate!</h1>
             </div>
             <div style="background: #ffffff; padding: 30px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 10px 10px;">
               <p style="color: #475569; line-height: 1.6;">
@@ -219,7 +219,7 @@ export async function POST(request: NextRequest) {
               </p>
               <p style="color: #475569; line-height: 1.6;">
                 Congratulations! Your institution <strong>${data.collegeName}</strong> has been 
-                successfully registered on Academic Compass ERP.
+                successfully registered on Algomate ERP.
               </p>
 
               <div style="background: #f1f5f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
@@ -263,7 +263,7 @@ export async function POST(request: NextRequest) {
 
               <div style="border-top: 1px solid #e2e8f0; margin-top: 30px; padding-top: 20px;">
                 <p style="color: #64748b; font-size: 14px;">
-                  Need help? Contact our support team at support@academiccompass.com
+                  Need help? Contact our support team at support@algomate.io
                 </p>
               </div>
             </div>
@@ -273,8 +273,8 @@ export async function POST(request: NextRequest) {
 
       // Also notify super admin about new registration
       await transporter.sendMail({
-        from: process.env.SMTP_FROM || 'noreply@academiccompass.com',
-        to: process.env.ADMIN_EMAIL || 'admin@academiccompass.com',
+        from: process.env.SMTP_FROM || 'noreply@algomate.io',
+        to: process.env.ADMIN_EMAIL || 'admin@algomate.io',
         subject: `🎉 New College Registered: ${data.collegeName}`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">

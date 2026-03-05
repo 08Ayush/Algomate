@@ -214,14 +214,14 @@ const CollegeAdminsPage: React.FC = () => {
         }
     };
 
-    const handleDeleteAdmin = (admin: any) => {
+    const handleDeleteAdmin = (adminId: string) => {
         showConfirm({
             title: 'Delete Admin',
             message: `Are you sure you want to delete this admin? This action cannot be undone.`,
             confirmText: 'Delete',
             onConfirm: async () => {
                 try {
-                    const res = await fetch(`/api/super-admin/college-admins/${admin.id}`, { method: 'DELETE', headers: getAuthHeaders() });
+                    const res = await fetch(`/api/super-admin/college-admins/${adminId}`, { method: 'DELETE', headers: getAuthHeaders() });
                     if (res.ok) {
                         toast.success('Admin deleted successfully');
                         fetchData();

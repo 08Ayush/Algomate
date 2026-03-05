@@ -151,7 +151,7 @@ export default function Sidebar({ isOpen, onToggle, facultyRole, currentPath = '
                 </div>
                 {(isMobile || isOpen) && (
                   <div className="ml-3">
-                    <h2 className="text-lg font-bold text-slate-800">Academic Compass</h2>
+                    <h2 className="text-lg font-bold text-slate-800">Algomate</h2>
                     <p className="text-xs text-slate-500">Faculty Portal</p>
                   </div>
                 )}

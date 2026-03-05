@@ -47,9 +47,12 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       valid: true,
-      tokenData: demoRequestData || {
-        institutionName: tokenData.institution_name,
-        email: tokenData.email
+      tokenData: {
+        institutionName: (demoRequestData?.institution_name) || tokenData.institution_name || '',
+        email: (demoRequestData?.email) || tokenData.email || '',
+        city: demoRequestData?.city || '',
+        state: demoRequestData?.state || ''
+        // phone intentionally excluded — admin fills this themselves
       }
     });
 

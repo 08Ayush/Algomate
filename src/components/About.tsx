@@ -15,7 +15,7 @@ export function About() {
               Empowering Students to Reach Their Full Potential
             </h2>
             <p className="text-lg text-muted-foreground mb-6">
-              At Academic Compass, we believe every student deserves personalized guidance on their educational journey. 
+              At Algomate, we believe every student deserves personalized guidance on their educational journey. 
               Our mission is to democratize access to quality academic counseling and career guidance through technology, 
               fully aligned with the National Education Policy (NEP) 2020.
             </p>

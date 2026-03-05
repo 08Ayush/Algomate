@@ -1,24 +1,25 @@
-"""
-Supabase Database Client for Optimized Scheduler
+﻿"""
+Neon PostgreSQL Database Client for Optimized Scheduler
 
-Connects to the same Supabase database as the scheduler module,
-fetches domain data (batches, subjects, faculty, classrooms, time_slots),
-and maps them to optimized core models for batch-wise timetable generation.
+Replaces the former Supabase client after the Supabase -> Neon migration.
+Connects via psycopg2 using DATABASE_URL from .env, fetches domain data
+(batches, subjects, faculty, classrooms, time_slots) and maps them to
+optimized core models for batch-wise timetable generation.
 
-References: services/scheduler/utils/db_client.py, services/scheduler/hybrid_orchestrator.py
+Drop-in replacement for the original SupabaseSchedulerClient - same public API.
 """
 
 import os
 import uuid
+import json
 import logging
-from dataclasses import asdict
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime
-from functools import lru_cache
 
+import psycopg2
+import psycopg2.extras
 from dotenv import load_dotenv
-from supabase import create_client, Client
 
 from core.models import (
     TimeSlot,
@@ -35,11 +36,8 @@ logger = logging.getLogger("optimized.supabase")
 
 
 # ---------------------------------------------------------------------------
-# Singleton Supabase client (mirrors scheduler/utils/db_client.py)
+# Connection helpers
 # ---------------------------------------------------------------------------
-
-_supabase_client: Optional[Client] = None
-
 
 def _load_env():
     """Load .env from project root (3 levels up from this file)."""
@@ -52,89 +50,121 @@ def _load_env():
         logger.warning(f".env not found at {env_file}")
 
 
-def get_supabase_client() -> Client:
-    """Get or create singleton Supabase client."""
-    global _supabase_client
-    if _supabase_client is None:
-        _load_env()
-        url = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
-        key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-        if not url or not key:
-            raise ValueError(
-                "Missing Supabase credentials. "
-                "Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env"
-            )
-        _supabase_client = create_client(url, key)
-        logger.info("Supabase client initialized")
-    return _supabase_client
+def get_connection() -> psycopg2.extensions.connection:
+    """Open a new psycopg2 connection to Neon using DATABASE_URL."""
+    _load_env()
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise ValueError(
+            "Missing DATABASE_URL. Set DATABASE_URL in .env pointing to your Neon database."
+        )
+    conn = psycopg2.connect(db_url)
+    conn.autocommit = False
+    return conn
 
 
-def reset_client():
-    """Reset singleton client (for testing)."""
-    global _supabase_client
-    _supabase_client = None
+def _query(sql: str, params=None) -> List[Dict[str, Any]]:
+    """Execute a SELECT query and return list of dicts."""
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+            return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def _execute(sql: str, params=None):
+    """Execute an INSERT / UPDATE statement."""
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def _execute_many(sql: str, param_list: List):
+    """Execute a batch INSERT for a list of rows."""
+    if not param_list:
+        return
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            psycopg2.extras.execute_batch(cur, sql, param_list, page_size=50)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------
-# SupabaseSchedulerClient – batch-wise domain data fetching
+# Kept for backward compatibility (used in orchestrator.py / routes.py)
+# ---------------------------------------------------------------------------
+
+def get_supabase_client():
+    """Deprecated shim - SupabaseSchedulerClient now uses psycopg2 directly."""
+    return None
+
+
+def reset_client():
+    pass
+
+
+# ---------------------------------------------------------------------------
+# SupabaseSchedulerClient - same public API, now backed by Neon / psycopg2
 # ---------------------------------------------------------------------------
 
 class SupabaseSchedulerClient:
     """
-    Fetches scheduling domain data from Supabase and maps to optimized core models.
-
-    Follows the same DB schema as services/scheduler/hybrid_orchestrator.py:
-      - batches (id, name, department_id, semester, year, strength, program)
-      - batch_subjects (batch_id, subject_id, assigned_faculty_id, required_hours_per_week)
-      - subjects (joined via batch_subjects)
-      - users (faculty records)
-      - faculty_qualified_subjects (faculty_id, subject_id)
-      - classrooms (college_id, is_available)
-      - time_slots (college_id, is_active)
-      - timetable_generation_tasks (task tracking)
-      - generated_timetables (results)
-      - scheduled_classes (individual assignments)
-      - algorithm_execution_metrics (perf tracking)
+    Fetches scheduling domain data from Neon PostgreSQL and maps to optimized
+    core models.  The public interface is identical to the original Supabase
+    version so no other files need to change.
     """
 
-    def __init__(self, client: Optional[Client] = None):
-        self.client = client or get_supabase_client()
-        self.logger = logging.getLogger("optimized.supabase.client")
+    def __init__(self, client=None):
+        self._injected_client = client
+        self.logger = logging.getLogger("optimized.neon.client")
 
     # ------------------------------------------------------------------
-    # Domain data fetching (batch-wise, mirrors _fetch_domain_data)
+    # Domain data fetching
     # ------------------------------------------------------------------
 
     def fetch_batch_data(self, batch_id: str, college_id: str) -> Dict[str, Any]:
-        """
-        Fetch all domain data for a single batch.
-
-        Returns dict with keys:
-          batch, subjects, faculty, classrooms, time_slots, assigned_faculty_map
-        """
+        """Fetch all domain data for a single batch."""
         self.logger.info(f"Fetching domain data for batch={batch_id}, college={college_id}")
 
         # 1. Batch info
-        batch_row = (
-            self.client.table("batches")
-            .select("*, department_id")
-            .eq("id", batch_id)
-            .single()
-            .execute()
-        ).data
-        if not batch_row:
+        rows = _query(
+            "SELECT *, department_id FROM batches WHERE id = %s LIMIT 1",
+            (batch_id,),
+        )
+        if not rows:
             raise ValueError(f"Batch {batch_id} not found")
-
-        batch = self._map_batch(batch_row)
+        batch = self._map_batch(rows[0])
         self.logger.info(f"Batch: {batch.name} (semester {batch.semester})")
 
         # 2. Subjects via batch_subjects join
-        bs_rows = (
-            self.client.table("batch_subjects")
-            .select("subject_id, assigned_faculty_id, required_hours_per_week, subjects(*)")
-            .eq("batch_id", batch_id)
-            .execute()
-        ).data or []
+        bs_rows = _query(
+            """
+            SELECT
+                bs.subject_id,
+                bs.assigned_faculty_id,
+                bs.required_hours_per_week,
+                row_to_json(s) AS subjects
+            FROM batch_subjects bs
+            JOIN subjects s ON s.id = bs.subject_id
+            WHERE bs.batch_id = %s
+            """,
+            (batch_id,),
+        )
 
         subjects: List[Subject] = []
         subject_ids: List[str] = []
@@ -142,6 +172,8 @@ class SupabaseSchedulerClient:
 
         for bs in bs_rows:
             subj_data = bs.get("subjects")
+            if isinstance(subj_data, str):
+                subj_data = json.loads(subj_data)
             if not subj_data:
                 continue
             subj_data["required_hours_per_week"] = bs.get("required_hours_per_week", 3)
@@ -150,83 +182,68 @@ class SupabaseSchedulerClient:
             if bs.get("assigned_faculty_id"):
                 assigned_faculty_map[subj_data["id"]] = bs["assigned_faculty_id"]
 
-        # Update batch.subjects list
         batch.subjects = subject_ids
         self.logger.info(f"Subjects: {len(subjects)} assigned to batch")
 
-        # 3. Faculty – assigned first, then qualified
+        # 3. Faculty
         faculty_dict: Dict[str, dict] = {}
-        # Build qualification map: faculty_id -> [subject_ids they can teach]
         faculty_qualifications_map: Dict[str, List[str]] = {}
 
-        # 3a. Add assigned faculty from batch_subjects.assigned_faculty_id
+        # 3a. Assigned faculty
         if assigned_faculty_map:
             assigned_ids = list(set(assigned_faculty_map.values()))
-            assigned_rows = (
-                self.client.table("users")
-                .select("*")
-                .in_("id", assigned_ids)
-                .execute()
-            ).data or []
+            assigned_rows = _query(
+                "SELECT * FROM users WHERE id = ANY(%s::uuid[])",
+                (assigned_ids,),
+            )
             for u in assigned_rows:
                 faculty_dict[u["id"]] = u
-            
-            # Build qualifications from assigned_faculty_map
             for subject_id, faculty_id in assigned_faculty_map.items():
-                if faculty_id not in faculty_qualifications_map:
-                    faculty_qualifications_map[faculty_id] = []
-                faculty_qualifications_map[faculty_id].append(subject_id)
+                faculty_qualifications_map.setdefault(faculty_id, []).append(subject_id)
 
-        # 3b. Add qualified faculty from faculty_qualified_subjects table
+        # 3b. Qualified faculty
         if subject_ids:
-            qual_rows = (
-                self.client.table("faculty_qualified_subjects")
-                .select("faculty_id, subject_id, users!faculty_id(*)")
-                .in_("subject_id", subject_ids)
-                .execute()
-            ).data or []
+            qual_rows = _query(
+                """
+                SELECT fqs.faculty_id, fqs.subject_id, row_to_json(u) AS users
+                FROM faculty_qualified_subjects fqs
+                JOIN users u ON u.id = fqs.faculty_id
+                WHERE fqs.subject_id = ANY(%s::uuid[])
+                """,
+                (subject_ids,),
+            )
             for fq in qual_rows:
-                if fq.get("users") and fq["users"]["id"] not in faculty_dict:
-                    faculty_dict[fq["users"]["id"]] = fq["users"]
-                
-                # Add to qualifications map
+                user_data = fq.get("users")
+                if isinstance(user_data, str):
+                    user_data = json.loads(user_data)
+                if user_data and user_data["id"] not in faculty_dict:
+                    faculty_dict[user_data["id"]] = user_data
                 fac_id = fq.get("faculty_id")
                 sub_id = fq.get("subject_id")
                 if fac_id and sub_id:
-                    if fac_id not in faculty_qualifications_map:
-                        faculty_qualifications_map[fac_id] = []
-                    if sub_id not in faculty_qualifications_map[fac_id]:
-                        faculty_qualifications_map[fac_id].append(sub_id)
+                    lst = faculty_qualifications_map.setdefault(fac_id, [])
+                    if sub_id not in lst:
+                        lst.append(sub_id)
 
-        # 3c. Map faculty and inject qualifications
         faculty = [
             self._map_faculty(u, faculty_qualifications_map.get(u["id"], []))
             for u in faculty_dict.values()
         ]
         self.logger.info(f"Faculty: {len(faculty)} available")
-        # Log qualification stats
-        qual_counts = {f.name: len(f.qualifications) for f in faculty}
-        self.logger.info(f"Faculty qualifications: {qual_counts}")
 
         # 4. Classrooms
-        classrooms_rows = (
-            self.client.table("classrooms")
-            .select("*")
-            .eq("college_id", college_id)
-            .eq("is_available", True)
-            .execute()
-        ).data or []
+        classrooms_rows = _query(
+            "SELECT * FROM classrooms WHERE college_id = %s AND is_available = TRUE",
+            (college_id,),
+        )
         classrooms = [self._map_room(r) for r in classrooms_rows]
         self.logger.info(f"Classrooms: {len(classrooms)} available")
 
         # 5. Time slots
-        ts_rows = (
-            self.client.table("time_slots")
-            .select("*")
-            .eq("college_id", college_id)
-            .eq("is_active", True)
-            .execute()
-        ).data or []
+        ts_rows = _query(
+            "SELECT * FROM time_slots WHERE college_id = %s AND is_active = TRUE",
+            (college_id,),
+        )
         time_slots = [self._map_time_slot(t) for t in ts_rows]
         self.logger.info(f"Time slots: {len(time_slots)} active")
 
@@ -240,7 +257,7 @@ class SupabaseSchedulerClient:
         }
 
     # ------------------------------------------------------------------
-    # Task management (mirrors scheduler's _create_task / _update_task_status)
+    # Task management
     # ------------------------------------------------------------------
 
     def create_task(
@@ -253,35 +270,37 @@ class SupabaseSchedulerClient:
     ):
         """Create a timetable_generation_tasks record."""
         try:
-            self.client.table("timetable_generation_tasks").insert({
-                "id": task_id,
-                "college_id": college_id,
-                "batch_id": batch_id,
-                "task_name": f"Optimized Schedule - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-                "academic_year": algo_config.pop("academic_year", "2025-26"),
-                "semester": algo_config.pop("semester", 1),
-                "status": "PENDING",
-                "current_phase": "INITIALIZING",
-                "progress": 0,
-                "created_by": created_by,
-                "algorithm_config": algo_config,
-            }).execute()
+            academic_year = algo_config.pop("academic_year", "2025-26")
+            semester = algo_config.pop("semester", 1)
+            task_name = f"Optimized Schedule - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+            _execute(
+                """
+                INSERT INTO timetable_generation_tasks
+                    (id, college_id, batch_id, task_name, academic_year, semester,
+                     status, current_phase, progress, created_by, algorithm_config)
+                VALUES (%s, %s, %s, %s, %s, %s, 'PENDING', 'INITIALIZING', 0, %s, %s)
+                """,
+                (
+                    task_id, college_id, batch_id, task_name,
+                    academic_year, semester, created_by,
+                    json.dumps(algo_config),
+                ),
+            )
             self.logger.info(f"Created task record: {task_id}")
         except Exception as e:
             self.logger.warning(f"Could not create task record: {e}")
 
     def update_task_batch_info(self, task_id: str, semester: int, academic_year: str):
-        """Update task record with correct semester and academic_year from batch."""
+        """Update task with correct semester and academic_year from batch."""
         try:
-            self.client.table("timetable_generation_tasks").update({
-                "semester": semester,
-                "academic_year": academic_year,
-            }).eq("id", task_id).execute()
-            self.logger.info(f"Updated task {task_id} with semester={semester}, academic_year={academic_year}")
+            _execute(
+                "UPDATE timetable_generation_tasks SET semester=%s, academic_year=%s WHERE id=%s",
+                (semester, academic_year, task_id),
+            )
+            self.logger.info(f"Updated task {task_id}: semester={semester}, academic_year={academic_year}")
         except Exception as e:
             self.logger.warning(f"Could not update task batch info: {e}")
 
-    # Map internal status strings to DB enum values
     STATUS_MAP = {
         "pending": "PENDING",
         "running": "RUNNING",
@@ -294,35 +313,47 @@ class SupabaseSchedulerClient:
         """Update task status in database."""
         try:
             db_status = self.STATUS_MAP.get(status.lower(), status.upper())
-            update_data: Dict[str, Any] = {
-                "status": db_status,
-                "current_message": message,
-                "updated_at": datetime.now().isoformat(),
-            }
-            # Set phase and progress based on status
-            if status.lower() == "running":
-                update_data["current_phase"] = "CP_SAT"
-                if "Initializing" in message:
-                    update_data["progress"] = 5
-                elif "Fetching" in message or "fetch" in message.lower():
-                    update_data["progress"] = 15
-                elif "Context" in message:
-                    update_data["progress"] = 25
-                elif "solver" in message.lower() or "Running" in message:
-                    update_data["progress"] = 50
-                else:
-                    update_data["progress"] = 60
-            elif status.lower() == "completed":
-                update_data["current_phase"] = "COMPLETED"
-                update_data["progress"] = 100
-                update_data["completed_at"] = datetime.now().isoformat()
-            elif status.lower() == "failed":
-                update_data["current_phase"] = "FAILED"
-                update_data["error_details"] = message
+            now = datetime.now().isoformat()
+            phase = None
+            progress = None
+            completed_at = None
+            error_details = None
 
-            self.client.table("timetable_generation_tasks").update(
-                update_data
-            ).eq("id", task_id).execute()
+            if status.lower() == "running":
+                phase = "CP_SAT"
+                msg_l = message.lower()
+                if "initializing" in msg_l:
+                    progress = 5
+                elif "fetching" in msg_l or "fetch" in msg_l:
+                    progress = 15
+                elif "context" in msg_l:
+                    progress = 25
+                elif "solver" in msg_l or "running" in msg_l:
+                    progress = 50
+                else:
+                    progress = 60
+            elif status.lower() == "completed":
+                phase = "COMPLETED"
+                progress = 100
+                completed_at = now
+            elif status.lower() == "failed":
+                phase = "FAILED"
+                error_details = message
+
+            _execute(
+                """
+                UPDATE timetable_generation_tasks SET
+                    status = %s,
+                    current_message = %s,
+                    updated_at = %s,
+                    current_phase = COALESCE(%s, current_phase),
+                    progress = COALESCE(%s, progress),
+                    completed_at = COALESCE(%s::timestamptz, completed_at),
+                    error_details = COALESCE(%s, error_details)
+                WHERE id = %s
+                """,
+                (db_status, message, now, phase, progress, completed_at, error_details, task_id),
+            )
         except Exception as e:
             self.logger.warning(f"Could not update task status: {e}")
 
@@ -338,24 +369,11 @@ class SupabaseSchedulerClient:
         solution: Solution,
         execution_time: float,
     ) -> str:
-        """
-        Save the generated timetable to the database.
-
-        Creates records in:
-          - generated_timetables
-          - scheduled_classes
-          - algorithm_execution_metrics
-
-        Returns:
-            timetable_id
-        """
-        # Use runtime logger so messages appear in visible log output
         from utils.runtime_logger import get_runtime_logger
         rlog = get_runtime_logger()
 
         timetable_id = str(uuid.uuid4())
 
-        # Helper: serialize constraint violations (dataclass objects → dicts)
         def _serialize_violations(violations):
             result = []
             for v in (violations or []):
@@ -379,14 +397,12 @@ class SupabaseSchedulerClient:
         )
         soft_count = len(solution.constraint_violations or []) - hard_count
 
-        # Helper: make metadata JSON-safe (strip non-serializable values)
         def _json_safe(obj):
-            """Recursively convert any object to JSON-safe types."""
             if obj is None:
                 return None
-            if isinstance(obj, bool):  # must be before int check
+            if isinstance(obj, bool):
                 return bool(obj)
-            if isinstance(obj, (int,)):
+            if isinstance(obj, int):
                 return int(obj)
             if isinstance(obj, float):
                 return float(obj)
@@ -396,7 +412,6 @@ class SupabaseSchedulerClient:
                 return {str(k): _json_safe(v) for k, v in obj.items()}
             if isinstance(obj, (list, tuple)):
                 return [_json_safe(v) for v in obj]
-            # numpy scalars, Decimal, datetime, etc.
             try:
                 return float(obj)
             except (TypeError, ValueError):
@@ -404,131 +419,156 @@ class SupabaseSchedulerClient:
 
         # 1. generated_timetables
         try:
-            self.client.table("generated_timetables").insert({
-                "id": timetable_id,
-                "generation_task_id": task_id,
-                "batch_id": batch_id,
-                "college_id": college_id,
-                "title": f"Optimized Timetable - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-                "academic_year": str(solution.metadata.get("academic_year", "2025-26")),
-                "semester": int(solution.metadata.get("semester", 1)),
-                "fitness_score": float(solution.quality_score),
-                "hard_constraint_violations": hard_count,
-                "constraint_violations": _json_safe(violations_json),
-                "optimization_metrics": _json_safe(solution.metadata or {}),
-                "generation_method": "HYBRID",
-                "algorithm_source": "optimized_ensemble",
-                "status": "draft",
-                "created_by": str(solution.metadata.get("user_id", college_id)),
-                "is_active": False,
-                "is_published": False,
-                "version": 1,
-            }).execute()
+            _execute(
+                """
+                INSERT INTO generated_timetables
+                    (id, generation_task_id, batch_id, college_id, title,
+                     academic_year, semester, fitness_score,
+                     hard_constraint_violations, constraint_violations,
+                     optimization_metrics, generation_method, algorithm_source,
+                     status, created_by, is_active, is_published, version)
+                VALUES
+                    (%s, %s, %s, %s, %s,
+                     %s, %s, %s,
+                     %s, %s::jsonb,
+                     %s::jsonb, %s, %s,
+                     %s, %s, %s, %s, %s)
+                """,
+                (
+                    timetable_id, task_id, batch_id, college_id,
+                    f"Optimized Timetable - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                    str(solution.metadata.get("academic_year", "2025-26")),
+                    int(solution.metadata.get("semester", 1)),
+                    float(solution.quality_score),
+                    hard_count,
+                    json.dumps(_json_safe(violations_json)),
+                    json.dumps(_json_safe(solution.metadata or {})),
+                    "HYBRID", "optimized_ensemble",
+                    "draft",
+                    str(solution.metadata.get("user_id", college_id)),
+                    False, False, 1,
+                ),
+            )
             rlog.info(f"Created timetable record: {timetable_id}")
         except Exception as e:
             rlog.error(f"FAILED to create timetable record: {e}")
-            # Still return timetable_id but log the error prominently
             return timetable_id
 
         # 2. scheduled_classes
-        # Look up actual credits from solution metadata (populated by orchestrator)
         credits_map = (solution.metadata or {}).get("subject_credits_map", {})
-        records = []
-        for asgn in solution.assignments:
-            records.append({
-                "id": str(uuid.uuid4()),
-                "timetable_id": timetable_id,
-                "batch_id": asgn.batch_id,
-                "subject_id": asgn.subject_id,
-                "faculty_id": asgn.faculty_id,
-                "classroom_id": asgn.room_id,
-                "time_slot_id": asgn.time_slot.id,
-                "credit_hour_number": credits_map.get(asgn.subject_id, 1),
-                "class_type": "LAB" if asgn.is_lab_session else "THEORY",
-            })
-
+        records = [
+            (
+                str(uuid.uuid4()),
+                timetable_id,
+                asgn.batch_id,
+                asgn.subject_id,
+                asgn.faculty_id,
+                asgn.room_id,
+                asgn.time_slot.id,
+                credits_map.get(asgn.subject_id, 1),
+                "LAB" if asgn.is_lab_session else "THEORY",
+            )
+            for asgn in solution.assignments
+        ]
         if records:
             try:
-                batch_size = 50
-                for i in range(0, len(records), batch_size):
-                    chunk = records[i : i + batch_size]
-                    self.client.table("scheduled_classes").insert(chunk).execute()
+                _execute_many(
+                    """
+                    INSERT INTO scheduled_classes
+                        (id, timetable_id, batch_id, subject_id, faculty_id,
+                         classroom_id, time_slot_id, credit_hour_number, class_type)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    records,
+                )
                 rlog.info(f"Saved {len(records)} scheduled classes")
             except Exception as e:
                 rlog.error(f"FAILED to save scheduled classes: {e}")
 
         # 3. algorithm_execution_metrics
         try:
-            self.client.table("algorithm_execution_metrics").insert({
-                "generation_task_id": task_id,
-                "total_execution_time_ms": int(execution_time * 1000),
-                "final_score": float(solution.quality_score),
-                "solutions_found": 1,
-                "hard_constraint_violations": hard_count,
-                "soft_constraint_violations": soft_count,
-                "metrics_json": _json_safe({
-                    "solver_name": solution.solver_name,
-                    "is_valid": solution.is_valid,
-                    "hard_constraint_score": solution.hard_constraint_score,
-                    "soft_constraint_score": solution.soft_constraint_score,
-                    "num_assignments": len(solution.assignments),
-                    "violations": len(solution.constraint_violations),
-                    "iterations": solution.metadata.get("iterations", 0),
-                }),
-            }).execute()
+            _execute(
+                """
+                INSERT INTO algorithm_execution_metrics
+                    (generation_task_id, total_execution_time_ms, final_score,
+                     solutions_found, hard_constraint_violations,
+                     soft_constraint_violations, metrics_json)
+                VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
+                """,
+                (
+                    task_id,
+                    int(execution_time * 1000),
+                    float(solution.quality_score),
+                    1, hard_count, soft_count,
+                    json.dumps(_json_safe({
+                        "solver_name": solution.solver_name,
+                        "is_valid": solution.is_valid,
+                        "hard_constraint_score": solution.hard_constraint_score,
+                        "soft_constraint_score": solution.soft_constraint_score,
+                        "num_assignments": len(solution.assignments),
+                        "violations": len(solution.constraint_violations),
+                        "iterations": solution.metadata.get("iterations", 0),
+                    })),
+                ),
+            )
             rlog.info("Saved algorithm execution metrics")
         except Exception as e:
             rlog.error(f"FAILED to save algorithm metrics: {e}")
 
         return timetable_id
 
+    # ------------------------------------------------------------------
+    # Status / result queries
+    # ------------------------------------------------------------------
+
     def get_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
-        """Fetch task status from the database."""
         try:
-            result = (
-                self.client.table("timetable_generation_tasks")
-                .select("id, status, current_message, created_at, updated_at")
-                .eq("id", task_id)
-                .single()
-                .execute()
+            rows = _query(
+                "SELECT id, status, current_message, created_at, updated_at "
+                "FROM timetable_generation_tasks WHERE id = %s LIMIT 1",
+                (task_id,),
             )
-            return result.data
+            return rows[0] if rows else None
         except Exception:
             return None
 
     def get_timetable_for_task(self, task_id: str) -> Optional[Dict[str, Any]]:
-        """Fetch generated timetable linked to a task."""
         try:
-            result = (
-                self.client.table("generated_timetables")
-                .select("id, fitness_score, is_published, title, status, created_at")
-                .eq("generation_task_id", task_id)
-                .limit(1)
-                .execute()
+            rows = _query(
+                "SELECT id, fitness_score, is_published, title, status, created_at "
+                "FROM generated_timetables WHERE generation_task_id = %s LIMIT 1",
+                (task_id,),
             )
-            return result.data[0] if result.data else None
+            return rows[0] if rows else None
         except Exception:
             return None
 
     def get_scheduled_classes(self, timetable_id: str) -> List[Dict[str, Any]]:
-        """Fetch all scheduled classes for a timetable."""
         try:
-            result = (
-                self.client.table("scheduled_classes")
-                .select(
-                    "*, subjects(name, code), users!faculty_id(first_name, last_name), "
-                    "classrooms(name), time_slots(day, start_time, end_time, slot_number)"
-                )
-                .eq("timetable_id", timetable_id)
-                .execute()
+            return _query(
+                """
+                SELECT
+                    sc.*,
+                    s.name  AS subject_name,
+                    s.code  AS subject_code,
+                    u.first_name, u.last_name,
+                    c.name  AS classroom_name,
+                    ts.day, ts.start_time, ts.end_time, ts.slot_number
+                FROM scheduled_classes sc
+                LEFT JOIN subjects   s  ON s.id  = sc.subject_id
+                LEFT JOIN users      u  ON u.id  = sc.faculty_id
+                LEFT JOIN classrooms c  ON c.id  = sc.classroom_id
+                LEFT JOIN time_slots ts ON ts.id = sc.time_slot_id
+                WHERE sc.timetable_id = %s
+                """,
+                (timetable_id,),
             )
-            return result.data or []
         except Exception as e:
             self.logger.error(f"Failed to fetch scheduled classes: {e}")
             return []
 
     # ------------------------------------------------------------------
-    # Model mapping helpers (DB row → core models)
+    # Model mapping helpers (DB row -> core models)
     # ------------------------------------------------------------------
 
     @staticmethod
@@ -553,17 +593,10 @@ class SupabaseSchedulerClient:
             or (row.get("subject_type", "").upper() in ("LAB", "PRACTICAL"))
             or (row.get("lab_hours") and int(row.get("lab_hours", 0)) > 0)
         )
-
-        # Resolve hours_per_week:
-        # Priority 1: required_hours_per_week from batch_subjects (admin's explicit setting)
-        #   BUT for labs/practicals, double it: 1 credit = 2 consecutive slots
-        # Priority 2: Credits-based (lab/practical: credits * 2, theory: credits * 1)
-        # Priority 3: weekly_hours / hours_per_week fallback
         rhpw = row.get("required_hours_per_week")
         credits = row.get("credits", 3)
         if rhpw and int(rhpw) > 0:
             hours = int(rhpw)
-            # For labs, required_hours_per_week represents credits, but we need SLOTS
             if is_lab:
                 hours = hours * 2
         elif credits and int(credits) > 0:
@@ -613,7 +646,6 @@ class SupabaseSchedulerClient:
             is_available=row.get("is_available", True),
         )
 
-    # Day name → integer mapping (DB stores enum strings like 'Monday')
     DAY_NAME_MAP = {
         "monday": 0, "tuesday": 1, "wednesday": 2,
         "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6,
@@ -621,18 +653,10 @@ class SupabaseSchedulerClient:
 
     @staticmethod
     def _map_time_slot(row: dict) -> TimeSlot:
-        """Map a time_slots DB row to the core TimeSlot model.
-
-        The DB stores:
-          - day as enum string ('Monday', 'Tuesday', ...)
-          - start_time / end_time as TIME strings ('09:00:00')
-          - duration_minutes as generated column
-        """
         start_hour = row.get("start_hour")
         start_minute = row.get("start_minute", 0)
         duration = row.get("duration_minutes", 60)
 
-        # Parse 'start_time' / 'end_time' strings (primary path)
         if start_hour is None and "start_time" in row:
             parts = str(row["start_time"]).split(":")
             start_hour = int(parts[0])
@@ -642,7 +666,6 @@ class SupabaseSchedulerClient:
                 end_minutes = int(eparts[0]) * 60 + (int(eparts[1]) if len(eparts) > 1 else 0)
                 duration = end_minutes - (start_hour * 60 + start_minute)
 
-        # Map day: handle both string ('Monday') and integer formats
         raw_day = row.get("day", row.get("day_of_week", 0))
         if isinstance(raw_day, str):
             day = SupabaseSchedulerClient.DAY_NAME_MAP.get(raw_day.lower(), 0)

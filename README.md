@@ -35,7 +35,7 @@
 
 ## 🚀 Project Overview
 
-**Academic Campass 2025** is a comprehensive, enterprise-grade campus management system designed to solve the complex challenge of automated timetable generation for Indian higher-education institutions under the **National Education Policy (NEP) 2020** framework.
+**Algomate** is a comprehensive, enterprise-grade campus management system designed to solve the complex challenge of automated timetable generation for Indian higher-education institutions under the **National Education Policy (NEP) 2020** framework.
 
 The system supports:
 - 🏫 **Multiple colleges** under a single super-admin umbrella

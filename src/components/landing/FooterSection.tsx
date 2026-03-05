@@ -12,7 +12,7 @@ export function FooterSection() {
                     <div>
                         <div className="flex items-center gap-3 mb-4">
                             <GraduationCap size={36} />
-                            <h3 className="text-xl font-bold">Academic Compass</h3>
+                            <h3 className="text-xl font-bold">Algomate</h3>
                         </div>
                         <p className="text-white/80 mb-4">
                             Revolutionizing education management with intelligent automation and AI-powered scheduling.
@@ -49,11 +49,9 @@ export function FooterSection() {
                     <div>
                         <h4 className="text-lg font-bold mb-4">Resources</h4>
                         <ul className="space-y-2">
-                            <li><a href="#" className="text-white/80 hover:text-white transition-colors">Documentation</a></li>
-                            <li><a href="#" className="text-white/80 hover:text-white transition-colors">API Reference</a></li>
-                            <li><a href="#" className="text-white/80 hover:text-white transition-colors">Support Center</a></li>
-                            <li><a href="#" className="text-white/80 hover:text-white transition-colors">Privacy Policy</a></li>
-                            <li><a href="#" className="text-white/80 hover:text-white transition-colors">Terms of Service</a></li>
+                            <li><Link href="/docs" className="text-white/80 hover:text-white transition-colors">Documentation</Link></li>
+                            <li><Link href="/privacy" className="text-white/80 hover:text-white transition-colors">Privacy Policy</Link></li>
+                            <li><Link href="/terms" className="text-white/80 hover:text-white transition-colors">Terms of Service</Link></li>
                         </ul>
                     </div>
 
@@ -63,15 +61,15 @@ export function FooterSection() {
                         <ul className="space-y-3">
                             <li className="flex items-start gap-3">
                                 <Mail size={18} className="mt-1 flex-shrink-0" />
-                                <span className="text-white/80">support@academiccompass.com</span>
+                                <a href="mailto:pygramalgomate@gmail.com" className="text-white/80 hover:text-white transition-colors">pygramalgomate@gmail.com</a>
                             </li>
                             <li className="flex items-start gap-3">
                                 <Phone size={18} className="mt-1 flex-shrink-0" />
-                                <span className="text-white/80">+91 1234567890</span>
+                                <a href="tel:+917058435485" className="text-white/80 hover:text-white transition-colors">+91 7058435485</a>
                             </li>
                             <li className="flex items-start gap-3">
                                 <MapPin size={18} className="mt-1 flex-shrink-0" />
-                                <span className="text-white/80">123 Education Street, Tech City, India</span>
+                                <span className="text-white/80">Nagpur, Maharashtra, India</span>
                             </li>
                         </ul>
                     </div>
@@ -80,7 +78,7 @@ export function FooterSection() {
                 {/* Bottom Bar */}
                 <div className="border-t border-white/20 pt-8 text-center">
                     <p className="text-white/60">
-                        © {new Date().getFullYear()} Academic Compass. All rights reserved.
+                        © {new Date().getFullYear()} Algomate. All rights reserved.
                     </p>
                 </div>
             </div>

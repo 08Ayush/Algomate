@@ -80,33 +80,70 @@ function CollegeRegistrationPageContent() {
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
 
-  const [formData, setFormData] = useState<CollegeFormData>({
-    collegeName: '',
-    collegeCode: '',
-    address: '',
-    city: '',
-    state: '',
-    pincode: '',
-    website: '',
-    establishedYear: '',
-    affiliatedUniversity: '',
-    accreditation: '',
-    principalName: '',
-    principalEmail: '',
-    principalPhone: '',
-    adminFirstName: '',
-    adminLastName: '',
-    adminEmail: '',
-    adminPhone: '',
-    adminDesignation: '',
-    adminPassword: '',
-    confirmPassword: '',
-    academicYear: new Date().getFullYear() + '-' + (new Date().getFullYear() + 1).toString().slice(-2),
-    workingDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
-    startTime: '09:00',
-    endTime: '17:00',
-    agreedToTerms: false
+  const STORAGE_KEY = `college_reg_draft_${registrationToken || 'draft'}`;
+
+  const [formData, setFormData] = useState<CollegeFormData>(() => {
+    // Restore from sessionStorage if available
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = sessionStorage.getItem(`college_reg_draft_${registrationToken || 'draft'}`);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          // Never restore password fields
+          return { ...parsed, adminPassword: '', confirmPassword: '' };
+        }
+      } catch { /* ignore */ }
+    }
+    return {
+      collegeName: '',
+      collegeCode: '',
+      address: '',
+      city: '',
+      state: '',
+      pincode: '',
+      website: '',
+      establishedYear: '',
+      affiliatedUniversity: '',
+      accreditation: '',
+      principalName: '',
+      principalEmail: '',
+      principalPhone: '',
+      adminFirstName: '',
+      adminLastName: '',
+      adminEmail: '',
+      adminPhone: '',
+      adminDesignation: '',
+      adminPassword: '',
+      confirmPassword: '',
+      academicYear: new Date().getFullYear() + '-' + (new Date().getFullYear() + 1).toString().slice(-2),
+      workingDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+      startTime: '09:00',
+      endTime: '17:00',
+      agreedToTerms: false
+    };
   });
+
+  // Restore step from sessionStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedStep = sessionStorage.getItem(`${STORAGE_KEY}_step`);
+        if (savedStep) setCurrentStep(parseInt(savedStep, 10));
+      } catch { /* ignore */ }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist form data to sessionStorage on every change (exclude passwords)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const toSave = { ...formData, adminPassword: '', confirmPassword: '' };
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+        sessionStorage.setItem(`${STORAGE_KEY}_step`, String(currentStep));
+      } catch { /* ignore */ }
+    }
+  }, [formData, currentStep, STORAGE_KEY]);
 
   // Validate registration token on mount
   useEffect(() => {
@@ -131,8 +168,8 @@ function CollegeRegistrationPageContent() {
               collegeName: data.tokenData.institutionName || '',
               city: data.tokenData.city || '',
               state: data.tokenData.state || '',
-              adminEmail: data.tokenData.email || '',
-              adminPhone: data.tokenData.phone || ''
+              adminEmail: data.tokenData.email || ''
+              // adminPhone intentionally not pre-filled — admin enters their own
             }));
           }
         } else {
@@ -274,6 +311,11 @@ function CollegeRegistrationPageContent() {
       }
 
       setIsSuccess(true);
+      // Clear saved draft on successful registration
+      try {
+        sessionStorage.removeItem(STORAGE_KEY);
+        sessionStorage.removeItem(`${STORAGE_KEY}_step`);
+      } catch { /* ignore */ }
     } catch (error: any) {
       setErrors({ submit: error.message || 'Registration failed. Please try again.' });
     } finally {
@@ -378,7 +420,7 @@ function CollegeRegistrationPageContent() {
           </h1>
           <p className="text-lg text-gray-600 dark:text-gray-300 mb-6">
             Your institution <span className="font-semibold text-primary">{formData.collegeName}</span> has
-            been successfully registered on Academic Compass.
+            been successfully registered on Algomate.
           </p>
 
           <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-md rounded-xl p-6 border border-gray-200 dark:border-gray-700 mb-6 text-left">
@@ -482,7 +524,7 @@ function CollegeRegistrationPageContent() {
               College Registration
             </h1>
             <p className="text-gray-600 dark:text-gray-300">
-              Complete your institution's registration to get started with Academic Compass
+              Complete your institution's registration to get started with Algomate
             </p>
             {tokenData?.institutionName && (
               <div className="mt-3 inline-flex items-center gap-2 px-4 py-2 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 rounded-full text-sm">
@@ -796,7 +838,7 @@ function CollegeRegistrationPageContent() {
                     System Administrator Setup
                   </h2>
                   <p className="text-gray-600 dark:text-gray-400 text-sm">
-                    This person will manage the Academic Compass system for your institution
+                    This person will manage the Algomate system for your institution
                   </p>
 
                   <div className="grid md:grid-cols-2 gap-4">
@@ -866,6 +908,7 @@ function CollegeRegistrationPageContent() {
                         <input
                           type="tel"
                           name="adminPhone"
+                          autoComplete="off"
                           value={formData.adminPhone}
                           onChange={handleInputChange}
                           placeholder="+91 9876543210"
@@ -880,16 +923,14 @@ function CollegeRegistrationPageContent() {
 
                     <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Designation
+                        Admin UID <span className="text-xs text-gray-500">(Auto-generated on registration)</span>
                       </label>
-                      <input
-                        type="text"
-                        name="adminDesignation"
-                        value={formData.adminDesignation}
-                        onChange={handleInputChange}
-                        placeholder="e.g., IT Administrator, Academic Coordinator"
-                        className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      />
+                      <div className="w-full px-4 py-3 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 font-mono text-sm flex items-center gap-2">
+                        <Key className="h-4 w-4 flex-shrink-0 text-gray-400" />
+                        {formData.collegeCode ? `${formData.collegeCode.toUpperCase()}-ADMIN-XXXXXX` : 'COLLEGECODE-ADMIN-XXXXXX'}
+                        <span className="ml-2 text-xs text-gray-400 font-sans">(Generated automatically)</span>
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500">This will be your unique login ID. You will receive it via email after registration.</p>
                     </div>
 
                     <div>
@@ -901,6 +942,7 @@ function CollegeRegistrationPageContent() {
                         <input
                           type={showPassword ? 'text' : 'password'}
                           name="adminPassword"
+                          autoComplete="new-password"
                           value={formData.adminPassword}
                           onChange={handleInputChange}
                           placeholder="Create a strong password"
@@ -932,6 +974,7 @@ function CollegeRegistrationPageContent() {
                         <input
                           type={showPassword ? 'text' : 'password'}
                           name="confirmPassword"
+                          autoComplete="new-password"
                           value={formData.confirmPassword}
                           onChange={handleInputChange}
                           placeholder="Confirm your password"
@@ -1041,8 +1084,8 @@ function CollegeRegistrationPageContent() {
                         className="mt-1 h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary"
                       />
                       <span className="text-sm text-gray-700 dark:text-gray-300">
-                        I agree to the <Link href="/terms" className="text-primary hover:underline">Terms of Service</Link> and{' '}
-                        <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>.
+                        I agree to the <Link href="/terms" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Terms of Service</Link> and{' '}
+                        <Link href="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Privacy Policy</Link>.
                         I understand that this platform will be used to manage academic data and I am
                         authorized to register on behalf of my institution.
                       </span>

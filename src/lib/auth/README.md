@@ -2,7 +2,7 @@
 
 ## Overview
 
-Academic Compass uses a **centralized middleware-based authentication system** with session caching to provide secure, high-performance API access control.
+Algomate uses a **centralized middleware-based authentication system** with session caching to provide secure, high-performance API access control.
 
 ### Architecture Highlights
 - ✅ **Single database query per session** (not per request)
@@ -725,4 +725,4 @@ Middleware will automatically include them in the cache.
 ---
 
 **Last Updated:** January 2025  
-**Maintained By:** Academic Compass Team
+**Maintained By:** Algomate Team

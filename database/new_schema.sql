@@ -1046,16 +1046,8 @@ CREATE TABLE exam_notification_tracking (
     read_at TIMESTAMPTZ
 );
 
--- Submission Question Grades - Detailed grading for each question in assignments
-CREATE TABLE submission_question_grades (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    submission_id UUID NOT NULL REFERENCES assignment_submissions(id) ON DELETE CASCADE,
-    question_id UUID NOT NULL REFERENCES assignment_questions(id) ON DELETE CASCADE,
-    obtained_marks NUMERIC(5, 2) DEFAULT 0,
-    feedback TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(submission_id, question_id)
-);
+-- NOTE: submission_question_grades table is already defined earlier (~line 774).
+-- Duplicate definition removed by 02_query_optimizations.sql patch.
 
 -- ============================================================================
 -- 6. MULTI-COLLEGE OPTIMIZED INDEXES
@@ -1069,7 +1061,8 @@ CREATE INDEX IF NOT EXISTS idx_users_course_id ON users(course_id);
 CREATE INDEX idx_departments_college ON departments(college_id, is_active);
 CREATE INDEX idx_subjects_college_department ON subjects(college_id, department_id, is_active);
 CREATE INDEX idx_subjects_course ON subjects(course_id);
-CREATE INDEX idx_subjects_department ON subjects(department_id);
+-- idx_subjects_department removed: redundant, covered by idx_subjects_dept_semester_active
+-- (Applied by 02_query_optimizations.sql)
 CREATE INDEX idx_subjects_algorithm_lookup ON subjects(subject_type, requires_lab, algorithm_complexity);
 CREATE INDEX IF NOT EXISTS idx_subjects_nep_category ON subjects(nep_category);
 CREATE INDEX IF NOT EXISTS idx_subjects_bucket ON subjects(course_group_id);
@@ -1092,18 +1085,19 @@ CREATE INDEX idx_generation_tasks_status ON timetable_generation_tasks(status, c
 CREATE INDEX idx_generation_tasks_batch_lookup ON timetable_generation_tasks(batch_id, academic_year, semester);
 CREATE INDEX idx_timetables_batch_status ON generated_timetables(batch_id, status, fitness_score);
 CREATE INDEX idx_scheduled_classes_timetable ON scheduled_classes(timetable_id, time_slot_id);
-CREATE INDEX idx_scheduled_classes_conflicts ON scheduled_classes(faculty_id, classroom_id, time_slot_id);
+-- idx_scheduled_classes_conflicts removed: redundant, covered by faculty_slot + room_slot indexes
+-- (Applied by 02_query_optimizations.sql)
 CREATE INDEX idx_student_enrollment_batch ON student_batch_enrollment(batch_id, is_active);
 CREATE INDEX idx_student_enrollment_student ON student_batch_enrollment(student_id, is_active);
 -- NEP 2020 Indexes
 CREATE INDEX idx_buckets_batch ON elective_buckets(batch_id);
 
 CREATE INDEX idx_student_selections_student ON student_course_selections(student_id);
-CREATE INDEX idx_subjects_bucket ON subjects(course_group_id);
+-- Duplicate idx_subjects_bucket removed (already defined at line ~1075)
 CREATE INDEX idx_timetable_access_user ON timetable_access_control(user_id, access_type, is_active);
 CREATE INDEX idx_timetable_access_batch ON timetable_access_control(batch_id, access_type, is_active);
 CREATE INDEX idx_workflow_approvals_timetable ON workflow_approvals(timetable_id, workflow_step);
-CREATE INDEX idx_notifications_recipient ON notifications(recipient_id, is_read, created_at);
+-- idx_notifications_recipient removed: replaced by targeted recipient_unread, recipient_content,\n-- and recipient_priority indexes in notification section (Applied by 02_query_optimizations.sql)
 CREATE INDEX idx_algorithm_metrics_task ON algorithm_execution_metrics(generation_task_id);
 CREATE INDEX idx_audit_algorithm_context ON audit_logs USING GIN (algorithm_context);
 
@@ -1111,14 +1105,16 @@ CREATE INDEX idx_audit_algorithm_context ON audit_logs USING GIN (algorithm_cont
 CREATE INDEX IF NOT EXISTS idx_subjects_is_elective ON subjects(is_elective) WHERE is_elective = TRUE;
 CREATE INDEX IF NOT EXISTS idx_classrooms_is_lab ON classrooms(is_lab) WHERE is_lab = TRUE;
 CREATE INDEX IF NOT EXISTS idx_time_slots_slot_number ON time_slots(slot_number);
-CREATE INDEX IF NOT EXISTS idx_time_slots_day_enum ON time_slots(day);
+-- idx_time_slots_day_enum removed: redundant, covered by idx_time_slots_college_algorithm
+-- (Applied by 02_query_optimizations.sql)
 CREATE INDEX IF NOT EXISTS idx_hybrid_tasks_college_status ON timetable_generation_tasks(college_id, status);
 CREATE INDEX IF NOT EXISTS idx_hybrid_tasks_created_by ON timetable_generation_tasks(created_by);
 CREATE INDEX IF NOT EXISTS idx_hybrid_timetables_active ON generated_timetables(batch_id, is_active) WHERE is_active = TRUE;
 CREATE INDEX IF NOT EXISTS idx_hybrid_classes_faculty_slot ON scheduled_classes(faculty_id, time_slot_id);
 CREATE INDEX IF NOT EXISTS idx_hybrid_classes_room_slot ON scheduled_classes(classroom_id, time_slot_id);
 CREATE INDEX IF NOT EXISTS idx_hybrid_classes_batch_slot ON scheduled_classes(batch_id, time_slot_id);
-CREATE INDEX IF NOT EXISTS idx_hybrid_metrics_task ON algorithm_execution_metrics(generation_task_id);
+-- idx_hybrid_metrics_task removed: duplicate of idx_algorithm_metrics_task
+-- (Applied by 02_query_optimizations.sql)
 CREATE INDEX IF NOT EXISTS idx_hybrid_snapshots_task_gen ON ga_population_snapshots(task_id, generation_number);
 
 
@@ -2518,19 +2514,10 @@ END $$;
 -- 11. ROW LEVEL SECURITY (RLS) PATCH
 -- ============================================================================
 
--- Helper function to get the current user's college ID from the session
-CREATE OR REPLACE FUNCTION current_app_college_id() RETURNS UUID AS $$
-BEGIN
-    RETURN NULLIF(current_setting('app.current_college_id', TRUE), '')::UUID;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Helper function to get the current user's role
-CREATE OR REPLACE FUNCTION current_app_role() RETURNS VARCHAR AS $$
-BEGIN
-    RETURN NULLIF(current_setting('app.current_role', TRUE), '');
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+-- NOTE: current_app_college_id() and current_app_role() are already defined with
+-- STABLE attribute in section 8. Duplicate definitions removed here to avoid
+-- overwriting STABLE with a non-STABLE version (performance regression).
+-- (Applied by 02_query_optimizations.sql)
 
 -- Enable RLS on Sensitive Tables
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
@@ -3633,11 +3620,17 @@ COMMENT ON COLUMN system_settings.is_secret IS 'If true, value should be masked 
 -- NOTIFICATION SYSTEM - INDEXES, RLS, AND FUNCTIONS
 -- ============================================================================
 
--- Notifications indexes
-CREATE INDEX IF NOT EXISTS idx_notifications_recipient ON notifications(recipient_id, is_read, created_at);
-CREATE INDEX IF NOT EXISTS idx_notifications_recipient_unread ON notifications(recipient_id, is_read) WHERE is_read = FALSE;
-CREATE INDEX IF NOT EXISTS idx_notifications_content ON notifications(content_type, content_id) WHERE content_type IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_notifications_priority ON notifications(priority, is_read) WHERE priority IN ('high', 'urgent');
+-- Notifications indexes (optimized by 02_query_optimizations.sql)
+-- idx_notifications_recipient replaced by more targeted indexes below
+CREATE INDEX IF NOT EXISTS idx_notifications_recipient_unread
+  ON notifications(recipient_id, created_at DESC)
+  WHERE is_read = FALSE;
+CREATE INDEX IF NOT EXISTS idx_notifications_recipient_content
+  ON notifications(recipient_id, content_type, created_at DESC)
+  WHERE content_type IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_notifications_recipient_priority
+  ON notifications(recipient_id, priority, created_at DESC)
+  WHERE priority IN ('high', 'urgent');
 CREATE INDEX IF NOT EXISTS idx_notifications_expiry ON notifications(expires_at) WHERE expires_at IS NOT NULL;
 
 -- Announcements indexes
@@ -3729,3 +3722,109 @@ COMMENT ON COLUMN announcements.target_id IS 'ID of the target (batch_id, depart
 
 COMMENT ON TABLE submission_question_grades IS 'Individual question grades for assignment submissions';
 COMMENT ON FUNCTION cleanup_expired_notifications IS 'Deletes notifications that have passed their expiration date';
+
+CREATE TABLE IF NOT EXISTS contact_messages (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      message TEXT NOT NULL,
+      is_read BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+-- ============================================================================
+-- QUERY OPTIMIZATION INDEXES (Applied from 02_query_optimizations.sql)
+-- Critical missing indexes for hot query paths
+-- ============================================================================
+
+-- users.email — auth lookup, registration duplicate check
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
+-- users.college_uid — profile lookup, direct user fetch
+CREATE INDEX IF NOT EXISTS idx_users_college_uid ON users(college_uid);
+
+-- subjects(department_id, semester, is_active) — 5+ queries filter by all three
+CREATE INDEX IF NOT EXISTS idx_subjects_dept_semester_active
+  ON subjects(department_id, semester, is_active);
+
+-- faculty_qualified_subjects(subject_id) — subject-first lookups for batch-faculty assignment
+CREATE INDEX IF NOT EXISTS idx_faculty_qual_subject
+  ON faculty_qualified_subjects(subject_id);
+
+-- generated_timetables(college_id, status) — student/admin timetable listing
+CREATE INDEX IF NOT EXISTS idx_timetables_college_status
+  ON generated_timetables(college_id, status);
+
+-- generated_timetables(created_by) — dashboard queries
+CREATE INDEX IF NOT EXISTS idx_timetables_created_by
+  ON generated_timetables(created_by);
+
+-- generated_timetables(generation_method) — hybrid timetable list filter
+CREATE INDEX IF NOT EXISTS idx_timetables_generation_method
+  ON generated_timetables(generation_method)
+  WHERE generation_method = 'HYBRID';
+
+-- classrooms(college_id, department_id, is_available) — algorithm and batch-faculty pages
+CREATE INDEX IF NOT EXISTS idx_classrooms_college_dept_avail
+  ON classrooms(college_id, department_id, is_available);
+
+-- assignments(batch_id, is_published) — student assignment listing
+CREATE INDEX IF NOT EXISTS idx_assignments_batch_published
+  ON assignments(batch_id, created_at DESC)
+  WHERE is_published = TRUE;
+
+-- events(department_id, status, created_at DESC) — event listing with pagination
+CREATE INDEX IF NOT EXISTS idx_events_dept_status_created
+  ON events(department_id, status, created_at DESC);
+
+-- student_course_selections(student_id, semester) — NEP elective queries
+CREATE INDEX IF NOT EXISTS idx_student_selections_student_semester
+  ON student_course_selections(student_id, semester);
+
+-- elective_buckets(batch_id) filtered — student elective page
+CREATE INDEX IF NOT EXISTS idx_elective_buckets_batch_live
+  ON elective_buckets(batch_id)
+  WHERE is_published = TRUE AND is_live_for_students = TRUE;
+
+-- scheduled_classes(faculty_id) — faculty dashboard
+CREATE INDEX IF NOT EXISTS idx_scheduled_classes_faculty
+  ON scheduled_classes(faculty_id);
+
+-- batches(college_id) — RLS subquery optimization
+CREATE INDEX IF NOT EXISTS idx_batches_college
+  ON batches(college_id);
+
+-- Time slots: algorithm lookup excluding breaks and lunch
+CREATE INDEX IF NOT EXISTS idx_time_slots_algorithm_full
+  ON time_slots(college_id, day, start_time)
+  WHERE is_active = TRUE AND NOT is_break_time AND NOT is_lunch_time;
+
+-- Timetable generation tasks: dashboard completed tasks
+CREATE INDEX IF NOT EXISTS idx_gen_tasks_created_by_completed
+  ON timetable_generation_tasks(created_by, created_at DESC)
+  WHERE status = 'COMPLETED';
+
+-- Users: student course/semester lookup for broadcast notifications
+CREATE INDEX IF NOT EXISTS idx_users_student_course_semester
+  ON users(course_id, current_semester, is_active)
+  WHERE role = 'student';
+
+-- Case-insensitive email lookups for auth
+CREATE INDEX IF NOT EXISTS idx_users_email_lower
+  ON users(LOWER(email));
+
+-- Timetables per batch by recency (student dashboard)
+CREATE INDEX IF NOT EXISTS idx_generated_timetables_batch_created_at
+  ON generated_timetables(batch_id, created_at DESC);
+
+-- Recent assignment submissions per assignment + student
+CREATE INDEX IF NOT EXISTS idx_assignment_submissions_assignment_student_created
+  ON assignment_submissions(assignment_id, student_id, created_at DESC);
+
+-- Timetable generation tasks per college (admin dashboards)
+CREATE INDEX IF NOT EXISTS idx_timetable_generation_tasks_college_created
+  ON timetable_generation_tasks(college_id, created_at DESC);
+
+-- Algorithm metrics: recent metrics for a task
+CREATE INDEX IF NOT EXISTS idx_algorithm_metrics_task_recorded_at
+  ON algorithm_execution_metrics(generation_task_id, recorded_at DESC);

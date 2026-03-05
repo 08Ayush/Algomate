@@ -17,7 +17,7 @@ SELECT * FROM generated_timetables WHERE college_id = '00000000-0000-0000-0000-0
 
 -- 4) Scheduled classes for a faculty
 EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
-SELECT * FROM scheduled_classes WHERE faculty_id = '00000000-0000-0000-0000-000000000000' ORDER BY time_slot_id, start_time LIMIT 200;
+SELECT * FROM scheduled_classes WHERE faculty_id = '00000000-0000-0000-0000-000000000000' ORDER BY time_slot_id LIMIT 200;
 
 -- 5) Subjects by department + semester
 EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)

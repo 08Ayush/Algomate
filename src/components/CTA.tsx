@@ -20,7 +20,7 @@ export function CTA() {
                 </h2>
                 <p className="text-lg sm:text-xl mb-6 text-white/90">
                   Join 500+ educational institutions that have streamlined their academic management 
-                  with Academic Compass ERP.
+                  with Algomate ERP.
                 </p>
                 
                 <div className="space-y-3 mb-8">
@@ -85,7 +85,7 @@ export function CTA() {
                     </div>
                     <div>
                       <p className="text-sm text-white/70">Email Us</p>
-                      <p className="font-semibold">sales@academiccompass.com</p>
+                      <p className="font-semibold">sales@algomate.io</p>
                     </div>
                   </div>
                 </div>

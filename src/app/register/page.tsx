@@ -77,7 +77,7 @@ export default function RegisterPage() {
               transition={{ delay: 0.4 }}
               className="text-xl text-gray-600 max-w-2xl mx-auto leading-relaxed"
             >
-              Academic Compass is an enterprise platform designed for educational institutions.
+              Algomate is an enterprise platform designed for educational institutions.
               Direct registration is limited to protect data integrity.
             </motion.p>
           </div>

@@ -27,7 +27,7 @@ export function getEmailSubject(type: string, data?: any): string {
       return `📊 Results Published - ${data?.examName || 'Examination'}`;
     
     default:
-      return `📬 Notification from Academic Compass`;
+      return `📬 Notification from Algomate`;
   }
 }
 
@@ -78,7 +78,7 @@ export function getRoleSpecificMessage(role: 'student' | 'faculty', type: string
       case 'schedule_change':
         return 'There has been a change in your class schedule. Please review the details below.';
       default:
-        return 'You have a new notification from Academic Compass.';
+        return 'You have a new notification from Algomate.';
     }
   } else {
     switch (type) {
@@ -87,7 +87,7 @@ export function getRoleSpecificMessage(role: 'student' | 'faculty', type: string
       case 'schedule_change':
         return 'There has been a schedule change that affects your assigned classes.';
       default:
-        return 'You have a new notification from Academic Compass.';
+        return 'You have a new notification from Algomate.';
     }
   }
 }
@@ -98,7 +98,7 @@ export function getRoleSpecificMessage(role: 'student' | 'faculty', type: string
 export function getEmailFooter(): string {
   return `
     <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280;">
-      <p><strong>Academic Compass</strong><br>
+      <p><strong>Algomate</strong><br>
       ${process.env.COLLEGE_NAME || 'Government College of Education'}<br>
       ${process.env.COLLEGE_WEBSITE || 'https://gcoej.edu.in'}</p>
       
@@ -110,7 +110,7 @@ export function getEmailFooter(): string {
       </p>
       
       <p style="margin-top: 15px; color: #9ca3af; font-size: 11px;">
-        This is an automated email from Academic Compass. Please do not reply to this email.
+        This is an automated email from Algomate. Please do not reply to this email.
         If you believe you received this email by mistake, please contact your administrator.
       </p>
     </div>
@@ -208,7 +208,7 @@ export function wrapEmailContent(content: string, preheader?: string): string {
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <meta http-equiv="X-UA-Compatible" content="IE=edge">
-      <title>Academic Compass Notification</title>
+      <title>Algomate Notification</title>
       ${preheader ? `<style type="text/css">.preheader { display: none !important; visibility: hidden; opacity: 0; color: transparent; height: 0; width: 0; }</style>` : ''}
     </head>
     <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">

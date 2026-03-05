@@ -196,7 +196,7 @@ export function PageLoader({ message = 'Loading...', subMessage, size = 'lg' }: 
             </svg>
           </div>
           <span className="font-bold text-base tracking-tight" style={{ color: '#4D869C' }}>
-            Academic Compass
+            Algomate
           </span>
         </motion.div>
 

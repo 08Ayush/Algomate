@@ -22,7 +22,7 @@ export const GET = asyncHandler(async (request: NextRequest) => {
   const { withCacheAside } = await import('@/shared/cache/cache-helper');
   const { redisCache } = await import('@/shared/cache/redis-cache');
 
-  const cacheKeyParts = [collegeId, 'subjects', 'list'];
+  const cacheKeyParts = [collegeId, 'subjects', 'list-v2']; // v2: includes batches subquery
   if (departmentId) cacheKeyParts.push(`dept:${departmentId}`);
   if (semester) cacheKeyParts.push(`sem:${semester}`);
   const cacheKey = redisCache.buildKey(cacheKeyParts[0], cacheKeyParts[1], cacheKeyParts[2], cacheKeyParts.slice(3).join(':') || undefined);
@@ -33,11 +33,20 @@ export const GET = asyncHandler(async (request: NextRequest) => {
       const pool = getPool();
       const params: any[] = [collegeId];
       let sql = `
-        SELECT s.*, CASE WHEN d.id IS NOT NULL
-          THEN json_build_object('id', d.id, 'name', d.name, 'code', d.code)
-          ELSE NULL END AS departments
+        SELECT s.*,
+          CASE WHEN d.id IS NOT NULL
+            THEN json_build_object('id', d.id, 'name', d.name, 'code', d.code)
+            ELSE NULL END AS departments,
+          COALESCE(bmap.batches, '[]'::json) AS batches
         FROM subjects s
         LEFT JOIN departments d ON d.id = s.department_id
+        LEFT JOIN (
+          SELECT bs.subject_id,
+            json_agg(json_build_object('id', ba.id, 'name', ba.name) ORDER BY ba.name) AS batches
+          FROM batch_subjects bs
+          JOIN batches ba ON ba.id = bs.batch_id
+          GROUP BY bs.subject_id
+        ) bmap ON bmap.subject_id = s.id
         WHERE s.college_id = $1
       `;
 
@@ -69,7 +78,7 @@ export const POST = asyncHandler(async (request: NextRequest) => {
   }
 
   const body = await request.json();
-  const { name, code, credits_per_week, department_id, semester, subject_type, nep_category, course_id, is_active } = body;
+  const { name, code, credits_per_week, credit_value, department_id, semester, subject_type, nep_category, course_id, is_active } = body;
 
   if (!name || !code || !department_id) {
     return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
@@ -82,6 +91,7 @@ export const POST = asyncHandler(async (request: NextRequest) => {
       name: name.trim(),
       code: code.trim().toUpperCase(),
       credits_per_week: credits_per_week || 3,
+      credit_value: credit_value ?? credits_per_week ?? 3,
       department_id,
       college_id: user.college_id,
       semester: semester || 1,

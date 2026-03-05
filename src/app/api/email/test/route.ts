@@ -28,10 +28,10 @@ export async function POST(request: NextRequest) {
     // Send test email
     const result = await emailService.sendEmail({
       to: to || process.env.SMTP_USER!,
-      subject: '✅ Test Email - Academic Compass',
+      subject: '✅ Test Email - Algomate',
       template: 'system/test',
       data: {
-        testMessage: 'This is a test email from Academic Compass timetable system. If you received this, your email configuration is working correctly!',
+        testMessage: 'This is a test email from Algomate timetable system. If you received this, your email configuration is working correctly!',
         timestamp: new Date().toISOString(),
         collegeWebsite: process.env.COLLEGE_WEBSITE || 'http://localhost:3000',
       },

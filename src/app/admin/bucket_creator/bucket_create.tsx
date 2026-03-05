@@ -2,7 +2,7 @@ import { serviceDb as supabase } from '@/shared/database';
 import { PageLoader } from '@/components/ui/PageLoader';
 /*
 ===============================================================================
-🎓 COMPLETE BUCKET WORKFLOW SYSTEM - ACADEMIC COMPASS 2025
+🎓 COMPLETE BUCKET WORKFLOW SYSTEM - ALGOMATE 2025
 ===============================================================================
 
 📋 SYSTEM OVERVIEW:
@@ -204,7 +204,7 @@ individual student notifications"
 - Extensible for future enhancements
 
 All components are tested, documented, and production-ready!
-Developed by: Academic Compass Team | January 2026
+Developed by: Algomate Team | January 2026
 ===============================================================================
 */
 

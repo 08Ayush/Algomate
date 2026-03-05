@@ -1,5 +1,5 @@
 import { PageLoader } from '@/components/ui/PageLoader';
 
 export default function Loading() {
-  return <PageLoader message="Loading Academic Compass" subMessage="Preparing your experience..." />;
+  return <PageLoader message="Loading Algomate" subMessage="Preparing your experience..." />;
 }

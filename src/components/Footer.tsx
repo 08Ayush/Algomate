@@ -47,9 +47,9 @@ export function Footer() {
           <div className="lg:col-span-2">
             <div className="flex items-center space-x-2 mb-4">
               <div className="w-8 h-8 bg-gradient-to-br from-primary to-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-sm">AC</span>
+                <span className="text-primary-foreground font-bold text-sm">AM</span>
               </div>
-              <span className="text-xl font-bold text-foreground">Academic Compass</span>
+              <span className="text-xl font-bold text-foreground">Algomate</span>
             </div>
             <p className="text-muted-foreground mb-6 max-w-md">
               Empowering students to navigate their educational journey with personalized guidance, 
@@ -98,7 +98,7 @@ export function Footer() {
         <div className="mt-12 pt-8 border-t border-border">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <p className="text-muted-foreground text-sm">
-              &copy; 2024 Academic Compass. All rights reserved.
+              &copy; 2026 Algomate. All rights reserved.
             </p>
             <div className="mt-4 md:mt-0">
               <p className="text-muted-foreground text-sm">

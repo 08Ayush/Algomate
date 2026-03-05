@@ -25,9 +25,9 @@ export async function POST(request: NextRequest) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
     await transporter.sendMail({
-      from: process.env.SMTP_FROM || 'noreply@academiccompass.com',
+      from: process.env.SMTP_FROM || 'noreply@algomate.io',
       to: email,
-      subject: `Your Admin Credentials - ${collegeName || 'Academic Compass'}`,
+      subject: `Your Admin Credentials - ${collegeName || 'Algomate'}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
               Dear ${adminName || 'Administrator'},
             </p>
             <p style="color: #475569; line-height: 1.6;">
-              Here are your login credentials for <strong>${collegeName || 'Academic Compass'}</strong>.
+              Here are your login credentials for <strong>${collegeName || 'Algomate'}</strong>.
             </p>
 
             <div style="background: #f1f5f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
             <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;">
 
             <p style="color: #94a3b8; font-size: 12px; text-align: center; margin: 0;">
-              This email was sent by Academic Compass ERP.<br>
+              This email was sent by Algomate ERP.<br>
               If you didn't request these credentials, please ignore this email.
             </p>
           </div>

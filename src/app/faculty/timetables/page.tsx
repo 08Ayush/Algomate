@@ -357,8 +357,8 @@ const TimetablesPage: React.FC = () => {
                                             Batch: {tt.batch?.name || tt.batch_name || 'N/A'} • Semester: {tt.semester || 'N/A'} • Year: {tt.academic_year || 'N/A'}
                                         </p>
                                         <div className="flex items-center gap-4 mt-1 text-xs text-gray-400">
-                                            {tt.fitness_score && (
-                                                <span className="text-green-600 font-medium">Fitness: {tt.fitness_score}%</span>
+                                            {tt.fitness_score != null && (
+                                                <span className="text-green-600 font-medium">Fitness: {(Number(tt.fitness_score) * 100).toFixed(2)}%</span>
                                             )}
                                             <span>Created: {formatDate(tt.created_at)}</span>
                                         </div>

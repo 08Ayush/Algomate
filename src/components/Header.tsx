@@ -131,8 +131,8 @@ export function Header() {
             <Sparkles className="h-3 w-3 text-accent absolute -top-1 -right-1 animate-pulse" />
           </div>
           <div className="flex flex-col">
-            <span className="text-xl font-bold text-foreground">
-              Academic Compass
+            <span className="text-2xl font-bold text-foreground">
+              Algomate
             </span>
             {user && (
               <span className="text-xs text-muted-foreground">

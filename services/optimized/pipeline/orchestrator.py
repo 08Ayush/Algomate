@@ -482,7 +482,7 @@ class OptimizedOrchestrator:
         task_id = str(uuid.uuid4())
         tracker = PipelineStepTracker(task_id, self.logger)
         start_time = time.perf_counter()
-        etl = ETLPipeline(supabase_client=self.db.client)
+        etl = ETLPipeline(supabase_client=None)  # Neon: ETL uses psycopg2 directly
 
         self.logger.info(
             f"{'='*60}\n"

@@ -107,10 +107,10 @@ export default function DashboardHeader({ user, onLogout, onToggleSidebar, isSid
 
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-lg">AC</span>
+              <span className="text-white font-bold text-lg">AM</span>
             </div>
             <div>
-              <h1 className="text-xl font-semibold text-gray-900">Academic Compass</h1>
+              <h1 className="text-xl font-semibold text-gray-900">Algomate</h1>
               <p className="text-sm text-gray-500">AI-Powered Timetables</p>
             </div>
           </div>

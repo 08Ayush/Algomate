@@ -14,7 +14,8 @@ import {
   Clock,
   RefreshCw,
   Send,
-  ExternalLink
+  ExternalLink,
+  Link2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import SuperAdminLayout from '@/components/super-admin/SuperAdminLayout';
@@ -39,6 +40,7 @@ const RegistrationTokensPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  const [generatedResult, setGeneratedResult] = useState<{ url: string; tokenValue: string; institutionName: string; email: string } | null>(null);
 
   const [newToken, setNewToken] = useState({
     institution_name: '',
@@ -83,6 +85,11 @@ const RegistrationTokensPage: React.FC = () => {
     }
   };
 
+  const getRegistrationUrl = (tokenValue: string) => {
+    if (typeof window === 'undefined') return `/college/register?token=${tokenValue}`;
+    return `${window.location.origin}/college/register?token=${tokenValue}`;
+  };
+
   const handleGenerateToken = async () => {
     if (!newToken.institution_name || !newToken.email) {
       toast.error('Institution name and email are required');
@@ -98,22 +105,34 @@ const RegistrationTokensPage: React.FC = () => {
 
       if (res.ok) {
         const data = await res.json();
-        toast.success('Token generated successfully');
-        setShowGenerateModal(false);
-        setNewToken({ institution_name: '', email: '', expires_in_days: 30 });
         fetchTokens();
-
-        // Copy the token to clipboard
-        if (data.token?.token) {
-          navigator.clipboard.writeText(data.token.token);
-          toast.success('Token copied to clipboard');
-        }
+        const url = data.registrationUrl || getRegistrationUrl(data.token?.token || '');
+        setGeneratedResult({
+          url,
+          tokenValue: data.token?.token || '',
+          institutionName: newToken.institution_name,
+          email: newToken.email
+        });
+        setNewToken({ institution_name: '', email: '', expires_in_days: 30 });
+        toast.success('Token generated & registration link emailed!');
       } else {
         const err = await res.json();
         toast.error(err.error || 'Failed to generate token');
       }
     } catch (e) {
       toast.error('Error generating token');
+    }
+  };
+
+  const handleCopyUrl = async (tokenValue: string) => {
+    const url = getRegistrationUrl(tokenValue);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedToken(tokenValue);
+      toast.success('Registration URL copied!');
+      setTimeout(() => setCopiedToken(null), 2000);
+    } catch {
+      toast.error('Failed to copy URL');
     }
   };
 
@@ -307,7 +326,25 @@ const RegistrationTokensPage: React.FC = () => {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
-                          {status === 'expired' || status === 'used' ? (
+                          {status === 'active' && (
+                            <>
+                              <button
+                                onClick={() => handleCopyUrl(token.token)}
+                                className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                title="Copy Registration URL"
+                              >
+                                {copiedToken === token.token ? <CheckCircle2 size={16} className="text-green-500" /> : <Link2 size={16} />}
+                              </button>
+                              <a
+                                href={`mailto:${token.email}?subject=Your%20Algomate%20Registration%20Link&body=Dear%20Team%2C%0A%0AYour%20private%20registration%20link%20for%20Algomate%20is%3A%0A%0A${encodeURIComponent(getRegistrationUrl(token.token))}%0A%0AThis%20link%20expires%20on%20${encodeURIComponent(new Date(token.expiresAt).toDateString())}.%20Please%20complete%20your%20registration%20before%20then.%0A%0ARegards%2C%0AAlgomate%20Team`}
+                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="Send via Email"
+                              >
+                                <Send size={16} />
+                              </a>
+                            </>
+                          )}
+                          {(status === 'expired' || status === 'used') && (
                             <button
                               onClick={() => handleReactivateToken(token.id)}
                               className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
@@ -315,14 +352,6 @@ const RegistrationTokensPage: React.FC = () => {
                             >
                               <RefreshCw size={16} />
                             </button>
-                          ) : (
-                            <a
-                              href={`mailto:${token.email}?subject=Your Registration Token&body=Here is your registration token: ${token.token}`}
-                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="Send via Email"
-                            >
-                              <Send size={16} />
-                            </a>
                           )}
                           {!token.isUsed && (
                             <button
@@ -351,6 +380,54 @@ const RegistrationTokensPage: React.FC = () => {
               animate={{ scale: 1, opacity: 1 }}
               className="bg-white rounded-2xl shadow-2xl w-full max-w-md"
             >
+              {generatedResult ? (
+                /* Success state — show registration URL */
+                <>
+                  <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-green-50">
+                    <h3 className="text-lg font-bold text-green-800 flex items-center gap-2">
+                      <CheckCircle2 size={20} className="text-green-600" />
+                      Token Generated & Email Sent
+                    </h3>
+                    <button onClick={() => { setGeneratedResult(null); setShowGenerateModal(false); }} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+                  </div>
+                  <div className="p-6 space-y-4">
+                    <p className="text-sm text-gray-600">
+                      Registration link sent to <strong>{generatedResult.email}</strong>. Share the link below if needed:
+                    </p>
+                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                      <p className="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wide">Private Registration URL</p>
+                      <p className="font-mono text-xs text-blue-700 break-all">{generatedResult.url}</p>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(generatedResult.url);
+                        toast.success('Registration URL copied!');
+                      }}
+                      className="w-full flex items-center justify-center gap-2 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors"
+                    >
+                      <Copy size={16} />
+                      Copy Registration Link
+                    </button>
+                    <a
+                      href={`mailto:${generatedResult.email}?subject=Your%20Algomate%20Registration%20Link&body=Dear%20Team%2C%0A%0AYour%20private%20registration%20link%20for%20${encodeURIComponent(generatedResult.institutionName)}%20on%20Algomate%20is%3A%0A%0A${encodeURIComponent(generatedResult.url)}%0A%0APlease%20complete%20your%20registration%20using%20this%20link.%0A%0ARegards%2C%0AAlgomate%20Team`}
+                      className="w-full flex items-center justify-center gap-2 py-3 bg-white border border-blue-300 text-blue-700 rounded-xl font-semibold hover:bg-blue-50 transition-colors"
+                    >
+                      <Send size={16} />
+                      Re-send via Email Client
+                    </a>
+                  </div>
+                  <div className="flex justify-end px-6 py-4 border-t border-gray-100">
+                    <button
+                      onClick={() => { setGeneratedResult(null); setShowGenerateModal(false); }}
+                      className="px-8 py-2.5 bg-gray-800 text-white font-bold rounded-xl hover:bg-gray-900 transition-colors"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </>
+              ) : (
+                /* Form state */
+                <>
               <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
                 <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                   <Key size={20} className="text-[#ED8936]" />
@@ -408,9 +485,11 @@ const RegistrationTokensPage: React.FC = () => {
                   onClick={handleGenerateToken}
                   className="px-8 py-2.5 bg-[#ED8936] text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all"
                 >
-                  Generate Token
+                  Generate & Send Email
                 </button>
               </div>
+              </>
+              )}
             </motion.div>
           </div>
         )}

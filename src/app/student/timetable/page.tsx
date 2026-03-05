@@ -384,57 +384,82 @@ export default function StudentTimetable() {
 
                 {/* Week View - Desktop */}
                 {viewMode === 'week' && (
-                    <div className="hidden lg:block bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                        <div className="overflow-x-auto">
-                            <table className="w-full">
-                                <thead>
-                                    <tr className="bg-gray-50">
-                                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600 border-b border-r w-24">Time</th>
-                                        {days.map(day => (
-                                            <th key={day} className="px-4 py-3 text-center text-sm font-semibold text-gray-600 border-b border-r last:border-r-0">
-                                                {day}
-                                            </th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {timeSlots.map((slot, slotIndex) => (
-                                        <tr key={slot} className="border-b last:border-b-0">
-                                            <td className="px-4 py-3 text-sm font-medium text-gray-600 border-r bg-gray-50">
-                                                {slot}
-                                            </td>
-                                            {days.map((day) => {
-                                                const cls = getClassForSlot(day, slot);
-                                                const color = cls ? getSubjectColor(cls.subjectType, slotIndex) : null;
-
-                                                return (
-                                                    <td key={day} className="px-2 py-2 border-r last:border-r-0 min-w-[140px]">
-                                                        {cls ? (
-                                                            cls.isBreak || cls.isLunch ? (
-                                                                <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 text-center">
-                                                                    <span className="text-amber-700 text-sm font-medium">
-                                                                        {cls.isLunch ? '🍽️ Lunch' : '☕ Break'}
-                                                                    </span>
-                                                                </div>
-                                                            ) : (
-                                                                <div className={`${color?.bg} ${color?.border} border rounded-lg p-2`}>
-                                                                    <p className={`font-semibold text-sm ${color?.text} truncate`}>{cls.subjectCode}</p>
-                                                                    <p className="text-xs text-gray-600 truncate">{cls.subjectName}</p>
-                                                                    <p className="text-xs text-gray-500 mt-1 truncate">{cls.facultyName}</p>
-                                                                    <p className="text-xs text-gray-400 truncate">{cls.classroomName}</p>
-                                                                </div>
-                                                            )
-                                                        ) : (
-                                                            <div className="h-16 flex items-center justify-center text-gray-300">—</div>
-                                                        )}
-                                                    </td>
-                                                );
-                                            })}
-                                        </tr>
+                    <div className="hidden lg:block bg-white rounded-2xl shadow-lg overflow-hidden">
+                        <table className="w-full table-fixed border-collapse">
+                            <colgroup>
+                                <col style={{ width: '80px' }} />
+                                {days.map(day => <col key={day} />)}
+                            </colgroup>
+                            <thead>
+                                <tr className="bg-[#4D869C]">
+                                    <th className="border border-[#4D869C]/30 p-3 text-center font-semibold text-white text-xs">
+                                        Time
+                                    </th>
+                                    {days.map(day => (
+                                        <th key={day} className="border border-[#4D869C]/30 p-3 text-center font-semibold text-white text-sm">
+                                            {day}
+                                        </th>
                                     ))}
-                                </tbody>
-                            </table>
-                        </div>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {timeSlots.map((slot, slotIndex) => (
+                                    <tr key={slot} className={slotIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                                        <td className="border border-gray-200 p-2 text-center align-middle bg-[#4D869C]/5">
+                                            {slot.includes('-') ? (
+                                                <>
+                                                    <div className="text-xs font-bold text-[#4D869C]">{slot.split('-')[0]}</div>
+                                                    <div className="text-[10px] text-gray-400">to</div>
+                                                    <div className="text-xs font-bold text-[#4D869C]">{slot.split('-')[1]}</div>
+                                                </>
+                                            ) : (
+                                                <span className="text-xs font-medium text-gray-500">{slot}</span>
+                                            )}
+                                        </td>
+                                        {days.map((day) => {
+                                            const cls = getClassForSlot(day, slot);
+                                            const isLab = cls && (cls.subjectType === 'LAB' || cls.subjectType === 'PRACTICAL');
+
+                                            return (
+                                                <td key={day} className="border border-gray-200 p-2 align-top">
+                                                    {cls ? (
+                                                        cls.isBreak || cls.isLunch ? (
+                                                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 text-center">
+                                                                <span className="text-amber-700 text-sm font-medium">
+                                                                    {cls.isLunch ? '🍽️ Lunch' : '☕ Break'}
+                                                                </span>
+                                                            </div>
+                                                        ) : (
+                                                            <div className={`${isLab
+                                                                ? 'bg-purple-50 border-purple-200'
+                                                                : 'bg-[#4D869C]/10 border-[#4D869C]/30'
+                                                                } border rounded-xl p-2.5`}>
+                                                                <p className={`font-bold text-xs ${isLab ? 'text-purple-900' : 'text-[#4D869C]'} mb-0.5 truncate`}>
+                                                                    {cls.subjectCode}
+                                                                </p>
+                                                                <p className={`text-[11px] ${isLab ? 'text-purple-700' : 'text-[#4D869C]/80'} mb-1.5 leading-tight line-clamp-2`}>
+                                                                    {cls.subjectName}
+                                                                </p>
+                                                                <div className="flex items-center gap-1 text-[10px] text-gray-600 mb-0.5">
+                                                                    <Users size={9} />
+                                                                    <span className="truncate">{cls.facultyName}</span>
+                                                                </div>
+                                                                <div className="flex items-center gap-1 text-[10px] text-gray-500">
+                                                                    <MapPin size={9} />
+                                                                    <span className="truncate">{cls.classroomName}</span>
+                                                                </div>
+                                                            </div>
+                                                        )
+                                                    ) : (
+                                                        <div className="h-16 flex items-center justify-center text-gray-300 text-sm">—</div>
+                                                    )}
+                                                </td>
+                                            );
+                                        })}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
                 )}
 

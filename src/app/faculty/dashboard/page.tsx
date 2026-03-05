@@ -166,7 +166,7 @@ const FacultyDashboardPage: React.FC = () => {
               {!isCreator && !isPublisher && <CalendarDays size={28} className="text-white" />}
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Welcome to Academic Compass</h2>
+              <h2 className="text-2xl font-bold text-gray-900">Welcome to Algomate</h2>
               <p className="text-gray-600">
                 {isCreator && 'Create and generate optimized timetables using AI-powered tools and hybrid scheduling algorithms.'}
                 {isPublisher && 'Review, approve, and publish timetables submitted by faculty creators.'}

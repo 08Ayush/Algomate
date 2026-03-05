@@ -100,14 +100,14 @@ export async function POST(request: NextRequest) {
         });
 
         await transporter.sendMail({
-            from: process.env.SMTP_FROM || 'noreply@academiccompass.com',
+            from: process.env.SMTP_FROM || 'noreply@algomate.io',
             to: email,
-            subject: 'Password Reset - Academic Compass',
+            subject: 'Password Reset - Algomate',
             html: `
         <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
           <h2 style="color: #2563A3;">Password Reset Request</h2>
           <p>Hello ${user.name},</p>
-          <p>We received a request to reset your password for your Academic Compass account.</p>
+          <p>We received a request to reset your password for your Algomate account.</p>
           <p>Your new temporary password is:</p>
           <h3 style="background: #f0f7ff; padding: 15px; display: inline-block; border-radius: 8px; letter-spacing: 2px;">
             ${tempPassword}

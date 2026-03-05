@@ -17,8 +17,8 @@ import { Toaster } from "react-hot-toast";
 // });
 
 export const metadata: Metadata = {
-  title: "Academic Compass - Your Educational Journey Starts Here",
-  description: "Academic Compass helps students navigate their educational journey with personalized guidance, resources, and tools for academic success.",
+  title: "Algomate - AI-Powered Timetable Scheduling",
+  description: "Algomate is an AI-powered platform that helps educational institutions automate and optimize academic scheduling with intelligent algorithms.",
 };
 
 export default function RootLayout({

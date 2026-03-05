@@ -210,7 +210,7 @@ const FacultyCreatorLayout: React.FC<FacultyCreatorLayoutProps> = ({ children, a
                         <circle cx="25" cy="25" r="23" fill="white" fillOpacity="0.2" stroke="white" strokeWidth="2" />
                         <path d="M25 12 L33 18 L33 30 L25 36 L17 30 L17 18 Z" fill="white" stroke="white" strokeWidth="0.5" />
                     </svg>
-                    <h1 className="text-white text-[22px] font-bold">Academic Compass</h1>
+                    <h1 className="text-white text-[22px] font-bold">Algomate</h1>
                 </div>
 
                 <div className="flex items-center gap-6">

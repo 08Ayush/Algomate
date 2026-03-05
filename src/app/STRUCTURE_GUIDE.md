@@ -1,4 +1,4 @@
-# Academic Compass - Application Structure
+# Algomate - Application Structure
 
 Complete guide to the application's folder structure organized by user roles.
 

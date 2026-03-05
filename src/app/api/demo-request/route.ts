@@ -97,8 +97,8 @@ export async function POST(request: NextRequest) {
 
       // Email to admin
       await transporter.sendMail({
-        from: process.env.SMTP_FROM || 'noreply@academiccompass.com',
-        to: process.env.ADMIN_EMAIL || 'admin@academiccompass.com',
+        from: process.env.SMTP_FROM || 'noreply@algomate.io',
+        to: process.env.ADMIN_EMAIL || 'admin@algomate.io',
         subject: `🎓 New Demo Request: ${data.institutionName}`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -193,13 +193,13 @@ export async function POST(request: NextRequest) {
 
       // Confirmation email to the requester
       await transporter.sendMail({
-        from: process.env.SMTP_FROM || 'noreply@academiccompass.com',
+        from: process.env.SMTP_FROM || 'noreply@algomate.io',
         to: data.email,
-        subject: 'Demo Request Received - Academic Compass ERP',
+        subject: 'Demo Request Received - Algomate ERP',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <div style="background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
-              <h1 style="color: white; margin: 0;">Academic Compass</h1>
+              <h1 style="color: white; margin: 0;">Algomate</h1>
               <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0;">Enterprise ERP for Education</p>
             </div>
             <div style="background: #ffffff; padding: 30px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 10px 10px;">
@@ -209,7 +209,7 @@ export async function POST(request: NextRequest) {
               </p>
               <p style="color: #475569; line-height: 1.6;">
                 We have received your demo request for <strong>${data.institutionName}</strong>. 
-                Our team is excited to show you how Academic Compass can transform your institution's 
+                Our team is excited to show you how Algomate can transform your institution's 
                 academic management.
               </p>
 
@@ -234,13 +234,13 @@ export async function POST(request: NextRequest) {
                   Have questions? Feel free to reply to this email or contact us at:
                 </p>
                 <p style="color: #3b82f6; margin: 0;">
-                  📧 support@academiccompass.com | 📞 +91 XXXXXXXXXX
+                  📧 support@algomate.io | 📞 +91 XXXXXXXXXX
                 </p>
               </div>
 
               <p style="color: #475569; line-height: 1.6; margin-top: 30px;">
                 Best Regards,<br>
-                <strong>The Academic Compass Team</strong>
+                <strong>The Algomate Team</strong>
               </p>
             </div>
           </div>

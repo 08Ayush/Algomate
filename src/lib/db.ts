@@ -1,7 +1,7 @@
 /**
  * Neon PostgreSQL Client
  * ========================
- * Central database connection for the Academic Compass project.
+ * Central database connection for the Algomate project.
  * Replaces @supabase/supabase-js database calls with direct Neon connections.
  *
  * DATABASE_URL     → pooled connection  (use in API routes / server components)

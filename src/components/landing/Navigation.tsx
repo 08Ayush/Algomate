@@ -36,7 +36,7 @@ export function Navigation() {
             <div className="max-w-[1400px] mx-auto px-10 flex justify-between items-center">
                 <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
                     <GraduationCap size={36} className="text-[#2563A3]" />
-                    <h1 className="text-[22px] font-bold text-[#2563A3]">Academic Compass</h1>
+                    <h1 className="text-[22px] font-bold text-[#2563A3]">Algomate</h1>
                 </Link>
 
                 <div className="flex items-center gap-10">
@@ -50,7 +50,7 @@ export function Navigation() {
                         href={getLinkHref('#features')}
                         className="text-slate-600 font-medium text-[15px] transition-colors hover:text-[#2563A3] relative after:absolute after:bottom-[-5px] after:left-0 after:w-0 after:h-[2px] after:bg-[#2563A3] after:transition-all after:duration-300 hover:after:w-full"
                     >
-                        Services
+                        Features
                     </Link>
                     <Link
                         href={getLinkHref('#about')}

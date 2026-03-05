@@ -12,11 +12,14 @@ import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface Department { id: string; name: string; code: string; }
 interface Course { id: string; title: string; code: string; }
+interface BatchRef { id: string; name: string; }
+interface Batch { id: string; name: string; department_id: string; semester: number; }
 interface Subject {
     id: string;
     code: string;
     name: string;
     credits_per_week: number;
+    credit_value?: number;
     semester?: number;
     subject_type: string;
     nep_category?: string;
@@ -24,6 +27,7 @@ interface Subject {
     course_id?: string;
     is_active: boolean;
     departments?: Department | null;
+    batches?: BatchRef[];
 }
 
 const SubjectsPage: React.FC = () => {
@@ -40,9 +44,12 @@ const SubjectsPage: React.FC = () => {
     const [showForm, setShowForm] = useState(false);
     const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
     const [submitting, setSubmitting] = useState(false);
+    const [allBatches, setAllBatches] = useState<Batch[]>([]);
+    const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
+    const [showAllSemsBatches, setShowAllSemsBatches] = useState(false);
 
     const [form, setForm] = useState({
-        code: '', name: '', credits_per_week: 4, semester: 1, department_id: '', course_id: '',
+        code: '', name: '', credits_per_week: 4, credit_value: 0, semester: 1, department_id: '', course_id: '',
         subject_type: 'THEORY', nep_category: 'CORE', is_active: true
     });
 
@@ -68,14 +75,16 @@ const SubjectsPage: React.FC = () => {
             const headers = getAuthHeaders();
             if (!headers) return;
             const q = user.college_id ? `?college_id=${user.college_id}` : '';
-            const [subjectRes, deptRes, courseRes] = await Promise.all([
+            const [subjectRes, deptRes, courseRes, batchRes] = await Promise.all([
                 fetch(`/api/admin/subjects${q}`, { headers }),
                 fetch(`/api/admin/departments${q}`, { headers }),
-                fetch(`/api/admin/courses${q}`, { headers })
+                fetch(`/api/admin/courses${q}`, { headers }),
+                fetch(`/api/admin/batches${q}${q ? '&' : '?'}include_inactive=true`, { headers })
             ]);
             if (subjectRes.ok) setSubjects((await subjectRes.json()).subjects || []);
             if (deptRes.ok) setDepartments((await deptRes.json()).departments || []);
             if (courseRes.ok) setCourses((await courseRes.json()).courses || []);
+            if (batchRes.ok) setAllBatches((await batchRes.json()).batches || []);
         } catch { toast.error('Error loading data'); } finally { setLoading(false); }
     };
 
@@ -87,7 +96,8 @@ const SubjectsPage: React.FC = () => {
             const headers = getAuthHeaders();
             if (!headers) return;
             const url = editingSubject ? `/api/admin/subjects/${editingSubject.id}` : '/api/admin/subjects';
-            const res = await fetch(url, { method: editingSubject ? 'PUT' : 'POST', headers, body: JSON.stringify(form) });
+            const payload = editingSubject ? { ...form, batch_ids: selectedBatchIds } : form;
+            const res = await fetch(url, { method: editingSubject ? 'PUT' : 'POST', headers, body: JSON.stringify(payload) });
             if (res.ok) { toast.success(editingSubject ? 'Updated' : 'Created'); setShowForm(false); setEditingSubject(null); resetForm(); fetchData(); }
             else { const err = await res.json(); toast.error(err.error || 'Failed'); }
         } catch { toast.error('Error'); } finally { setSubmitting(false); }
@@ -95,13 +105,18 @@ const SubjectsPage: React.FC = () => {
 
     const resetForm = () => {
         setEditingSubject(null);
-        setForm({ code: '', name: '', credits_per_week: 4, semester: 1, department_id: '', course_id: '', subject_type: 'THEORY', nep_category: 'CORE', is_active: true });
+        setSelectedBatchIds([]);
+        setShowAllSemsBatches(false);
+        setForm({ code: '', name: '', credits_per_week: 4, credit_value: 0, semester: 1, department_id: '', course_id: '', subject_type: 'THEORY', nep_category: 'CORE', is_active: true });
     };
 
     const handleEdit = (subject: Subject) => {
         setEditingSubject(subject);
+        setSelectedBatchIds(subject.batches?.map(b => b.id) || []);
+        setShowAllSemsBatches(false);
         setForm({
-            code: subject.code, name: subject.name, credits_per_week: subject.credits_per_week, semester: subject.semester || 1,
+            code: subject.code, name: subject.name, credits_per_week: subject.credits_per_week,
+            credit_value: subject.credit_value ?? 0, semester: subject.semester || 1,
             department_id: subject.department_id || '', course_id: subject.course_id || '',
             subject_type: subject.subject_type, nep_category: subject.nep_category || 'CORE', is_active: subject.is_active
         });
@@ -154,6 +169,17 @@ const SubjectsPage: React.FC = () => {
         const matchesMode = semesterMode === 'all' || (s.semester != null && activeSemesters.includes(s.semester));
         return matchesSearch && matchesDept && matchesSem && matchesMode;
     });
+
+    const shortBatchLabel = (name: string) => {
+        // "CSE-DS Batch 2024 - Sem 3 (2025-26)" → "CSE-DS S3 '24"
+        const deptMatch = name.match(/^([-\w]+)\s+Batch/);
+        const semMatch = name.match(/Sem\s+(\d+)/i);
+        const yearMatch = name.match(/Batch\s+(\d{4})/i);
+        const dept = deptMatch?.[1] || name.slice(0, 8);
+        const sem = semMatch?.[1] || '?';
+        const year = yearMatch?.[1]?.slice(2) || '';
+        return year ? `${dept} S${sem} '${year}` : `${dept} S${sem}`;
+    };
 
     const getTypeColor = (type: string) => {
         switch (type) { case 'LAB': return 'bg-purple-100 text-purple-700'; case 'PRACTICAL': return 'bg-orange-100 text-orange-700'; case 'TUTORIAL': return 'bg-blue-100 text-blue-700'; default: return 'bg-gray-100 text-gray-700'; }
@@ -248,10 +274,12 @@ const SubjectsPage: React.FC = () => {
                             <thead className="bg-gray-50"><tr>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Code</th>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Name</th>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Hrs/Wk</th>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Credits</th>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Type</th>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Category</th>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Department</th>
+                                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Batches</th>
                                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase">Actions</th>
                             </tr></thead>
                             <tbody className="divide-y divide-gray-100">
@@ -260,6 +288,7 @@ const SubjectsPage: React.FC = () => {
                                         <td className="px-6 py-4"><span className="font-mono px-2 py-1 bg-gray-100 text-gray-700 rounded text-sm">{subject.code}</span></td>
                                         <td className="px-6 py-4 font-medium text-gray-900">{subject.name}</td>
                                         <td className="px-6 py-4 text-gray-600">{subject.credits_per_week}</td>
+                                        <td className="px-6 py-4 font-semibold text-indigo-700">{subject.credit_value ?? '—'}</td>
                                         <td className="px-6 py-4"><span className={`px-3 py-1 rounded-full text-xs font-medium ${getTypeColor(subject.subject_type)}`}>{subject.subject_type}</span></td>
                                         <td className="px-6 py-4">
                                             {subject.nep_category
@@ -268,6 +297,23 @@ const SubjectsPage: React.FC = () => {
                                             }
                                         </td>
                                         <td className="px-6 py-4"><span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm">{subject.departments?.name || '-'}</span></td>
+                                        <td className="px-6 py-4">
+                                            {!subject.batches || subject.batches.length === 0
+                                                ? <span className="px-2 py-1 bg-orange-50 text-orange-500 rounded text-xs font-medium">Unassigned</span>
+                                                : <div className="flex flex-wrap gap-1">
+                                                    {subject.batches.slice(0, 3).map(b => (
+                                                        <span key={b.id} title={b.name} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs font-medium whitespace-nowrap">
+                                                            {shortBatchLabel(b.name)}
+                                                        </span>
+                                                    ))}
+                                                    {subject.batches.length > 3 && (
+                                                        <span title={subject.batches.slice(3).map(b => b.name).join('\n')} className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded text-xs font-medium cursor-default">
+                                                            +{subject.batches.length - 3} more
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            }
+                                        </td>
                                         <td className="px-6 py-4"><div className="flex gap-2">
                                             <button onClick={() => handleEdit(subject)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={16} /></button>
                                             <button onClick={() => handleDelete(subject)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16} /></button>
@@ -287,9 +333,10 @@ const SubjectsPage: React.FC = () => {
                                 <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
                             </div>
                             <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                                <div><label className="block text-sm font-medium text-gray-700 mb-1">Code *</label><input className="w-full px-4 py-2 border rounded-lg" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} required /></div>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Code *</label><input className="w-full px-4 py-2 border rounded-lg" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} required /></div>
-                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Credits/Week</label><input type="number" className="w-full px-4 py-2 border rounded-lg" value={form.credits_per_week} onChange={(e) => setForm({ ...form, credits_per_week: parseInt(e.target.value) })} /></div>
+                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Hrs / Week <span className="text-gray-400 text-xs">(scheduling)</span></label><input type="number" min={1} className="w-full px-4 py-2 border rounded-lg" value={form.credits_per_week} onChange={(e) => setForm({ ...form, credits_per_week: parseInt(e.target.value) })} /></div>
+                                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Credit Value <span className="text-gray-400 text-xs">(display)</span></label><input type="number" min={0} step={0.5} className="w-full px-4 py-2 border rounded-lg" value={form.credit_value} onChange={(e) => setForm({ ...form, credit_value: parseFloat(e.target.value) || 0 })} /></div>
                                 </div>
                                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Name *</label><input className="w-full px-4 py-2 border rounded-lg" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></div>
                                 <div className="grid grid-cols-2 gap-4">
@@ -334,6 +381,40 @@ const SubjectsPage: React.FC = () => {
                                         <option value="">Select</option>{courses.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
                                     </select>
                                 </div>
+                                {editingSubject && (
+                                    <div>
+                                        <div className="flex items-center justify-between mb-1">
+                                            <label className="block text-sm font-medium text-gray-700">
+                                                Batch Assignment
+                                                <span className="ml-1 text-xs text-gray-400">({selectedBatchIds.length} selected)</span>
+                                            </label>
+                                            <button type="button" onClick={() => setShowAllSemsBatches(p => !p)} className="text-xs text-indigo-600 hover:underline">
+                                                {showAllSemsBatches ? `Sem ${form.semester} only` : 'Show all semesters'}
+                                            </button>
+                                        </div>
+                                        <div className="border rounded-lg max-h-44 overflow-y-auto">
+                                            {allBatches.filter(b => showAllSemsBatches || b.semester === form.semester).length === 0
+                                                ? <p className="text-xs text-gray-400 px-3 py-3 text-center">No batches found for Semester {form.semester}</p>
+                                                : allBatches
+                                                    .filter(b => showAllSemsBatches || b.semester === form.semester)
+                                                    .map(b => (
+                                                        <label key={b.id} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedBatchIds.includes(b.id)}
+                                                                onChange={(e) => setSelectedBatchIds(prev =>
+                                                                    e.target.checked ? [...prev, b.id] : prev.filter(id => id !== b.id)
+                                                                )}
+                                                                className="rounded accent-indigo-600"
+                                                            />
+                                                            <span className="text-sm text-gray-700 flex-1">{b.name}</span>
+                                                            {selectedBatchIds.includes(b.id) && <span className="text-xs text-indigo-500 font-medium">✓</span>}
+                                                        </label>
+                                                    ))
+                                            }
+                                        </div>
+                                    </div>
+                                )}
                                 <div className="flex justify-end gap-3 pt-4">
                                     <button type="button" onClick={() => setShowForm(false)} className="px-6 py-2.5 text-gray-600 hover:bg-gray-100 rounded-xl">Cancel</button>
                                     <button type="submit" disabled={submitting} className="px-8 py-2.5 bg-[#4D869C] text-white font-bold rounded-xl disabled:opacity-50">{submitting ? 'Saving...' : editingSubject ? 'Update' : 'Add'}</button>

@@ -5,44 +5,53 @@ for the current batch to understand why subjects get specific hours.
 """
 
 import os
-from supabase import create_client
+import sys
+import json
+from pathlib import Path
+from dotenv import load_dotenv
+import psycopg2
+import psycopg2.extras
 
-# Supabase credentials
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://gdvymqrxyqhowqwecpfc.supabase.co")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdkdnltcXJ4eXFob3dxd2VjcGZjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzY3ODE4NDMsImV4cCI6MjA1MjM1Nzg0M30.0j2D4zzQvlWWg8_eZXnb6r2YkdAa-cLgJvdQ7Hee9T0")
+# Load .env from project root
+load_dotenv(Path(__file__).resolve().parents[3] / ".env")
+
 BATCH_ID = "abbdd58e-f543-4e82-acbf-e813df03e23c"
 
+
+def _query(sql, params=None):
+    conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, params)
+            return [dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
 def main():
-    client = create_client(SUPABASE_URL, SUPABASE_KEY)
-    
     print(f"\n{'='*100}")
     print(f"CREDIT COLUMN DIAGNOSTIC FOR BATCH: {BATCH_ID}")
     print(f"{'='*100}\n")
-    
-    # Fetch batch_subjects with full subject details
-    result = client.table("batch_subjects").select(
+
+    rows = _query(
         """
-        subject_id,
-        assigned_faculty_id,
-        required_hours_per_week,
-        subjects (
-            name,
-            code,
-            lecture_hours,
-            tutorial_hours,
-            practical_hours,
-            credit_value,
-            credits_per_week,
-            weekly_hours,
-            requires_lab,
-            subject_type,
-            lab_hours,
-            is_active
-        )
-        """
-    ).eq("batch_id", BATCH_ID).execute()
-    
-    batch_subjects = result.data or []
+        SELECT
+            bs.subject_id, bs.assigned_faculty_id, bs.required_hours_per_week,
+            row_to_json(s) AS subjects
+        FROM batch_subjects bs
+        JOIN subjects s ON s.id = bs.subject_id
+        WHERE bs.batch_id = %s
+        """,
+        (BATCH_ID,),
+    )
+    batch_subjects = []
+    for r in rows:
+        subj = r.get("subjects")
+        if isinstance(subj, str):
+            subj = json.loads(subj)
+        r["subjects"] = subj
+        batch_subjects.append(r)
+
     
     if not batch_subjects:
         print(f"❌ No subjects found for batch {BATCH_ID}")
