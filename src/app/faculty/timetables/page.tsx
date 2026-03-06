@@ -45,6 +45,7 @@ const TimetablesPage: React.FC = () => {
 
     const isCreator = user?.faculty_type === 'creator';
     const isPublisher = user?.faculty_type === 'publisher';
+    const isGeneral = !isCreator && !isPublisher; // general or guest
 
     useEffect(() => {
         const userData = localStorage.getItem('user');
@@ -198,7 +199,12 @@ const TimetablesPage: React.FC = () => {
         .filter(sem => semesterMode === 'all' || activeSemesters.includes(sem!))
         .sort((a, b) => (a || 0) - (b || 0));
 
-    const filteredTimetables = timetables.filter(t => {
+    // General/guest faculty can only see published timetables
+    const visibleTimetables = isGeneral
+        ? timetables.filter(t => t.status === 'published')
+        : timetables;
+
+    const filteredTimetables = visibleTimetables.filter(t => {
         const matchesSearch = t.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             (t.batch?.name || t.batch_name)?.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesStatus = statusFilter === 'all' || t.status === statusFilter;
@@ -241,7 +247,9 @@ const TimetablesPage: React.FC = () => {
                 <div className="flex justify-between items-center">
                     <div>
                         <h1 className="text-4xl font-bold text-gray-900 mb-2">Timetables</h1>
-                        <p className="text-gray-600">View and manage generated timetables</p>
+                        <p className="text-gray-600">
+                            {isGeneral ? 'View published timetables' : 'View and manage generated timetables'}
+                        </p>
                     </div>
                     <button onClick={() => fetchTimetables()} className="flex items-center gap-2 px-4 py-3 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 bg-white">
                         <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
@@ -261,6 +269,8 @@ const TimetablesPage: React.FC = () => {
                                 className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#4D869C] outline-none"
                             />
                         </div>
+                        {/* General faculty only see published — hide status filter for them */}
+                        {!isGeneral && (
                         <select
                             value={statusFilter}
                             onChange={(e) => setStatusFilter(e.target.value)}
@@ -273,6 +283,7 @@ const TimetablesPage: React.FC = () => {
                             <option value="generating">Generating</option>
                             <option value="rejected">Rejected</option>
                         </select>
+                        )}
                         <select
                             value={semesterFilter}
                             onChange={(e) => setSemesterFilter(e.target.value)}
@@ -298,24 +309,30 @@ const TimetablesPage: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-2xl shadow-lg p-5 flex items-center gap-4">
                         <div className="p-3 rounded-xl bg-blue-100"><CalendarDays size={22} className="text-blue-600" /></div>
-                        <div><p className="text-xl font-bold text-gray-900">{timetables.length}</p><p className="text-sm text-gray-500">Total</p></div>
+                        <div><p className="text-xl font-bold text-gray-900">{visibleTimetables.length}</p><p className="text-sm text-gray-500">Total</p></div>
                     </motion.div>
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="bg-white rounded-2xl shadow-lg p-5 flex items-center gap-4">
                         <div className="p-3 rounded-xl bg-green-100"><CheckCircle size={22} className="text-green-600" /></div>
-                        <div><p className="text-xl font-bold text-gray-900">{timetables.filter(t => t.status === 'published').length}</p><p className="text-sm text-gray-500">Published</p></div>
+                        <div><p className="text-xl font-bold text-gray-900">{visibleTimetables.filter(t => t.status === 'published').length}</p><p className="text-sm text-gray-500">Published</p></div>
                     </motion.div>
+                    {!isGeneral && (
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="bg-white rounded-2xl shadow-lg p-5 flex items-center gap-4">
                         <div className="p-3 rounded-xl bg-yellow-100"><Clock size={22} className="text-yellow-600" /></div>
                         <div><p className="text-xl font-bold text-gray-900">{timetables.filter(t => t.status === 'pending_approval').length}</p><p className="text-sm text-gray-500">Pending</p></div>
                     </motion.div>
+                    )}
+                    {!isGeneral && (
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="bg-white rounded-2xl shadow-lg p-5 flex items-center gap-4">
                         <div className="p-3 rounded-xl bg-gray-100"><AlertCircle size={22} className="text-gray-600" /></div>
                         <div><p className="text-xl font-bold text-gray-900">{timetables.filter(t => t.status === 'draft').length}</p><p className="text-sm text-gray-500">Drafts</p></div>
                     </motion.div>
+                    )}
+                    {!isGeneral && (
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="bg-white rounded-2xl shadow-lg p-5 flex items-center gap-4">
                         <div className="p-3 rounded-xl bg-red-100"><XCircle size={22} className="text-red-600" /></div>
                         <div><p className="text-xl font-bold text-gray-900">{timetables.filter(t => t.status === 'rejected').length}</p><p className="text-sm text-gray-500">Rejected</p></div>
                     </motion.div>
+                    )}
                 </div>
 
                 {/* Timetables List */}
@@ -337,7 +354,11 @@ const TimetablesPage: React.FC = () => {
                                     animate={{ opacity: 1, x: 0 }}
                                     transition={{ delay: i * 0.03 }}
                                     className="p-5 hover:bg-gray-50 transition-all cursor-pointer flex items-center gap-4"
-                                    onClick={() => router.push(`/faculty/timetables/${tt.id}`)}
+                                    onClick={() => {
+                                        // General faculty can only open published timetables
+                                        if (isGeneral && tt.status !== 'published') return;
+                                        router.push(`/faculty/timetables/${tt.id}`);
+                                    }}
                                 >
                                     {/* Icon */}
                                     <div className="p-3 rounded-xl bg-blue-50 shrink-0">
@@ -366,13 +387,15 @@ const TimetablesPage: React.FC = () => {
 
                                     {/* Actions */}
                                     <div className="flex items-center gap-2 shrink-0">
-                                        {/* View Button - Always visible */}
+                                        {/* View Button - only published for general faculty */}
+                                        {(!isGeneral || tt.status === 'published') && (
                                         <button
                                             onClick={(e) => { e.stopPropagation(); router.push(`/faculty/timetables/${tt.id}`); }}
                                             className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50"
                                         >
                                             <Eye size={14} />
                                         </button>
+                                        )}
 
                                         {/* Submit Button - Only for Creator, only for Draft */}
                                         {isCreator && tt.status === 'draft' && (

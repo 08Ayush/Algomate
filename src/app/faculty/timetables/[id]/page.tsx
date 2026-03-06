@@ -67,6 +67,7 @@ export default function ViewTimetablePage() {
     const [timeSlots, setTimeSlots] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [userFacultyType, setUserFacultyType] = useState<string | null>(null);
 
     useEffect(() => {
         if (timetableId) {
@@ -84,6 +85,8 @@ export default function ViewTimetablePage() {
                 throw new Error('Please log in to view timetables');
             }
             const user = JSON.parse(userStr);
+            setUserFacultyType(user.faculty_type || null);
+            const isGeneralUser = user.faculty_type !== 'creator' && user.faculty_type !== 'publisher';
             const token = btoa(JSON.stringify({ id: user.id, role: user.role, department_id: user.department_id }));
 
             const response = await fetch(`/api/timetables/${timetableId}`, {
@@ -105,6 +108,11 @@ export default function ViewTimetablePage() {
 
             setTimetable(result.timetable);
             setClasses(result.scheduledClasses || []);
+
+            // General/guest faculty can only access published timetables
+            if (isGeneralUser && result.timetable?.status !== 'published') {
+                throw new Error('Access denied. You can only view published timetables.');
+            }
 
             const allTimeSlots = [
                 '09:00-10:00',
@@ -345,7 +353,7 @@ export default function ViewTimetablePage() {
 
                     {/* Actions */}
                     <div className="flex gap-3 mt-6">
-                        {timetable.status === 'draft' && (
+                        {timetable.status === 'draft' && userFacultyType !== 'general' && userFacultyType !== 'guest' && userFacultyType !== null && (userFacultyType === 'creator' || userFacultyType === 'publisher') && (
                             <button
                                 onClick={() => router.push(`/faculty/timetables/${timetableId}/edit`)}
                                 className="flex items-center gap-2 px-4 py-2.5 bg-white text-[#4D869C] rounded-xl font-medium hover:shadow-lg transition-all"

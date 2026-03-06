@@ -228,7 +228,7 @@ const SubjectAllotmentPage: React.FC = () => {
       a.subject_code,
       a.subject_name,
       `P${a.priority_rank}`,
-      a.student_cgpa?.toFixed(2) || '-',
+      Number(a.student_cgpa)?.toFixed(2) || '-',
       new Date(a.allotted_at).toLocaleString()
     ]);
 
@@ -337,7 +337,7 @@ const SubjectAllotmentPage: React.FC = () => {
                                 <td><code>${a.college_uid}</code></td>
                                 <td><span class="subject-code">${a.subject_code}</span> ${a.subject_name}</td>
                                 <td><span class="priority">#${a.priority_rank}</span></td>
-                                <td>${a.student_cgpa?.toFixed(2) || '-'}</td>
+                                <td>${Number(a.student_cgpa)?.toFixed(2) || '-'}</td>
                                 <td>${new Date(a.allotted_at).toLocaleString()}</td>
                             </tr>
                         `).join('')}
@@ -553,7 +553,7 @@ const SubjectAllotmentPage: React.FC = () => {
                         <span className="text-gray-600 ml-2">- {allotment.subject_name}</span>
                       </td>
                       <td className="px-6 py-4"><span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-bold">#{allotment.priority_rank}</span></td>
-                      <td className="px-6 py-4 text-gray-600 font-medium">{allotment.student_cgpa?.toFixed(2) || '-'}</td>
+                      <td className="px-6 py-4 text-gray-600 font-medium">{Number(allotment.student_cgpa)?.toFixed(2) || '-'}</td>
                       <td className="px-6 py-4 text-sm text-gray-500">{new Date(allotment.allotted_at).toLocaleString()}</td>
                       <td className="px-6 py-4">
                         <button onClick={() => handleRevokeAllotment(allotment)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Revoke"><Undo2 size={16} /></button>
@@ -637,7 +637,7 @@ const SubjectAllotmentPage: React.FC = () => {
                     <motion.tr key={choice.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.02 }} className="hover:bg-gray-50">
                       <td className="px-6 py-4 font-medium text-gray-900">{choice.student_name}</td>
                       <td className="px-6 py-4"><span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">{choice.college_uid}</span></td>
-                      <td className="px-6 py-4 text-gray-600 font-medium">{choice.cgpa?.toFixed(2) || '-'}</td>
+                      <td className="px-6 py-4 text-gray-600 font-medium">{Number(choice.cgpa)?.toFixed(2) || '-'}</td>
                       <td className="px-6 py-4"><span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">P{choice.priority}</span></td>
                       <td className="px-6 py-4">
                         <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">{choice.subject_code}</span>

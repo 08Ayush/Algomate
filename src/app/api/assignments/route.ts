@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getPaginationParams, getPaginationRange, createPaginatedResponse } from '@/shared/utils/pagination';
 import { notifyAssignmentCreated } from '@/lib/notificationService';
+import { getPool } from '@/lib/db';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -188,52 +189,73 @@ export async function GET(request: NextRequest) {
     if (user instanceof NextResponse) return user;
 
     const { page, limit, isPaginated } = getPaginationParams(request);
-    // Build query with joins
-    let query = supabase
-      .from('assignments')
-      .select(`
-        *,
-        batches(id, name, semester, section),
-        subjects:subject_id(id, name, code),
-        users(id, first_name, last_name)
-      `, { count: 'exact' })
-      .eq('college_id', user.college_id);
+    const pool = await getPool();
 
-    // Only faculty members see only their created assignments
+    // Build raw SQL with JOINs so batch/subject/user names are always populated
+    const params: unknown[] = [user.college_id];
+    let whereClauses = `a.college_id = $1`;
+
     if (user.role === 'faculty') {
-      query = query.eq('created_by', user.id);
+      params.push(user.id);
+      whereClauses += ` AND a.created_by = $${params.length}`;
     }
 
-    // Default sort
-    query = query.order('created_at', { ascending: false });
+    // Count query
+    const countResult = await pool.query(
+      `SELECT COUNT(*) AS total FROM assignments a WHERE ${whereClauses}`,
+      params
+    );
+    const total = parseInt(countResult.rows[0]?.total ?? '0', 10);
 
-    // Apply Pagination or Safety Limit
+    // Data query with pagination
+    let paginationSql = '';
     if (isPaginated && page && limit) {
       const { from, to } = getPaginationRange(page, limit);
-      query = query.range(from, to);
+      params.push(to - from + 1, from); // LIMIT, OFFSET
+      paginationSql = ` LIMIT $${params.length - 1} OFFSET $${params.length}`;
     } else {
-      query = query.limit(500); // Safety cap
+      params.push(500);
+      paginationSql = ` LIMIT $${params.length}`;
     }
 
-    const { data: assignments, count, error } = await query;
+    const { rows } = await pool.query(
+      `SELECT
+        a.*,
+        a.scheduled_end AS due_date,
+        (a.status = 'DRAFT') AS is_draft,
+        b.id   AS batch_id_ref,
+        b.name AS batch_name,
+        b.semester,
+        b.section,
+        s.id   AS subject_id_ref,
+        s.name AS subject_name,
+        s.code AS subject_code,
+        u.id   AS creator_id_ref,
+        u.first_name AS creator_first_name,
+        u.last_name  AS creator_last_name
+      FROM assignments a
+      LEFT JOIN batches  b ON b.id = a.batch_id
+      LEFT JOIN subjects s ON s.id = a.subject_id
+      LEFT JOIN users    u ON u.id = a.created_by
+      WHERE ${whereClauses}
+      ORDER BY a.created_at DESC
+      ${paginationSql}`,
+      params
+    );
 
-    if (error) {
-      console.error('Get assignments error:', error);
-      return NextResponse.json(
-        { success: false, error: 'Failed to fetch assignments: ' + error.message },
-        { status: 500 }
-      );
-    }
-
-    // Mapping for compatibility
-    const enrichedAssignments = (assignments || []).map((assignment: any) => ({
-      ...assignment,
-      subjects: assignment.subjects,
-      users: assignment.users ? { name: `${assignment.users.first_name || ''} ${assignment.users.last_name || ''}`.trim() } : null
+    const enrichedAssignments = rows.map((row: any) => ({
+      ...row,
+      due_date: row.due_date,
+      is_draft: row.is_draft,
+      batches: row.batch_name ? { id: row.batch_id_ref, name: row.batch_name, semester: row.semester, section: row.section } : null,
+      subjects: row.subject_name ? { id: row.subject_id_ref, name: row.subject_name, code: row.subject_code } : null,
+      users: (row.creator_first_name || row.creator_last_name)
+        ? { name: `${row.creator_first_name || ''} ${row.creator_last_name || ''}`.trim() }
+        : null,
     }));
 
     if (isPaginated && page && limit) {
-      const paginatedResult = createPaginatedResponse(enrichedAssignments, count || 0, page, limit);
+      const paginatedResult = createPaginatedResponse(enrichedAssignments, total, page, limit);
       return NextResponse.json({
         success: true,
         assignments: paginatedResult.data,

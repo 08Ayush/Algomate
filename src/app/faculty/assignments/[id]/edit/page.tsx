@@ -65,6 +65,8 @@ export default function EditAssignment() {
     // Data lists
     const [batches, setBatches] = useState<Batch[]>([]);
     const [subjects, setSubjects] = useState<Subject[]>([]);
+    const [subjectsByBatch, setSubjectsByBatch] = useState<Record<string, Subject[]>>({});
+    const [filteredSubjects, setFilteredSubjects] = useState<Subject[]>([]);
     const [questions, setQuestions] = useState<Question[]>([]);
 
     // Question form state
@@ -111,6 +113,7 @@ export default function EditAssignment() {
             if (subjectsData.success) {
                 setBatches(subjectsData.batches || []);
                 setSubjects(subjectsData.subjects || []);
+                setSubjectsByBatch(subjectsData.subjectsByBatch || {});
             }
 
             // Fetch assignment details
@@ -126,11 +129,21 @@ export default function EditAssignment() {
                 setType(a.type || 'MCQ');
                 setBatchId(a.batch_id || '');
                 setSubjectId(a.subject_id || '');
+                // Pre-filter subjects for the loaded batch (set after subjectsByBatch is populated)
+                if (a.batch_id && subjectsData.subjectsByBatch?.[a.batch_id]) {
+                    setFilteredSubjects(subjectsData.subjectsByBatch[a.batch_id]);
+                }
                 setTotalMarks(a.total_marks?.toString() || '');
                 setPassingMarks(a.passing_marks?.toString() || '');
                 setDurationMinutes(a.duration_minutes?.toString() || '');
-                setScheduledStart(a.scheduled_start ? new Date(a.scheduled_start).toISOString().slice(0, 16) : '');
-                setScheduledEnd(a.scheduled_end ? new Date(a.scheduled_end).toISOString().slice(0, 16) : '');
+                // Convert UTC timestamp to local datetime-local format (YYYY-MM-DDTHH:MM in local tz)
+                const toLocalInput = (utc: string) => {
+                    const d = new Date(utc);
+                    const offset = d.getTimezoneOffset() * 60000;
+                    return new Date(d.getTime() - offset).toISOString().slice(0, 16);
+                };
+                setScheduledStart(a.scheduled_start ? toLocalInput(a.scheduled_start) : '');
+                setScheduledEnd(a.scheduled_end ? toLocalInput(a.scheduled_end) : '');
                 setMaxAttempts(a.max_attempts?.toString() || '1');
                 setProctoringEnabled(a.proctoring_enabled || false);
                 setMaxViolations(a.max_violations?.toString() || '3');
@@ -193,8 +206,8 @@ export default function EditAssignment() {
                 totalMarks: parseFloat(totalMarks),
                 passingMarks: passingMarks ? parseFloat(passingMarks) : null,
                 durationMinutes: durationMinutes ? parseInt(durationMinutes) : null,
-                scheduledStart: scheduledStart || null,
-                scheduledEnd: scheduledEnd || null,
+                scheduledStart: scheduledStart ? new Date(scheduledStart).toISOString() : null,
+                scheduledEnd: scheduledEnd ? new Date(scheduledEnd).toISOString() : null,
                 maxAttempts: parseInt(maxAttempts),
                 proctoringEnabled,
                 maxViolations: parseInt(maxViolations),
@@ -353,7 +366,12 @@ export default function EditAssignment() {
                                     </label>
                                     <select
                                         value={batchId}
-                                        onChange={(e) => setBatchId(e.target.value)}
+                                        onChange={(e) => {
+                                            const newBatchId = e.target.value;
+                                            setBatchId(newBatchId);
+                                            setSubjectId('');
+                                            setFilteredSubjects(subjectsByBatch[newBatchId] || []);
+                                        }}
                                         className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#4D869C] outline-none"
                                         required
                                     >
@@ -372,7 +390,7 @@ export default function EditAssignment() {
                                         className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#4D869C] outline-none"
                                     >
                                         <option value="">Select Subject (Optional)</option>
-                                        {subjects.map((subject) => (
+                                        {(filteredSubjects.length > 0 ? filteredSubjects : subjects).map((subject) => (
                                             <option key={subject.id} value={subject.id}>{subject.name} ({subject.code})</option>
                                         ))}
                                     </select>

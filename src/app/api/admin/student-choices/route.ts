@@ -1,4 +1,5 @@
 import { serviceDb as supabase } from '@/shared/database';
+import { getPool } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 
@@ -20,37 +21,45 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ choices: [] });
     }
 
-    // Get bucket's max_selection limit
-    const { data: bucket } = await supabase
-      .from('elective_buckets')
-      .select('max_selection')
-      .eq('id', bucketId)
-      .single();
+    // Get bucket's max_selection limit via raw SQL
+    const pool = getPool();
+    const bucketRes = await pool.query(
+      'SELECT max_selection FROM elective_buckets WHERE id = $1',
+      [bucketId]
+    );
+    const maxSelection = bucketRes.rows[0]?.max_selection || 1;
 
-    const maxSelection = bucket?.max_selection || 1;
+    // Fetch ALL choices for this bucket with JOINs for user + subject data
+    const { rows: allChoices, rowCount } = await pool.query(
+      `SELECT
+         ssc.id,
+         ssc.student_id,
+         ssc.subject_id,
+         ssc.bucket_id,
+         ssc.priority,
+         ssc.is_allotted,
+         ssc.allotment_status,
+         ssc.created_at,
+         ssc.updated_at,
+         u.first_name,
+         u.last_name,
+         u.college_uid,
+         u.cgpa,
+         s.id   AS subject_db_id,
+         s.name AS subject_name,
+         s.code AS subject_code,
+         eb.bucket_name
+       FROM student_subject_choices ssc
+       LEFT JOIN users u ON u.id = ssc.student_id
+       LEFT JOIN subjects s ON s.id = ssc.subject_id
+       LEFT JOIN elective_buckets eb ON eb.id = ssc.bucket_id
+       WHERE ssc.bucket_id = $1
+       ORDER BY ssc.priority ASC`,
+      [bucketId]
+    );
 
-    // Fetch ALL choices for this bucket (we'll filter pending ones in code)
-    const { data: allChoices, error } = await supabase
-      .from('student_subject_choices')
-      .select(`
-        id,
-        student_id,
-        subject_id,
-        bucket_id,
-        priority,
-        is_allotted,
-        allotment_status,
-        created_at,
-        updated_at,
-        users:student_id(id, first_name, last_name, college_uid, cgpa),
-        subjects:subject_id(id, name, code),
-        elective_buckets:bucket_id(id, bucket_name)
-      `)
-      .eq('bucket_id', bucketId)
-      .order('priority', { ascending: true });
-
-    if (error) {
-      console.error('Error fetching student choices:', error);
+    if (!rowCount && rowCount !== 0) {
+      console.error('Error fetching student choices');
       return NextResponse.json({ choices: [] });
     }
 
@@ -102,13 +111,13 @@ export async function GET(request: NextRequest) {
     const mappedChoices = pendingChoices.map((c: any) => ({
       id: c.id,
       student_id: c.student_id,
-      student_name: `${c.users?.first_name || ''} ${c.users?.last_name || ''}`.trim(),
-      college_uid: c.users?.college_uid || '',
-      cgpa: c.users?.cgpa || 0,
+      student_name: `${c.first_name || ''} ${c.last_name || ''}`.trim(),
+      college_uid: c.college_uid || '',
+      cgpa: c.cgpa || 0,
       priority: c.priority,
-      subject_code: c.subjects?.code || '',
-      subject_name: c.subjects?.name || '',
-      bucket_name: c.elective_buckets?.bucket_name || '',
+      subject_code: c.subject_code || '',
+      subject_name: c.subject_name || '',
+      bucket_name: c.bucket_name || '',
       created_at: c.created_at
     }));
 

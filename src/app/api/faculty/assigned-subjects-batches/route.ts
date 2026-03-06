@@ -55,7 +55,22 @@ export async function GET(request: NextRequest) {
       user.department_id ? [user.college_id, user.department_id] : [user.college_id]
     );
 
-    return NextResponse.json({ success: true, subjects, batches });
+    // Build subjectsByBatch: for each batch, which subjects the faculty can teach
+    const { rows: batchSubjectRows } = await pool.query(
+      `SELECT bs.batch_id, s.id, s.name, s.code, s.subject_type
+       FROM batch_subjects bs
+       INNER JOIN subjects s ON s.id = bs.subject_id
+       INNER JOIN faculty_qualified_subjects fqs ON fqs.subject_id = bs.subject_id AND fqs.faculty_id = $1
+       WHERE s.college_id = $2 AND s.is_active = true`,
+      [user.id, user.college_id]
+    );
+    const subjectsByBatch: Record<string, { id: string; name: string; code: string; subject_type: string }[]> = {};
+    for (const row of batchSubjectRows) {
+      if (!subjectsByBatch[row.batch_id]) subjectsByBatch[row.batch_id] = [];
+      subjectsByBatch[row.batch_id].push({ id: row.id, name: row.name, code: row.code, subject_type: row.subject_type });
+    }
+
+    return NextResponse.json({ success: true, subjects, batches, subjectsByBatch });
   } catch (error: any) {
     console.error('Error in GET /api/faculty/assigned-subjects-batches:', error);
     return NextResponse.json(

@@ -198,18 +198,19 @@ export default function AssignmentPage() {
   const enterFullScreen = () => {
     const elem = document.documentElement;
     if (elem.requestFullscreen) {
-      elem.requestFullscreen().catch(err => {
-        console.error('Error entering fullscreen:', err);
-      });
-      setIsFullScreen(true);
+      elem.requestFullscreen()
+        .then(() => setIsFullScreen(true))
+        .catch(err => {
+          console.error('Error entering fullscreen:', err);
+        });
     }
   };
 
   const exitFullScreen = () => {
-    if (document.exitFullscreen) {
-      document.exitFullscreen();
-      setIsFullScreen(false);
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
     }
+    setIsFullScreen(false);
   };
 
   const toggleFullScreen = () => {

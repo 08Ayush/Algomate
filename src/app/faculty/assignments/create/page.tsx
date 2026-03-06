@@ -62,6 +62,8 @@ export default function CreateAssignment() {
   // Data lists
   const [batches, setBatches] = useState<Batch[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [subjectsByBatch, setSubjectsByBatch] = useState<Record<string, Subject[]>>({});
+  const [filteredSubjects, setFilteredSubjects] = useState<Subject[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
 
   // Question form state
@@ -109,6 +111,7 @@ export default function CreateAssignment() {
       if (data.success) {
         setBatches(data.batches || []);
         setSubjects(data.subjects || []);
+        setSubjectsByBatch(data.subjectsByBatch || {});
       } else {
         console.error('Failed to fetch assigned data:', data.error);
       }
@@ -164,8 +167,8 @@ export default function CreateAssignment() {
         totalMarks: parseFloat(totalMarks),
         passingMarks: passingMarks ? parseFloat(passingMarks) : null,
         durationMinutes: durationMinutes ? parseInt(durationMinutes) : null,
-        scheduledStart: scheduledStart || null,
-        scheduledEnd: scheduledEnd || null,
+        scheduledStart: scheduledStart ? new Date(scheduledStart).toISOString() : null,
+        scheduledEnd: scheduledEnd ? new Date(scheduledEnd).toISOString() : null,
         maxAttempts: parseInt(maxAttempts),
         proctoringEnabled: proctoringEnabled,
         maxViolations: parseInt(maxViolations),
@@ -332,7 +335,12 @@ export default function CreateAssignment() {
                   </label>
                   <select
                     value={batchId}
-                    onChange={(e) => setBatchId(e.target.value)}
+                    onChange={(e) => {
+                      const newBatchId = e.target.value;
+                      setBatchId(newBatchId);
+                      setSubjectId('');
+                      setFilteredSubjects(subjectsByBatch[newBatchId] || []);
+                    }}
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#4D869C] outline-none"
                     required
                   >
@@ -351,9 +359,14 @@ export default function CreateAssignment() {
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#4D869C] outline-none"
                   >
                     <option value="">Select Subject (Optional)</option>
-                    {subjects.map((subject) => (
-                      <option key={subject.id} value={subject.id}>{subject.name} ({subject.code})</option>
-                    ))}
+                    {filteredSubjects.length > 0
+                      ? filteredSubjects.map((subject) => (
+                          <option key={subject.id} value={subject.id}>{subject.name} ({subject.code})</option>
+                        ))
+                      : subjects.map((subject) => (
+                          <option key={subject.id} value={subject.id}>{subject.name} ({subject.code})</option>
+                        ))
+                    }
                   </select>
                 </div>
 
