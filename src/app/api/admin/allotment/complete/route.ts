@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const studentIds = students.map(s => s.id);
+    const studentIds = students.map((s: { id: string }) => s.id);
 
     // Mark all pending choices as allocated for the batch students
     const { error: updateError } = await supabase

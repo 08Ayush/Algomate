@@ -6,7 +6,7 @@ import { withCacheAside } from '@/shared/cache/cache-helper';
 import { redisCache } from '@/shared/cache/redis-cache';
 
 export class SupabaseDepartmentRepository implements IDepartmentRepository {
-    constructor(private readonly db: SupabaseClient<Database>) { }
+    constructor(private readonly db: SupabaseClient) { }
 
     private mapToEntity(row: any): Department {
         return new Department(
@@ -44,7 +44,7 @@ export class SupabaseDepartmentRepository implements IDepartmentRepository {
                 .select('*');
 
             if (error) throw error;
-            return data.map(row => this.mapToEntity(row));
+            return data.map((row: any) => this.mapToEntity(row));
         });
     }
 
@@ -64,7 +64,7 @@ export class SupabaseDepartmentRepository implements IDepartmentRepository {
 
         if (error) throw error;
         return {
-            items: (data || []).map(row => this.mapToEntity(row)),
+            items: (data || []).map((row: any) => this.mapToEntity(row)),
             total: count || 0
         };
     }

@@ -35,7 +35,7 @@ export class SupabaseClassroomRepository implements IClassroomRepository {
         const { data, error, count } = await query;
 
         if (error) throw error;
-        const items = (data || []).map(row => Classroom.fromDatabase(row));
+        const items = (data || []).map((row: any) => Classroom.fromDatabase(row));
         return { items, total: count || items.length };
     }
 
@@ -55,7 +55,7 @@ export class SupabaseClassroomRepository implements IClassroomRepository {
         const { data, error, count } = await query;
 
         if (error) throw error;
-        const items = (data || []).map(row => Classroom.fromDatabase(row));
+        const items = (data || []).map((row: any) => Classroom.fromDatabase(row));
         return { items, total: count || items.length };
     }
 

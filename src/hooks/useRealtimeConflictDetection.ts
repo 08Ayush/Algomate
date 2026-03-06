@@ -1,13 +1,37 @@
 // Neon does not support Realtime -- type stub for compatibility
 type RealtimeChannel = { unsubscribe: () => void };
 
-// Neon does not support Realtime -- type stub for backward compatibility
-
 /**
  * useRealtimeConflictDetection Hook
  * 
- * Subscribes to real-time conflict detection for timetable scheduling
- * Monitors master_scheduled_classes table for potential conflicts
+ * ⚠️ IMPORTANT: Uses POLLING instead of Realtime (Neon PostgreSQL limitation)
+ * 
+ * This hook provides conflict detection for timetable scheduling using
+ * a polling mechanism instead of realtime subscriptions.
+ * 
+ * HOW IT WORKS:
+ * 1. Checks for conflicts every 30 seconds
+ * 2. Fetches classes added/updated in the last 2 minutes
+ * 3. Automatically detects faculty and classroom double-bookings
+ * 4. Triggers onConflictDetected callback when conflicts are found
+ * 
+ * PERFORMANCE:
+ * - Polling interval: 30 seconds
+ * - Detection window: Last 2 minutes
+ * - Max classes checked per poll: 50
+ * 
+ * USAGE:
+ * ```typescript
+ * const { conflicts, loading, clearConflicts } = useRealtimeConflictDetection({
+ *   collegeId: 'college-123',
+ *   autoCheck: true,
+ *   onConflictDetected: (conflict) => {
+ *     toast.error(`Conflict detected: ${conflict.conflict_description}`);
+ *   }
+ * });
+ * ```
+ * 
+ * Currently monitors master_scheduled_classes table for potential conflicts.
  */
 
 import { useEffect, useState, useCallback } from 'react';
@@ -178,47 +202,71 @@ export function useRealtimeConflictDetection(options: UseRealtimeConflictDetecti
     }
   }, [options]);
 
-  // Setup Realtime subscription
+  // Setup polling-based conflict detection (Neon doesn't support Realtime)
   useEffect(() => {
     if (!options.autoCheck) return;
 
-    // Subscribe to master_scheduled_classes changes
-    const conflictChannel = supabaseBrowser
-      .channel(`conflicts:${options.collegeId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'master_scheduled_classes',
-        },
-        (payload) => {
-          console.log('⚠️ New class added to master registry:', payload.new);
-          checkForConflicts(payload.new);
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'master_scheduled_classes',
-        },
-        (payload) => {
-          console.log('⚠️ Class updated in master registry:', payload.new);
-          checkForConflicts(payload.new);
-        }
-      )
-      .subscribe((status) => {
-        console.log('🔌 Conflict detection channel status:', status);
-      });
+    console.log('🔄 Starting polling-based conflict detection (checking every 30 seconds)');
+    setLoading(true);
 
-    setChannel(conflictChannel);
+    // Check for recent conflicts immediately on mount
+    const checkRecentConflicts = async () => {
+      try {
+        // Fetch classes added/updated in the last 2 minutes
+        const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+        
+        const { data: recentClasses, error } = await supabaseBrowser
+          .from('master_scheduled_classes')
+          .select('*')
+          .eq('college_id', options.collegeId)
+          .gte('created_at', twoMinutesAgo)
+          .order('created_at', { ascending: false })
+          .limit(50);
 
-    // Cleanup
+        if (error) {
+          console.error('❌ Error fetching recent classes:', error);
+          setError(new Error(error.message || 'Failed to fetch recent classes'));
+          return;
+        }
+
+        if (recentClasses && recentClasses.length > 0) {
+          console.log(`🔍 Checking ${recentClasses.length} recent classes for conflicts`);
+          
+          // Check each recent class for conflicts
+          for (const cls of recentClasses) {
+            await checkForConflicts(cls);
+          }
+        }
+      } catch (err) {
+        console.error('❌ Error in conflict polling:', err);
+        setError(err instanceof Error ? err : new Error('Unknown polling error'));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Run immediately
+    checkRecentConflicts();
+
+    // Set up polling interval (every 30 seconds)
+    const pollInterval = setInterval(() => {
+      checkRecentConflicts();
+    }, 30000); // 30 seconds
+
+    // Create a cleanup object
+    const cleanupChannel: RealtimeChannel = {
+      unsubscribe: () => {
+        console.log('🔌 Stopping conflict detection polling');
+        clearInterval(pollInterval);
+      }
+    };
+
+    setChannel(cleanupChannel);
+
+    // Cleanup on unmount
     return () => {
-      console.log('🔌 Unsubscribing from conflict detection channel');
-      conflictChannel.unsubscribe();
+      console.log('🔌 Cleaning up conflict detection hook');
+      clearInterval(pollInterval);
     };
   }, [options.collegeId, options.autoCheck, checkForConflicts]);
 
@@ -226,11 +274,49 @@ export function useRealtimeConflictDetection(options: UseRealtimeConflictDetecti
     setConflicts([]);
   }, []);
 
+  // Manual check function that components can call on-demand
+  const manualCheck = useCallback(async () => {
+    setLoading(true);
+    try {
+      const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
+      
+      const { data: recentClasses, error } = await supabaseBrowser
+        .from('master_scheduled_classes')
+        .select('*')
+        .eq('college_id', options.collegeId)
+        .gte('created_at', oneMinuteAgo)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (error) {
+        console.error('❌ Manual check error:', error);
+        setError(new Error(error.message || 'Manual check failed'));
+        return;
+      }
+
+      if (recentClasses && recentClasses.length > 0) {
+        console.log(`🔍 Manual check: ${recentClasses.length} classes`);
+        for (const cls of recentClasses) {
+          await checkForConflicts(cls);
+        }
+      } else {
+        console.log('✅ Manual check: No recent classes to check');
+      }
+    } catch (err) {
+      console.error('❌ Manual check error:', err);
+      setError(err instanceof Error ? err : new Error('Manual check failed'));
+    } finally {
+      setLoading(false);
+    }
+  }, [options.collegeId, checkForConflicts]);
+
   return {
     conflicts,
     loading,
     error,
     clearConflicts,
+    manualCheck, // New: allow manual conflict checking
+    checkForConflicts, // Expose for checking specific classes
   };
 }
 

@@ -7,8 +7,8 @@ import { withCacheAside } from '@/shared/cache/cache-helper';
 import { redisCache } from '@/shared/cache/redis-cache';
 
 export class SupabaseFacultyRepository extends BaseRepository<'users', Faculty> implements IFacultyRepository {
-    constructor(db: SupabaseClient<Database>) {
-        super(db, 'users');
+    constructor(db: SupabaseClient) {
+        super(db as any, 'users');
     }
 
     private mapToEntity(row: any): Faculty {
@@ -55,7 +55,7 @@ export class SupabaseFacultyRepository extends BaseRepository<'users', Faculty> 
                 .eq('role', 'faculty');
 
             if (error) throw error;
-            return data.map(row => this.mapToEntity(row));
+            return data.map((row: any) => this.mapToEntity(row));
         });
     }
 
@@ -111,7 +111,7 @@ export class SupabaseFacultyRepository extends BaseRepository<'users', Faculty> 
 }
 
 export class SupabaseFacultyQualificationRepository implements IFacultyQualificationRepository {
-    constructor(private readonly db: SupabaseClient<Database>) { }
+    constructor(private readonly db: SupabaseClient) { }
 
     private mapToEntity(row: any): FacultyQualification {
         return new FacultyQualification(
@@ -148,7 +148,7 @@ export class SupabaseFacultyQualificationRepository implements IFacultyQualifica
             .eq('faculty_id', facultyId);
 
         if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+        return data.map((row: any) => this.mapToEntity(row));
     }
 
     async findBySubject(subjectId: string): Promise<FacultyQualification[]> {
@@ -158,7 +158,7 @@ export class SupabaseFacultyQualificationRepository implements IFacultyQualifica
             .eq('subject_id', subjectId);
 
         if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+        return data.map((row: any) => this.mapToEntity(row));
     }
 
     async create(qualification: Omit<FacultyQualification, 'id' | 'createdAt'>): Promise<FacultyQualification> {

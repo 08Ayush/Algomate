@@ -1,4 +1,4 @@
-import type { NeonClient as SupabaseClient } from '@/lib/neon-supabase-compat';
+import type { NeonClient } from '@/lib/neon-supabase-compat';
 import { ITimetableRepository, IScheduledClassRepository } from '../../domain/repositories/ITimetableRepository';
 import { Timetable, ScheduledClass } from '../../domain/entities/Timetable';
 import { Database } from '@/shared/database';
@@ -6,9 +6,9 @@ import { withCacheAside } from '@/shared/cache/cache-helper';
 import { redisCache } from '@/shared/cache/redis-cache';
 
 export class SupabaseTimetableRepository implements ITimetableRepository {
-    constructor(private readonly db: SupabaseClient<Database>) { }
+    constructor(private readonly db: NeonClient) { }
 
-    private mapToEntity(row: any): Timetable {
+    private mapToEntity(row: Record<string, any>): Timetable {
         return new Timetable(
             row.id,
             row.title || 'Untitled Timetable',
@@ -57,7 +57,7 @@ export class SupabaseTimetableRepository implements ITimetableRepository {
 
             // Remove the joined batches property before mapping to avoid type issues if needed,
             // or just rely on mapToEntity ignoring extra props.
-            return data.map(row => this.mapToEntity(row));
+            return data.map((row: Record<string, any>) => this.mapToEntity(row));
         });
     }
 
@@ -71,7 +71,7 @@ export class SupabaseTimetableRepository implements ITimetableRepository {
                 .eq('college_id', collegeId);
 
             if (error) throw error;
-            return data.map(row => this.mapToEntity(row));
+            return data.map((row: Record<string, any>) => this.mapToEntity(row));
         });
     }
 
@@ -85,7 +85,7 @@ export class SupabaseTimetableRepository implements ITimetableRepository {
                 .eq('batch_id', batchId);
 
             if (error) throw error;
-            return data.map(row => this.mapToEntity(row));
+            return data.map((row: Record<string, any>) => this.mapToEntity(row));
         });
     }
 
@@ -247,9 +247,9 @@ export class SupabaseTimetableRepository implements ITimetableRepository {
 }
 
 export class SupabaseScheduledClassRepository implements IScheduledClassRepository {
-    constructor(private readonly db: SupabaseClient<Database>) { }
+    constructor(private readonly db: NeonClient) { }
 
-    private mapToEntity(row: any): ScheduledClass {
+    private mapToEntity(row: Record<string, any>): ScheduledClass {
         return new ScheduledClass(
             row.id,
             row.timetable_id,
@@ -289,7 +289,7 @@ export class SupabaseScheduledClassRepository implements IScheduledClassReposito
             .eq('timetable_id', timetableId);
 
         if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+        return data.map((row: Record<string, any>) => this.mapToEntity(row));
     }
 
     async create(scheduledClass: Omit<ScheduledClass, 'id' | 'createdAt'>): Promise<ScheduledClass> {
@@ -336,7 +336,7 @@ export class SupabaseScheduledClassRepository implements IScheduledClassReposito
             .select();
 
         if (error) throw error;
-        return data.map((row: any) => this.mapToEntity(row));
+        return data.map((row: Record<string, any>) => this.mapToEntity(row));
     }
 
     async delete(id: string): Promise<boolean> {

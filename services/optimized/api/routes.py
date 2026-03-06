@@ -182,10 +182,20 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS – allow Next.js frontend (localhost:3000) and any origin in dev
+# CORS – allow Next.js frontend from all environments
+# TODO: Before production deploy, replace "*" with specific domains
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",           # Local development
+    "http://localhost:3001",           # Alternative local port
+    "https://*.vercel.app",            # All Vercel preview deployments
+    # Add your production domains here:
+    # "https://your-project.vercel.app",
+    # "https://yourdomain.com",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # restrict in production
+    allow_origins=["*"],  # ⚠️ SECURITY: Change to ALLOWED_ORIGINS list before production!
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

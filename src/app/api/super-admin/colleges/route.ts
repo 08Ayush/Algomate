@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
 
     // Get counts for each college
     const collegesWithCounts = await Promise.all(
-      colleges.map(async (college) => {
+      colleges.map(async (college: typeof colleges[number]) => {
         // Count departments
         const { count: deptCount } = await supabaseAdmin
           .from('departments')

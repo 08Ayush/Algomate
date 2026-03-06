@@ -1,4 +1,3 @@
-import { serviceDb as supabase } from '@/shared/database';
 import { PageLoader } from '@/components/ui/PageLoader';
 /*
 ===============================================================================
@@ -261,6 +260,7 @@ export default function NEPCurriculumPage() {
 
   async function fetchCourses(collegeId: string) {
     try {
+      const supabase = createClient();
       const { data, error } = await supabase
         .from('courses')
         .select('id, title, code, nature_of_course, intake, duration_years, college_id')

@@ -12,7 +12,7 @@ import { redisCache } from '@/shared/cache/redis-cache';
  * Implements IUserRepository using Supabase
  */
 export class SupabaseUserRepository implements IUserRepository {
-    constructor(private readonly db: SupabaseClient<any>) { }
+    constructor(private readonly db: SupabaseClient) { }
 
     /**
      * Map database row to User entity
@@ -128,7 +128,7 @@ export class SupabaseUserRepository implements IUserRepository {
 
         if (error) throw error;
 
-        return data.map(row => this.mapToEntity(row));
+        return data.map((row: any) => this.mapToEntity(row));
     }
 
     /**
@@ -142,7 +142,7 @@ export class SupabaseUserRepository implements IUserRepository {
 
         if (error) throw error;
 
-        return data.map(row => this.mapToEntity(row));
+        return data.map((row: any) => this.mapToEntity(row));
     }
 
     /**
@@ -162,7 +162,7 @@ export class SupabaseUserRepository implements IUserRepository {
 
         if (error) throw error;
 
-        return data.map(row => this.mapToEntity(row));
+        return data.map((row: any) => this.mapToEntity(row));
     }
 
     /**
@@ -176,7 +176,7 @@ export class SupabaseUserRepository implements IUserRepository {
 
         if (error) throw error;
 
-        return data.map(row => this.mapToEntity(row));
+        return data.map((row: any) => this.mapToEntity(row));
     }
 
     /**

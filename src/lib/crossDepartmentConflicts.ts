@@ -215,7 +215,7 @@ async function checkFacultyConflicts(
       const timeSlot = classes[0].time_slots;
 
       // Build conflict record
-      const conflictingTimetables = existingClasses.map(existing => {
+      const conflictingTimetables = existingClasses.map((existing: any) => {
         const timetableData = Array.isArray(existing.master_accepted_timetables) 
           ? existing.master_accepted_timetables[0] 
           : existing.master_accepted_timetables;
@@ -347,7 +347,7 @@ async function checkClassroomConflicts(
       const timeSlot = classes[0].time_slots;
 
       // Build conflict record
-      const conflictingTimetables = existingClasses.map(existing => {
+      const conflictingTimetables = existingClasses.map((existing: any) => {
         const timetableData = Array.isArray(existing.master_accepted_timetables) 
           ? existing.master_accepted_timetables[0] 
           : existing.master_accepted_timetables;
@@ -471,7 +471,7 @@ export async function getUnresolvedConflicts(
 
     if (error) throw error;
 
-    return (data || []).map(record => ({
+    return (data || []).map((record: any) => ({
       conflict_id: record.id,
       resource_type: record.resource_type,
       resource_id: record.resource_id,

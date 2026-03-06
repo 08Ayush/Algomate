@@ -194,7 +194,7 @@ export async function POST(request: NextRequest) {
 
     // Create time slot mapping
     const timeSlotMap = new Map();
-    timeSlots?.forEach(slot => {
+    timeSlots?.forEach((slot: TimeSlot) => {
       const startTime = slot.start_time.substring(0, 5);
       const key = `${slot.day}-${startTime}`;
       timeSlotMap.set(key, slot.id);
@@ -352,7 +352,7 @@ export async function POST(request: NextRequest) {
 
         // Find first available classroom not used in this time slot
         const availableClassroom = availableClassrooms.find(
-          classroom => !usedClassrooms.has(classroom.id)
+          (classroom: any) => !usedClassrooms.has(classroom.id)
         );
 
         if (availableClassroom) {
@@ -533,7 +533,7 @@ export async function POST(request: NextRequest) {
       console.log(`✅ Loaded ${constraintRules.length} constraint rules for validation${enabled_constraint_ids ? ' (filtered by UI selection)' : ''}`);
 
       // Prepare time slots data
-      const timeSlotData: TimeSlot[] = (timeSlots || []).map(ts => ({
+      const timeSlotData: TimeSlot[] = (timeSlots || []).map((ts: any) => ({
         id: ts.id,
         day: ts.day,
         start_time: ts.start_time,

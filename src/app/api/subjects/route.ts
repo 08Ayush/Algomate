@@ -181,7 +181,7 @@ export async function GET(request: NextRequest) {
     for (let sem = 1; sem <= 8; sem++) {
       groupedBySemester[sem] = [];
     }
-    filteredData.forEach(subject => {
+    filteredData.forEach((subject: typeof transformedData[0]) => {
       const sem = subject.semester;
       if (sem >= 1 && sem <= 8) {
         groupedBySemester[sem].push(subject);
@@ -191,10 +191,10 @@ export async function GET(request: NextRequest) {
     // Statistics (on returned data/total)
     const statistics = {
       totalSubjects: count || 0,
-      totalCredits: filteredData.reduce((sum, s) => sum + (s.credits || 0), 0),
-      coreSubjects: filteredData.filter(s => s.is_core_subject).length,
-      theorySubjects: filteredData.filter(s => s.subject_type === 'THEORY').length,
-      labSubjects: filteredData.filter(s => s.subject_type === 'LAB' || s.subject_type === 'PRACTICAL').length,
+      totalCredits: filteredData.reduce((sum: number, s: typeof transformedData[0]) => sum + (s.credits || 0), 0),
+      coreSubjects: filteredData.filter((s: typeof transformedData[0]) => s.is_core_subject).length,
+      theorySubjects: filteredData.filter((s: typeof transformedData[0]) => s.subject_type === 'THEORY').length,
+      labSubjects: filteredData.filter((s: typeof transformedData[0]) => s.subject_type === 'LAB' || s.subject_type === 'PRACTICAL').length,
     };
 
     if (isPaginated && page && limit) {

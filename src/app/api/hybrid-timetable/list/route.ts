@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
         .select('id')
         .eq('department_id', department_id);
 
-      const batchIds = batches?.map(b => b.id) || [];
+      const batchIds = batches?.map((b: { id: string }) => b.id) || [];
       if (batchIds.length > 0) {
         query = query.in('batch_id', batchIds);
       }

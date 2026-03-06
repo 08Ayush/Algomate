@@ -55,10 +55,7 @@ export async function getCachedTimetablePDF(
     const path = timetableId;
     const { data: files, error } = await supabaseBrowser.storage
       .from(TIMETABLE_PDFS_BUCKET)
-      .list(path, {
-        sortBy: { column: 'created_at', order: 'desc' },
-        limit: 1,
-      });
+      .list(path, { sortBy: { column: 'created_at', order: 'desc' }, limit: 1 });
 
     if (error || !files || files.length === 0) {
       return null;
@@ -138,9 +135,7 @@ export async function listTimetablePDFs(
     
     const { data: files, error } = await supabaseBrowser.storage
       .from(TIMETABLE_PDFS_BUCKET)
-      .list(path, {
-        sortBy: { column: 'created_at', order: 'desc' },
-      });
+      .list(path, { sortBy: { column: 'created_at', order: 'desc' } });
 
     if (error || !files) return [];
 

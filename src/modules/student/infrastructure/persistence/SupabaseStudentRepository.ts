@@ -5,7 +5,7 @@ import { Database } from '@/shared/database';
 import { withCacheAside } from '@/shared/cache/cache-helper';
 
 export class SupabaseStudentRepository implements IStudentRepository {
-    constructor(private readonly db: SupabaseClient<Database>) { }
+    constructor(private readonly db: SupabaseClient) { }
 
     private mapToEntity(row: any): Student {
         return new Student(
@@ -49,7 +49,7 @@ export class SupabaseStudentRepository implements IStudentRepository {
                 .eq('batch_id', batchId); // Added the missing filter match
 
             if (error) throw error;
-            return data.map(row => this.mapToEntity(row));
+            return data.map((row: any) => this.mapToEntity(row));
         });
     }
 
@@ -106,7 +106,7 @@ export class SupabaseStudentRepository implements IStudentRepository {
 }
 
 export class SupabaseBatchRepository implements IBatchRepository {
-    constructor(private readonly db: SupabaseClient<Database>) { }
+    constructor(private readonly db: SupabaseClient) { }
 
     private mapToEntity(row: any): Batch {
         return new Batch(
@@ -144,7 +144,7 @@ export class SupabaseBatchRepository implements IBatchRepository {
                 .eq('department_id', departmentId);
 
             if (error) throw error;
-            return data.map(row => this.mapToEntity(row));
+            return data.map((row: any) => this.mapToEntity(row));
         });
     }
 

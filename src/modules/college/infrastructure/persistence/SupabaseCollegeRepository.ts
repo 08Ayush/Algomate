@@ -4,7 +4,7 @@ import { College } from '../../domain/entities/College';
 import { BaseRepository, Database } from '@/shared/database';
 
 export class SupabaseCollegeRepository extends BaseRepository<'colleges', College> implements ICollegeRepository {
-    constructor(db: SupabaseClient<Database>) {
+    constructor(db: SupabaseClient) {
         super(db, 'colleges');
     }
 

@@ -99,13 +99,13 @@ export async function POST(request: NextRequest) {
 
     console.log('👥 Faculty data retrieved:', {
       total_faculty: facultyData?.length || 0,
-      faculty_with_qualifications: facultyData?.filter(f =>
+      faculty_with_qualifications: facultyData?.filter((f: any) =>
         f.faculty_qualified_subjects && f.faculty_qualified_subjects.length > 0
       ).length || 0
     });
 
     // Log each faculty's qualifications
-    facultyData?.forEach(f => {
+    facultyData?.forEach((f: any) => {
       if (f.faculty_qualified_subjects && f.faculty_qualified_subjects.length > 0) {
         console.log(`  - ${f.first_name} ${f.last_name}: ${f.faculty_qualified_subjects.length} qualified subjects`);
       } else {
@@ -131,13 +131,13 @@ export async function POST(request: NextRequest) {
 
     console.log('📚 Subject data retrieved:', {
       total_subjects: subjectsData?.length || 0,
-      theory_subjects: subjectsData?.filter(s => s.subject_type === 'THEORY').length || 0,
-      lab_subjects: subjectsData?.filter(s => s.subject_type === 'LAB' || s.subject_type === 'PRACTICAL').length || 0
+      theory_subjects: subjectsData?.filter((s: any) => s.subject_type === 'THEORY').length || 0,
+      lab_subjects: subjectsData?.filter((s: any) => s.subject_type === 'LAB' || s.subject_type === 'PRACTICAL').length || 0
     });
 
     // Log qualified faculty for each subject
-    subjectsData?.forEach(subject => {
-      const qualifiedFaculty = facultyData?.filter(f =>
+    subjectsData?.forEach((subject: any) => {
+      const qualifiedFaculty = facultyData?.filter((f: any) =>
         f.faculty_qualified_subjects?.some((qs: any) => qs.subject_id === subject.id)
       ) || [];
 
@@ -184,7 +184,7 @@ export async function POST(request: NextRequest) {
 
     // Log classroom names to verify department filter
     if (classrooms && classrooms.length > 0) {
-      console.log('🏫 Department classrooms:', classrooms.map(c => `${c.name} (${c.type})`).join(', '));
+      console.log('🏫 Department classrooms:', classrooms.map((c: any) => `${c.name} (${c.type})`).join(', '));
     } else {
       console.warn('⚠️ No classrooms found for department:', department_id);
     }
@@ -219,7 +219,7 @@ export async function POST(request: NextRequest) {
     const existingClassroomOccupancy = new Map<string, Set<string>>();
 
     // Get the IDs of classrooms in this department for filtering
-    const departmentClassroomIds = new Set(classrooms?.map(c => c.id) || []);
+    const departmentClassroomIds = new Set(classrooms?.map((c: any) => c.id) || []);
 
     if (existingTimetables && existingTimetables.length > 0) {
       console.log(`📋 Found ${existingTimetables.length} existing scheduled classes in same department`);
@@ -259,18 +259,18 @@ export async function POST(request: NextRequest) {
     console.log('🎯 Constraints:', constraints.length, 'enabled');
 
     // Separate classrooms and labs
-    const regularClassrooms = classrooms?.filter(c =>
+    const regularClassrooms = classrooms?.filter((c: any) =>
       c.type === 'Lecture Hall' || c.type === 'Tutorial Room' || c.type === 'Seminar Room'
     ) || [];
-    const labs = classrooms?.filter(c =>
+    const labs = classrooms?.filter((c: any) =>
       c.type === 'Lab'
     ) || [];
 
     // Group time slots by day
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const timeSlotsByDay = days.map(day => {
-      const slots = timeSlots?.filter(ts => ts.day === day) || [];
-      return slots.map(slot => ({
+      const slots = timeSlots?.filter((ts: any) => ts.day === day) || [];
+      return slots.map((slot: any) => ({
         time: slot.start_time.substring(0, 5), // "09:00:00" -> "09:00"
         displayTime: `${slot.start_time.substring(0, 5)}-${slot.end_time.substring(0, 5)}`,
         duration: 60
@@ -363,10 +363,10 @@ export async function POST(request: NextRequest) {
       score += Math.min(classroomUsage * 2, 20);
 
       // SC005: Consecutive Classes (prefer consecutive slots for same faculty)
-      const previousSlot = schedule.find(s =>
+      const previousSlot = schedule.find((s: any) =>
         s.day === day &&
         s.faculty_id === faculty.id &&
-        timeSlotsPerDay.indexOf(timeSlotsPerDay.find(ts => ts.time === s.time)!) ===
+        timeSlotsPerDay.indexOf(timeSlotsPerDay.find((ts: any) => ts.time === s.time)!) ===
         timeSlotsPerDay.indexOf(timeSlot) - 1
       );
       if (previousSlot) score += 15;
@@ -457,7 +457,7 @@ export async function POST(request: NextRequest) {
 
       // Log current state
       const occupiedNames = Array.from(allOccupiedClassrooms).map(id => {
-        const room = classrooms?.find(c => c.id === id);
+        const room = classrooms?.find((c: any) => c.id === id);
         return room?.name || id.substring(0, 8);
       });
 
@@ -569,9 +569,9 @@ export async function POST(request: NextRequest) {
       const requiredHours = subject.credits_per_week || 2;
       const sessionsNeeded = Math.ceil(requiredHours / 2);
 
-      const qualifiedFaculty = facultyData?.filter(f =>
+      const qualifiedFaculty = facultyData?.filter((f: any) =>
         f.faculty_qualified_subjects?.some((qs: any) => qs.subject_id === subject.id)
-      ).sort((a, b) => {
+      ).sort((a: any, b: any) => {
         const aProf = a.faculty_qualified_subjects?.find((qs: any) => qs.subject_id === subject.id)?.proficiency_level || 0;
         const bProf = b.faculty_qualified_subjects?.find((qs: any) => qs.subject_id === subject.id)?.proficiency_level || 0;
         return bProf - aProf;
@@ -671,9 +671,9 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        const qualifiedFaculty = facultyData?.filter(f =>
+        const qualifiedFaculty = facultyData?.filter((f: any) =>
           f.faculty_qualified_subjects?.some((qs: any) => qs.subject_id === subject.id)
-        ).sort((a, b) => {
+        ).sort((a: any, b: any) => {
           const aProf = a.faculty_qualified_subjects?.find((qs: any) => qs.subject_id === subject.id)?.proficiency_level || 0;
           const bProf = b.faculty_qualified_subjects?.find((qs: any) => qs.subject_id === subject.id)?.proficiency_level || 0;
           return bProf - aProf;
@@ -772,7 +772,7 @@ export async function POST(request: NextRequest) {
           let bestScore = -Infinity;
 
           for (const subject of theorySubjects) {
-            const qualifiedFaculty = facultyData?.filter(f =>
+            const qualifiedFaculty = facultyData?.filter((f: any) =>
               f.faculty_qualified_subjects?.some((qs: any) => qs.subject_id === subject.id)
             ) || [];
 

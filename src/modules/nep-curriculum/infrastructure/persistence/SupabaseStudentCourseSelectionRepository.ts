@@ -6,7 +6,7 @@ import { withCacheAside } from '@/shared/cache/cache-helper';
 import { redisCache } from '@/shared/cache/redis-cache';
 
 export class SupabaseStudentCourseSelectionRepository implements IStudentCourseSelectionRepository {
-    constructor(private readonly db: SupabaseClient<Database>) { }
+    constructor(private readonly db: SupabaseClient) { }
 
     private mapToEntity(row: any): StudentCourseSelection {
         return new StudentCourseSelection(
@@ -37,7 +37,7 @@ export class SupabaseStudentCourseSelectionRepository implements IStudentCourseS
             const { data, error } = await query.order('id', { ascending: false });
 
             if (error) throw error;
-            return data.map(row => this.mapToEntity(row));
+            return data.map((row: any) => this.mapToEntity(row));
         });
     }
 
@@ -71,7 +71,7 @@ export class SupabaseStudentCourseSelectionRepository implements IStudentCourseS
                 .eq('selection_type', 'MAJOR');
 
             if (error) throw error;
-            return data.map(row => this.mapToEntity(row));
+            return data.map((row: any) => this.mapToEntity(row));
         });
     }
 

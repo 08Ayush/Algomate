@@ -3,11 +3,28 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   typescript: {
     // Route handler params in Next.js 15 are Promise-based; suppress type validation during build
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   eslint: {
     // ESLint errors are downgraded to warnings in eslint.config.mjs; prevent blocking build
     ignoreDuringBuilds: false,
+  },
+  experimental: {
+    // Exclude Node.js-only packages from client bundle
+    serverComponentsExternalPackages: ['pg', 'pg-native'],
+  },
+  // Webpack configuration (fallback when not using Turbopack)
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+        dns: false,
+      };
+    }
+    return config;
   },
 };
 

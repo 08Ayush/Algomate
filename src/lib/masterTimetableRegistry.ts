@@ -136,7 +136,7 @@ export async function publishToMasterRegistry(
     console.log(`✅ Created master timetable entry: ${masterTimetable.id}`);
 
     // 5. Copy scheduled classes to master registry
-    const masterClasses = scheduledClasses.map(cls => ({
+    const masterClasses = scheduledClasses.map((cls: any) => ({
       master_timetable_id: masterTimetable.id,
       timetable_id: timetableId,
       batch_id: cls.batch_id,
@@ -342,7 +342,7 @@ export async function getResourceOccupation(
       };
     }
 
-    const masterIds = masterTimetables.map(mt => mt.id);
+    const masterIds = masterTimetables.map((mt: { id: string }) => mt.id);
 
     const { data: classes } = await supabase
       .from('master_scheduled_classes')
@@ -354,7 +354,7 @@ export async function getResourceOccupation(
     const classroomOccupation = new Map<string, number>();
     const timeSlotOccupation = new Map<string, number>();
 
-    (classes || []).forEach(cls => {
+    (classes || []).forEach((cls: { faculty_id: string; classroom_id: string; time_slot_id: string }) => {
       facultyOccupation.set(
         cls.faculty_id,
         (facultyOccupation.get(cls.faculty_id) || 0) + 1
@@ -419,7 +419,7 @@ export async function isResourceAvailable(
 
       if (masterTimetable) {
         const conflictsFromOthers = data.filter(
-          cls => cls.master_timetable_id !== masterTimetable.id
+          (cls: { id: string; master_timetable_id: string }) => cls.master_timetable_id !== masterTimetable.id
         );
         return conflictsFromOthers.length === 0;
       }
@@ -476,7 +476,7 @@ export async function getMasterRegistryStats(
       };
     }
 
-    const masterIds = timetables.map(t => t.id);
+    const masterIds = timetables.map((t: { id: string; department_id: string }) => t.id);
 
     // Get all classes
     const { data: classes } = await supabase
@@ -485,9 +485,9 @@ export async function getMasterRegistryStats(
       .in('master_timetable_id', masterIds);
 
     // Calculate unique resources
-    const uniqueFaculty = new Set((classes || []).map(c => c.faculty_id));
-    const uniqueClassrooms = new Set((classes || []).map(c => c.classroom_id));
-    const uniqueDepartments = new Set(timetables.map(t => t.department_id));
+    const uniqueFaculty = new Set((classes || []).map((c: { faculty_id: string; classroom_id: string }) => c.faculty_id));
+    const uniqueClassrooms = new Set((classes || []).map((c: { faculty_id: string; classroom_id: string }) => c.classroom_id));
+    const uniqueDepartments = new Set(timetables.map((t: { id: string; department_id: string }) => t.department_id));
 
     return {
       total_timetables: timetables.length,

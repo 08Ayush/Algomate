@@ -204,7 +204,7 @@ export async function getSignedUrl(
       .createSignedUrl(filePath, expiresIn);
 
     if (error) throw error;
-    return data.signedUrl;
+    return data?.signedUrl ?? null;
   } catch (error) {
     console.error('Error generating signed URL:', error);
     return null;

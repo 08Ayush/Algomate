@@ -27,7 +27,7 @@ export class SupabaseBatchRepository implements IBatchRepository {
             .order('created_at', { ascending: false });
 
         if (error) throw error;
-        return (data || []).map(row => Batch.fromDatabase(row));
+        return (data || []).map((row: any) => Batch.fromDatabase(row));
     }
 
     async findByDepartmentId(departmentId: string): Promise<Batch[]> {
@@ -38,7 +38,7 @@ export class SupabaseBatchRepository implements IBatchRepository {
             .order('created_at', { ascending: false });
 
         if (error) throw error;
-        return (data || []).map(row => Batch.fromDatabase(row));
+        return (data || []).map((row: any) => Batch.fromDatabase(row));
     }
 
     async create(batch: CreateBatchData): Promise<Batch> {

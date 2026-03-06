@@ -61,7 +61,7 @@ export async function calculateResourceUtilization(params: {
       return { success: false, error: timetableError.message };
     }
 
-    const timetableIds = timetables?.map(t => t.id) || [];
+    const timetableIds = timetables?.map((t: { id: string }) => t.id) || [];
 
     if (timetableIds.length === 0) {
       // No timetables published yet - create zero stats
@@ -135,11 +135,11 @@ export async function calculateResourceUtilization(params: {
 
     // Calculate statistics
     const totalClasses = classes?.length || 0;
-    const uniqueBatches = new Set(classes?.map(c => c.batch_id) || []).size;
-    const uniqueSubjects = new Set(classes?.map(c => c.subject_id) || []).size;
+    const uniqueBatches = new Set(classes?.map((c: any) => c.batch_id) || []).size;
+    const uniqueSubjects = new Set(classes?.map((c: any) => c.subject_id) || []).size;
     
     // Calculate total hours (assuming each class is 1 hour if duration not available)
-    const totalHours = classes?.reduce((sum, cls: any) => {
+    const totalHours = classes?.reduce((sum: number, cls: any) => {
       const duration = cls.time_slots?.duration_minutes || 60;
       return sum + (duration / 60);
     }, 0) || 0;
@@ -166,7 +166,7 @@ export async function calculateResourceUtilization(params: {
       .eq('resolved', false);
 
     const totalConflicts = conflicts?.length || 0;
-    const criticalConflicts = conflicts?.filter(c => c.severity === 'CRITICAL').length || 0;
+    const criticalConflicts = conflicts?.filter((c: any) => c.severity === 'CRITICAL').length || 0;
 
     // Calculate additional statistics
     const statistics = {
@@ -428,24 +428,24 @@ export async function getUtilizationAnalytics(params: {
     const analytics = {
       total_resources: data?.length || 0,
       by_type: {
-        faculty: data?.filter(r => r.resource_type === 'faculty').length || 0,
-        classroom: data?.filter(r => r.resource_type === 'classroom').length || 0,
-        time_slot: data?.filter(r => r.resource_type === 'time_slot').length || 0
+        faculty: data?.filter((r: ResourceUtilization) => r.resource_type === 'faculty').length || 0,
+        classroom: data?.filter((r: ResourceUtilization) => r.resource_type === 'classroom').length || 0,
+        time_slot: data?.filter((r: ResourceUtilization) => r.resource_type === 'time_slot').length || 0
       },
       by_capacity_status: {
-        underutilized: data?.filter(r => r.capacity_status === 'underutilized').length || 0,
-        optimal: data?.filter(r => r.capacity_status === 'optimal').length || 0,
-        near_capacity: data?.filter(r => r.capacity_status === 'near_capacity').length || 0,
-        overutilized: data?.filter(r => r.capacity_status === 'overutilized').length || 0
+        underutilized: data?.filter((r: ResourceUtilization) => r.capacity_status === 'underutilized').length || 0,
+        optimal: data?.filter((r: ResourceUtilization) => r.capacity_status === 'optimal').length || 0,
+        near_capacity: data?.filter((r: ResourceUtilization) => r.capacity_status === 'near_capacity').length || 0,
+        overutilized: data?.filter((r: ResourceUtilization) => r.capacity_status === 'overutilized').length || 0
       },
       average_utilization: {
-        faculty: calculateAverage(data?.filter(r => r.resource_type === 'faculty'), 'utilization_percentage'),
-        classroom: calculateAverage(data?.filter(r => r.resource_type === 'classroom'), 'utilization_percentage'),
-        time_slot: calculateAverage(data?.filter(r => r.resource_type === 'time_slot'), 'utilization_percentage'),
+        faculty: calculateAverage(data?.filter((r: ResourceUtilization) => r.resource_type === 'faculty'), 'utilization_percentage'),
+        classroom: calculateAverage(data?.filter((r: ResourceUtilization) => r.resource_type === 'classroom'), 'utilization_percentage'),
+        time_slot: calculateAverage(data?.filter((r: ResourceUtilization) => r.resource_type === 'time_slot'), 'utilization_percentage'),
         overall: calculateAverage(data, 'utilization_percentage')
       },
-      total_conflicts: data?.reduce((sum, r) => sum + (r.total_conflicts_count || 0), 0) || 0,
-      critical_conflicts: data?.reduce((sum, r) => sum + (r.critical_conflicts_count || 0), 0) || 0
+      total_conflicts: data?.reduce((sum: number, r: ResourceUtilization) => sum + (r.total_conflicts_count || 0), 0) || 0,
+      critical_conflicts: data?.reduce((sum: number, r: ResourceUtilization) => sum + (r.critical_conflicts_count || 0), 0) || 0
     };
 
     return { success: true, data: analytics };

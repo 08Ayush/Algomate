@@ -254,7 +254,7 @@ export async function getFacultyUnavailableSlots(
       return [];
     }
 
-    return data?.map(d => d.time_slot_id) || [];
+    return data?.map((d: { time_slot_id: string }) => d.time_slot_id) || [];
   } catch (error) {
     console.error('⚠️ Exception in getFacultyUnavailableSlots:', error);
     return [];
@@ -288,12 +288,12 @@ export async function getFacultyPreferences(
     }
 
     const preferred = data
-      ?.filter(d => d.availability_type === 'preferred')
-      .map(d => ({ timeSlotId: d.time_slot_id, weight: d.preference_weight })) || [];
+      ?.filter((d: { availability_type: string; time_slot_id: string; preference_weight: number }) => d.availability_type === 'preferred')
+      .map((d: { availability_type: string; time_slot_id: string; preference_weight: number }) => ({ timeSlotId: d.time_slot_id, weight: d.preference_weight })) || [];
 
     const avoid = data
-      ?.filter(d => d.availability_type === 'avoid')
-      .map(d => ({ timeSlotId: d.time_slot_id, weight: d.preference_weight })) || [];
+      ?.filter((d: { availability_type: string; time_slot_id: string; preference_weight: number }) => d.availability_type === 'avoid')
+      .map((d: { availability_type: string; time_slot_id: string; preference_weight: number }) => ({ timeSlotId: d.time_slot_id, weight: d.preference_weight })) || [];
 
     return { preferred, avoid };
   } catch (error) {
@@ -385,7 +385,7 @@ export async function getAllFacultyAvailabilitySummary(
 
     // Get availability counts for each faculty
     const summaries = await Promise.all(
-      (faculty || []).map(async (fac) => {
+      (faculty || []).map(async (fac: typeof faculty[number]) => {
         const { count: unavailableCount } = await supabase
           .from('faculty_availability')
           .select('*', { count: 'exact', head: true })

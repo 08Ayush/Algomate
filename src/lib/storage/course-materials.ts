@@ -128,9 +128,7 @@ export async function listCourseMaterials(
     
     const { data, error } = await supabaseBrowser.storage
       .from(COURSE_MATERIALS_BUCKET)
-      .list(path, {
-        sortBy: { column: 'created_at', order: 'desc' },
-      });
+      .list(path);
 
     if (error) throw error;
 
@@ -176,8 +174,8 @@ export async function listMaterialCategories(subjectId: string): Promise<string[
 
     // Filter folders (categories)
     const folders = data
-      .filter(item => item.id === null) // Folders have null id in Supabase
-      .map(item => item.name);
+      .filter(item => item.name.endsWith('/')) // Folders end with / in Supabase
+      .map(item => item.name.replace(/\/$/, '')); // Remove trailing slash
 
     return folders;
   } catch (error) {

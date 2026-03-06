@@ -36,7 +36,7 @@ export class SupabaseCourseRepository implements ICourseRepository {
         if (error) throw error;
 
         return {
-            items: (data || []).map(row => Course.fromDatabase(row)),
+            items: (data || []).map((row: any) => Course.fromDatabase(row)),
             total: count || 0
         };
     }
@@ -58,7 +58,7 @@ export class SupabaseCourseRepository implements ICourseRepository {
         if (error) throw error;
 
         return {
-            items: (data || []).map(row => Course.fromDatabase(row)),
+            items: (data || []).map((row: any) => Course.fromDatabase(row)),
             total: count || 0
         };
     }

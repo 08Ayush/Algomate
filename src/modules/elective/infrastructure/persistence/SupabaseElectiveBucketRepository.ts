@@ -26,7 +26,7 @@ export class SupabaseElectiveBucketRepository implements IElectiveBucketReposito
             .eq('batch_id', batchId);
 
         if (error) throw error;
-        return (data || []).map(row => ElectiveBucket.fromDatabase(row));
+        return (data || []).map((row: any) => ElectiveBucket.fromDatabase(row));
     }
 
     async findByCollegeId(collegeId: string): Promise<ElectiveBucket[]> {
@@ -39,7 +39,7 @@ export class SupabaseElectiveBucketRepository implements IElectiveBucketReposito
             .eq('batches.college_id', collegeId);
 
         if (error) throw error;
-        return (data || []).map(row => ElectiveBucket.fromDatabase(row));
+        return (data || []).map((row: any) => ElectiveBucket.fromDatabase(row));
     }
 
     async create(bucket: Omit<ElectiveBucket, 'id' | 'createdAt' | 'updatedAt'>): Promise<ElectiveBucket> {

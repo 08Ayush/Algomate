@@ -4,7 +4,7 @@ import { ConstraintRule } from '../../domain/entities/ConstraintRule';
 import { Database } from '@/shared/database';
 
 export class SupabaseConstraintRepository implements IConstraintRepository {
-    constructor(private readonly db: SupabaseClient<Database>) { }
+    constructor(private readonly db: SupabaseClient) { }
 
     private mapToEntity(row: any): ConstraintRule {
         return new ConstraintRule(
@@ -27,7 +27,7 @@ export class SupabaseConstraintRepository implements IConstraintRepository {
             .order('weight', { ascending: false });
 
         if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+        return data.map((row: any) => this.mapToEntity(row));
     }
 
     async findByDepartment(departmentId: string): Promise<ConstraintRule[]> {
@@ -44,9 +44,9 @@ export class SupabaseConstraintRepository implements IConstraintRepository {
 
         if (error) throw error;
 
-        const allRules = data.map(row => this.mapToEntity(row));
+        const allRules = data.map((row: any) => this.mapToEntity(row));
 
-        return allRules.filter(rule =>
+        return allRules.filter((rule: ConstraintRule) =>
             !rule.appliesToDepartments ||
             rule.appliesToDepartments.length === 0 ||
             rule.appliesToDepartments.includes(departmentId)

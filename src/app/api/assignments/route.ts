@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
         lowest_score: 0,
         avg_time_taken: 0,
       })
-      .then(({ error: analyticsError }) => {
+      .then(({ error: analyticsError }: { error: any }) => {
         if (analyticsError) console.error('Analytics initialization error:', analyticsError);
       });
 

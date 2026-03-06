@@ -8,7 +8,7 @@ function getSupabase(): SupabaseClient {
     if (!_supabase) {
         _supabase = supabase;
     }
-    return _supabase;
+    return _supabase as SupabaseClient;
 }
 
 // Helper function to decode and verify user from token

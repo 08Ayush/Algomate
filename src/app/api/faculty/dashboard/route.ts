@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
 
     // Get dashboard stats
     const stats = {
-      activeTimetables: recentActivities?.filter(t => t.status === 'published').length || 0,
+      activeTimetables: recentActivities?.filter((t: typeof recentActivities[number]) => t.status === 'published').length || 0,
       totalTimetables: recentActivities?.length || 0,
       qualifiedSubjects: qualifiedSubjects?.length || 0,
       scheduledClasses: schedule?.length || 0

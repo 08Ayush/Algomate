@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
 
         // Transform array to object for easier frontend consumption
         const settingsObject: Record<string, any> = {};
-        settings?.forEach(setting => {
+        settings?.forEach((setting: any) => {
             let value = setting.setting_value;
 
             // Parse value based on type

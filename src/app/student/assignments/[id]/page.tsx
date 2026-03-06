@@ -71,6 +71,7 @@ export default function AssignmentPage() {
   const [showAlreadySubmittedDialog, setShowAlreadySubmittedDialog] = useState(false);
   const [submissionResult, setSubmissionResult] = useState<any>(null);
   const [existingSubmission, setExistingSubmission] = useState<any>(null);
+  const [blockedReason, setBlockedReason] = useState<{ code: string; message: string; detail?: string } | null>(null);
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -133,7 +134,7 @@ export default function AssignmentPage() {
     try {
       setLoading(true);
       const token = btoa(JSON.stringify({
-        user_id: user.id,
+        id: user.id,
         role: user.role,
         college_id: user.college_id
       }));
@@ -154,6 +155,23 @@ export default function AssignmentPage() {
             submitted_at: errorData.submission.submitted_at
           });
           setShowAlreadySubmittedDialog(true);
+          return;
+        }
+
+        // Handle time-based blocks gracefully
+        if (errorData.errorCode === 'NOT_YET_AVAILABLE') {
+          const startDate = errorData.scheduledStart
+            ? new Date(errorData.scheduledStart).toLocaleString()
+            : 'a scheduled time';
+          setBlockedReason({ code: 'NOT_YET_AVAILABLE', message: 'Assignment Not Yet Available', detail: `This assignment opens on ${startDate}` });
+          return;
+        }
+
+        if (errorData.errorCode === 'DEADLINE_PASSED') {
+          const endDate = errorData.scheduledEnd
+            ? new Date(errorData.scheduledEnd).toLocaleString()
+            : 'the deadline';
+          setBlockedReason({ code: 'DEADLINE_PASSED', message: 'Assignment Deadline Has Passed', detail: `The deadline was ${endDate}` });
           return;
         }
 
@@ -236,7 +254,7 @@ export default function AssignmentPage() {
 
           const user = JSON.parse(userData);
           const token = btoa(JSON.stringify({
-            user_id: user.id,
+            id: user.id,
             role: user.role,
             college_id: user.college_id
           }));
@@ -302,6 +320,23 @@ export default function AssignmentPage() {
 
   if (loading) {
     return <PageLoader message="Loading Assignment" subMessage="Fetching questions and details..." />;
+  }
+
+  if (blockedReason) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Card className="w-96">
+          <CardContent className="pt-6 text-center">
+            <AlertTriangle className="mx-auto mb-3 h-10 w-10 text-yellow-500" />
+            <h2 className="text-lg font-semibold text-gray-800 mb-2">{blockedReason.message}</h2>
+            {blockedReason.detail && <p className="text-sm text-gray-500 mb-4">{blockedReason.detail}</p>}
+            <Button onClick={() => router.push('/student/assignments')} className="w-full">
+              Back to Assignments
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   if (!assignment || questions.length === 0) {

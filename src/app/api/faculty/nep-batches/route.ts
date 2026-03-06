@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
 
     // For each batch, fetch its elective buckets and subjects
     const batchesWithBuckets = await Promise.all(
-      batches.map(async (batch) => {
+      batches.map(async (batch: typeof batches[number]) => {
         // Fetch elective buckets for this batch
         const { data: buckets, error: bucketsError } = await supabase
           .from('elective_buckets')
@@ -132,7 +132,7 @@ export async function GET(request: NextRequest) {
 
         // For each bucket, fetch subjects
         const bucketsWithSubjects = await Promise.all(
-          (buckets || []).map(async (bucket) => {
+          (buckets || []).map(async (bucket: typeof buckets[number]) => {
             console.log(`🔍 Fetching subjects for bucket: ${bucket.bucket_name} (ID: ${bucket.id})`);
             console.log(`   Query params: course_group_id=${bucket.id}, college_id=${user.college_id}, is_active=true`);
 

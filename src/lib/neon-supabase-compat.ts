@@ -502,10 +502,12 @@ export class NeonClient {
    */
   storage = {
     from: (_bucket: string) => ({
-      upload: async (_path: string, _file: unknown) => ({ data: null, error: { message: 'Storage not configured. Use Cloudinary.' } }),
+      upload: async (_path: string, _file: unknown, _options?: Record<string, unknown>) => ({ data: null as null, error: { message: 'Storage not configured. Use Cloudinary.' } as { message: string } | null }),
       getPublicUrl: (_path: string) => ({ data: { publicUrl: '' } }),
-      remove: async (_paths: string[]) => ({ data: null, error: null }),
-      list: async (_prefix?: string) => ({ data: [], error: null }),
+      remove: async (_paths: string[]) => ({ data: null as null, error: null as null }),
+      list: async (_prefix?: string, _options?: Record<string, unknown>) => ({ data: [] as Array<{ name: string; created_at: string; metadata?: { size?: number } }>, error: null as null }),
+      createSignedUrl: async (_path: string, _expiresIn: number) => ({ data: { signedUrl: '' } as { signedUrl: string } | null, error: { message: 'Storage not configured.' } as { message: string } | null }),
+      download: async (_path: string) => ({ data: null as Blob | null, error: { message: 'Storage not configured.' } as { message: string } | null }),
     }),
   };
 }

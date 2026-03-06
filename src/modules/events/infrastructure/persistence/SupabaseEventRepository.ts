@@ -6,7 +6,7 @@ import { withCacheAside } from '@/shared/cache/cache-helper';
 import { redisCache } from '@/shared/cache/redis-cache';
 
 export class SupabaseEventRepository implements IEventRepository {
-    constructor(private readonly db: SupabaseClient<Database>) { }
+    constructor(private readonly db: SupabaseClient) { }
 
     private mapToEntity(row: any): Event {
         return new Event(
@@ -47,7 +47,7 @@ export class SupabaseEventRepository implements IEventRepository {
                 .eq('department_id', departmentId);
 
             if (error) throw error;
-            return data.map(row => this.mapToEntity(row));
+            return data.map((row: any) => this.mapToEntity(row));
         });
     }
 
@@ -63,7 +63,7 @@ export class SupabaseEventRepository implements IEventRepository {
 
         const { data, error } = await query.order('event_date', { ascending: true });
         if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+        return data.map((row: any) => this.mapToEntity(row));
     }
 
     async findUpcoming(): Promise<Event[]> {
@@ -75,7 +75,7 @@ export class SupabaseEventRepository implements IEventRepository {
                 .order('event_date', { ascending: true });
 
             if (error) throw error;
-            return data.map(row => this.mapToEntity(row));
+            return data.map((row: any) => this.mapToEntity(row));
         });
     }
 
@@ -94,7 +94,7 @@ export class SupabaseEventRepository implements IEventRepository {
 
         const { data, error } = await query;
         if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+        return data.map((row: any) => this.mapToEntity(row));
     }
 
     async create(event: Omit<Event, 'id' | 'createdAt' | 'updatedAt'>): Promise<Event> {
@@ -147,7 +147,7 @@ export class SupabaseEventRepository implements IEventRepository {
 }
 
 export class SupabaseEventRegistrationRepository implements IEventRegistrationRepository {
-    constructor(private readonly db: SupabaseClient<Database>) { }
+    constructor(private readonly db: SupabaseClient) { }
 
     private mapToEntity(row: any): EventRegistration {
         return new EventRegistration(
@@ -180,7 +180,7 @@ export class SupabaseEventRegistrationRepository implements IEventRegistrationRe
             .eq('event_id', eventId);
 
         if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+        return data.map((row: any) => this.mapToEntity(row));
     }
 
     async findByUser(userId: string): Promise<EventRegistration[]> {
@@ -190,7 +190,7 @@ export class SupabaseEventRegistrationRepository implements IEventRegistrationRe
             .eq('user_id', userId);
 
         if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+        return data.map((row: any) => this.mapToEntity(row));
     }
 
     async create(registration: Omit<EventRegistration, 'id' | 'createdAt'>): Promise<EventRegistration> {

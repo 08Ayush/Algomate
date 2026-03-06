@@ -107,7 +107,7 @@ export async function createConstraintViolationNotifications(
     // Create list of recipients (creator + all publishers)
     const recipients: string[] = [creatorId];
     if (publishers && publishers.length > 0) {
-      publishers.forEach(p => {
+      publishers.forEach((p: { id: string }) => {
         if (p.id !== creatorId) { // Don't duplicate if creator is also publisher
           recipients.push(p.id);
         }
@@ -203,7 +203,7 @@ export async function getDepartmentPublishers(departmentId: string): Promise<str
       return [];
     }
 
-    return data?.map(u => u.id) || [];
+    return data?.map((u: { id: string }) => u.id) || [];
   } catch (error) {
     console.error('❌ Error in getDepartmentPublishers:', error);
     return [];

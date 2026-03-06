@@ -40,11 +40,21 @@ export async function GET(
       .single();
 
     if (assignmentError || !assignment) {
+      console.error('[Assignment] Not found or not published:', { assignmentId, error: assignmentError?.message });
       return NextResponse.json(
-        { success: false, error: 'Assignment not found' },
+        { success: false, error: 'Assignment not found or not published' },
         { status: 404 }
       );
     }
+
+    console.log('[Assignment] Found:', {
+      id: assignment.id,
+      title: assignment.title,
+      is_published: assignment.is_published,
+      scheduled_start: assignment.scheduled_start,
+      scheduled_end: assignment.scheduled_end,
+      now: new Date().toISOString(),
+    });
 
     // Check if student has already submitted this assignment
     const { data: existingSubmission } = await supabase
@@ -56,6 +66,7 @@ export async function GET(
       .single();
 
     if (existingSubmission) {
+      console.log('[Assignment] Already submitted by student:', user.id);
       return NextResponse.json(
         {
           success: false,
@@ -72,8 +83,9 @@ export async function GET(
     if (assignment.scheduled_start) {
       const startTime = new Date(assignment.scheduled_start);
       if (now < startTime) {
+        console.log('[Assignment] Not yet available. Start:', startTime.toISOString(), 'Now:', now.toISOString());
         return NextResponse.json(
-          { success: false, error: 'Assignment not yet available' },
+          { success: false, error: 'Assignment not yet available', errorCode: 'NOT_YET_AVAILABLE', scheduledStart: assignment.scheduled_start },
           { status: 403 }
         );
       }
@@ -82,8 +94,9 @@ export async function GET(
     if (assignment.scheduled_end) {
       const endTime = new Date(assignment.scheduled_end);
       if (now > endTime) {
+        console.log('[Assignment] Deadline passed. End:', endTime.toISOString(), 'Now:', now.toISOString());
         return NextResponse.json(
-          { success: false, error: 'Assignment deadline has passed' },
+          { success: false, error: 'Assignment deadline has passed', errorCode: 'DEADLINE_PASSED', scheduledEnd: assignment.scheduled_end },
           { status: 403 }
         );
       }

@@ -146,7 +146,7 @@ export class SaveGeneratedTimetableUseCase {
             .eq('is_active', true);
 
         const timeSlotMap = new Map();
-        timeSlots?.forEach(slot => {
+        timeSlots?.forEach((slot: any) => {
             const startTime = slot.start_time.substring(0, 5);
             const key = `${slot.day}-${startTime}`;
             timeSlotMap.set(key, slot.id);

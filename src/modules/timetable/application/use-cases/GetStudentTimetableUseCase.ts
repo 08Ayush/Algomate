@@ -5,7 +5,7 @@ import { Database } from '@/shared/database';
 
 export class GetStudentTimetableUseCase {
     constructor(
-        private readonly db: SupabaseClient<Database> // Direct DB access for complex join similar to legacy route?
+        private readonly db: SupabaseClient // Direct DB access for complex join similar to legacy route?
         // Or inject repositories? 
         // The legacy route does a massive join on 'scheduled_classes'.
         // Let's wrap this query in a tailored method in ScheduledClassRepository or here if it's unique.

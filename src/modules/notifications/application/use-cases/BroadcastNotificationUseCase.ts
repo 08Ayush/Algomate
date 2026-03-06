@@ -35,7 +35,7 @@ export class BroadcastNotificationUseCase {
                 .eq('batch_id', dto.batch_id)
                 .eq('is_active', true);
 
-            students?.forEach(s => recipientIds.add(s.student_id));
+            students?.forEach((s: { student_id: string }) => recipientIds.add(s.student_id));
 
             // Faculty
             const { data: faculty } = await this.supabase
@@ -43,7 +43,7 @@ export class BroadcastNotificationUseCase {
                 .select('assigned_faculty_id')
                 .eq('batch_id', dto.batch_id);
 
-            faculty?.forEach(f => {
+            faculty?.forEach((f: { assigned_faculty_id: string }) => {
                 if (f.assigned_faculty_id) recipientIds.add(f.assigned_faculty_id);
             });
         }
@@ -57,7 +57,7 @@ export class BroadcastNotificationUseCase {
                 .eq('is_active', true)
                 .in('role', ['faculty', 'student']);
 
-            deptUsers?.forEach(u => recipientIds.add(u.id));
+            deptUsers?.forEach((u: { id: string }) => recipientIds.add(u.id));
         }
 
         // 3. Specific Recipients

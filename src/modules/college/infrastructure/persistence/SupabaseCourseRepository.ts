@@ -4,7 +4,7 @@ import { Course } from '../../domain/entities/Course';
 import { Database } from '@/shared/database';
 
 export class SupabaseCourseRepository implements ICourseRepository {
-    constructor(private readonly db: SupabaseClient<Database>) { }
+    constructor(private readonly db: SupabaseClient) { }
 
     private mapToEntity(row: any): Course {
         return new Course(
@@ -37,7 +37,7 @@ export class SupabaseCourseRepository implements ICourseRepository {
             .select('*');
 
         if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+        return data.map((row: any) => this.mapToEntity(row));
     }
 
     async findByCollege(collegeId: string): Promise<Course[]> {
@@ -47,6 +47,6 @@ export class SupabaseCourseRepository implements ICourseRepository {
             .eq('college_id', collegeId);
 
         if (error) throw error;
-        return data.map(row => this.mapToEntity(row));
+        return data.map((row: any) => this.mapToEntity(row));
     }
 }

@@ -6,7 +6,7 @@ import { withCacheAside } from '@/shared/cache/cache-helper';
 import { redisCache } from '@/shared/cache/redis-cache';
 
 export class SupabaseSubjectRepository implements ISubjectRepository {
-    constructor(private readonly db: SupabaseClient<Database>) { }
+    constructor(private readonly db: SupabaseClient) { }
 
     private mapToEntity(row: any): Subject {
         return new Subject(
@@ -47,7 +47,7 @@ export class SupabaseSubjectRepository implements ISubjectRepository {
                 .eq('department_id', departmentId);
 
             if (error) throw error;
-            return data.map(row => this.mapToEntity(row));
+            return (data as any[]).map((row: any) => this.mapToEntity(row));
         });
     }
 
@@ -60,7 +60,7 @@ export class SupabaseSubjectRepository implements ISubjectRepository {
                 .eq('semester', semester);
 
             if (error) throw error;
-            return data.map(row => this.mapToEntity(row));
+            return (data as any[]).map((row: any) => this.mapToEntity(row));
         });
     }
 

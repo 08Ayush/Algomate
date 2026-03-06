@@ -92,7 +92,7 @@ export async function fetchConstraintRules(filters?: {
     let rules = data || [];
     
     if (filters?.department_id) {
-      rules = rules.filter(rule => 
+      rules = rules.filter((rule: ConstraintRule) => 
         !rule.applies_to_departments || 
         rule.applies_to_departments.length === 0 || 
         rule.applies_to_departments.includes(filters.department_id!)
@@ -100,7 +100,7 @@ export async function fetchConstraintRules(filters?: {
     }
 
     if (filters?.batch_id) {
-      rules = rules.filter(rule => 
+      rules = rules.filter((rule: ConstraintRule) => 
         !rule.applies_to_batches || 
         rule.applies_to_batches.length === 0 || 
         rule.applies_to_batches.includes(filters.batch_id!)
@@ -110,7 +110,7 @@ export async function fetchConstraintRules(filters?: {
     // Filter by enabled constraint IDs if provided (from UI selection)
     if (filters?.enabled_constraint_ids && filters.enabled_constraint_ids.length > 0) {
       const enabledIds = new Set(filters.enabled_constraint_ids);
-      rules = rules.filter(rule => enabledIds.has(rule.id));
+      rules = rules.filter((rule: ConstraintRule) => enabledIds.has(rule.id));
       console.log(`✅ Filtered to ${rules.length} user-enabled constraints from UI`);
     }
 
