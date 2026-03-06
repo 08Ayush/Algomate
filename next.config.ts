@@ -9,10 +9,8 @@ const nextConfig: NextConfig = {
     // ESLint errors are downgraded to warnings in eslint.config.mjs; prevent blocking build
     ignoreDuringBuilds: false,
   },
-  experimental: {
-    // Exclude Node.js-only packages from client bundle
-    serverComponentsExternalPackages: ['pg', 'pg-native'],
-  },
+  // Exclude Node.js-only packages from client bundle (Next.js 15+)
+  serverExternalPackages: ['pg', 'pg-native'],
   // Webpack configuration (fallback when not using Turbopack)
   webpack: (config, { isServer }) => {
     if (!isServer) {
