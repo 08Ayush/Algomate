@@ -178,8 +178,17 @@ class Extractor:
             )
             return rows[0] if rows else None
         except Exception as exc:
-            report.add_error("fetch_failed", "batch", f"Batch fetch error: {exc}")
-            return None
+            err_msg = str(exc)
+            report.add_error("fetch_failed", "batch", f"Batch fetch error: {err_msg}")
+            # Re-raise connection / auth errors so they surface properly in logs
+            # instead of being silently converted into a misleading "batch not found".
+            logger.error(
+                f"DB error while fetching batch {batch_id}: {err_msg}",
+                exc_info=True,
+            )
+            raise RuntimeError(
+                f"Database connection error (not a missing batch): {err_msg}"
+            ) from exc
 
     def _fetch_batch_subjects(self, batch_id: str) -> List[dict]:
         """Fetch subjects for a batch from batch_subjects join table.

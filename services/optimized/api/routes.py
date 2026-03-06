@@ -238,6 +238,57 @@ async def health_check():
     )
 
 
+@app.get("/health/db")
+async def health_db(batch_id: Optional[str] = None):
+    """
+    Diagnostic: test the raw psycopg2 DB connection from Railway.
+
+    Usage:
+      GET /health/db                  — just test the connection
+      GET /health/db?batch_id=<uuid>  — also check if a batch exists
+    """
+    import os
+    from storage.supabase_client import _query, get_connection
+
+    db_url = os.getenv("DATABASE_URL", "")
+    masked_url = db_url[:40] + "..." if len(db_url) > 40 else db_url
+
+    result: Dict[str, Any] = {
+        "database_url_set": bool(db_url),
+        "database_url_preview": masked_url,
+        "channel_binding_in_url": "channel_binding" in db_url,
+        "pooler_in_url": "-pooler" in db_url,
+    }
+
+    # Test actual connection
+    try:
+        conn = get_connection()
+        conn.close()
+        result["connection"] = "ok"
+    except Exception as e:
+        result["connection"] = "FAILED"
+        result["connection_error"] = str(e)
+        return result
+
+    # Test a simple query
+    try:
+        rows = _query("SELECT COUNT(*) AS cnt FROM batches", None)
+        result["batches_table_count"] = rows[0]["cnt"] if rows else 0
+    except Exception as e:
+        result["batches_table_error"] = str(e)
+
+    # Optional: check specific batch
+    if batch_id:
+        try:
+            rows = _query("SELECT id, name FROM batches WHERE id = %s LIMIT 1", (batch_id,))
+            result["batch_found"] = bool(rows)
+            result["batch_name"] = rows[0].get("name") if rows else None
+        except Exception as e:
+            result["batch_lookup_error"] = str(e)
+
+    return result
+
+
 @app.post("/generate", response_model=GenerateResponse)
 async def generate_timetable(
     request: GenerateRequest,
