@@ -40,14 +40,23 @@ logger = logging.getLogger("optimized.supabase")
 # ---------------------------------------------------------------------------
 
 def _load_env():
-    """Load .env from project root (3 levels up from this file)."""
-    project_root = Path(__file__).resolve().parents[3]
-    env_file = project_root / ".env"
-    if env_file.exists():
-        load_dotenv(env_file)
-        logger.debug(f"Loaded .env from {env_file}")
-    else:
-        logger.warning(f".env not found at {env_file}")
+    """Load .env for local development only.
+
+    Walks up the directory tree from this file looking for a .env file.
+    On Railway/production no .env exists so this is a no-op (Railway env
+    vars are already in os.environ and are never overridden).
+    """
+    try:
+        for parent in Path(__file__).resolve().parents:
+            env_file = parent / ".env"
+            if env_file.exists():
+                # override=False: never clobber Railway/Vercel env vars
+                load_dotenv(env_file, override=False)
+                logger.debug(f"Loaded .env from {env_file}")
+                return
+    except Exception as exc:
+        logger.debug(f"_load_env skipped: {exc}")
+    logger.debug("No .env file found — relying on environment variables")
 
 
 def get_connection() -> psycopg2.extensions.connection:
