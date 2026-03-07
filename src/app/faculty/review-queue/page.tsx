@@ -29,6 +29,7 @@ export default function ReviewQueuePage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [pendingTimetables, setPendingTimetables] = useState<PendingTimetable[]>([]);
+  const [stats, setStats] = useState({ approvedToday: 0, totalRejected: 0 });
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
   const [isSendingEmail, setIsSendingEmail] = useState<string | null>(null);
 
@@ -89,6 +90,7 @@ export default function ReviewQueuePage() {
 
       if (result.success) {
         setPendingTimetables(result.timetables || []);
+        if (result.stats) setStats(result.stats);
       }
       setLoading(false);
     } catch (error) {
@@ -278,8 +280,8 @@ export default function ReviewQueuePage() {
               <CheckCircle size={24} className="text-green-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">--</p>
-              <p className="text-sm text-gray-500">Approved Today</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.approvedToday}</p>
+              <p className="text-sm text-gray-500">Total Approved</p>
             </div>
           </motion.div>
 
@@ -293,7 +295,7 @@ export default function ReviewQueuePage() {
               <XCircle size={24} className="text-red-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">--</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.totalRejected}</p>
               <p className="text-sm text-gray-500">Rejected</p>
             </div>
           </motion.div>

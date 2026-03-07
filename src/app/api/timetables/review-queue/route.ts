@@ -49,10 +49,26 @@ export async function GET(request: NextRequest) {
       [user.department_id]
     );
 
+    const { rows: statsRows } = await pool.query(
+      `SELECT
+        COUNT(*) FILTER (WHERE gt.status = 'published') AS approved_today,
+        COUNT(*) FILTER (WHERE gt.status = 'rejected') AS total_rejected
+      FROM generated_timetables gt
+      INNER JOIN batches b ON b.id = gt.batch_id
+      WHERE b.department_id = $1`,
+      [user.department_id]
+    );
+
+    const stats = statsRows[0] || { approved_today: 0, total_rejected: 0 };
+
     return NextResponse.json({
       success: true,
       timetables: rows,
-      count: rows.length
+      count: rows.length,
+      stats: {
+        approvedToday: parseInt(stats.approved_today, 10),
+        totalRejected: parseInt(stats.total_rejected, 10)
+      }
     });
   } catch (error: any) {
     console.error('Error fetching review queue:', error);

@@ -78,62 +78,13 @@
     --gradient-end: 174 42% 60%;
   }
 
-  .dark {
-    /* Dark theme - Premium Academic Dark Mode */
-    --background: 222 47% 8%;
-    --foreground: 210 40% 98%;
-
-    --card: 222 47% 11%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222 47% 11%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 197 37% 55%;
-    --primary-foreground: 0 0% 100%;
-
-    --primary-dark: 197 45% 45%;
-    --primary-light: 197 35% 65%;
-
-    --secondary: 174 42% 50%;
-    --secondary-foreground: 0 0% 100%;
-
-    --secondary-light: 174 42% 60%;
-
-    --tertiary: 180 51% 25%;
-    --tertiary-foreground: 180 51% 95%;
-
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-
-    --accent: 262 52% 57%;
-    --accent-foreground: 0 0% 100%;
-
-    --accent-pink: 330 81% 70%;
-    --accent-sky: 199 89% 58%;
-    --accent-emerald: 142 76% 46%;
-
-    --success: 142 76% 46%;
-    --success-foreground: 0 0% 100%;
-
-    --warning: 38 92% 60%;
-    --warning-foreground: 0 0% 100%;
-
-    --destructive: 0 62% 50%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217 33% 20%;
-    --input: 217 33% 17%;
-    --ring: 197 37% 55%;
-
-    --gradient-start: 197 37% 55%;
-    --gradient-end: 174 42% 50%;
-  }
 }
 
 @layer base {
   * {
     @apply border-border;
+    /* Prevent OS dark mode from inverting element colours */
+    color-scheme: light;
   }
 
   body {
@@ -142,6 +93,21 @@
     font-weight: 500;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    color-scheme: light;
+  }
+
+  /* Force all form controls to use explicit light-mode colours */
+  input,
+  textarea,
+  select {
+    background-color: #ffffff;
+    color: #1e293b;
+    color-scheme: light;
+  }
+
+  option {
+    background-color: #ffffff;
+    color: #1e293b;
   }
 
   h1,

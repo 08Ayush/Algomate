@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/shared/database/client';
+import toast from 'react-hot-toast';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 
 interface TimeSlot {
   id: string;
@@ -279,10 +281,8 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
         lastName: f.last_name || f.lastName,
         email: f.email,
         departmentId: f.department_id || f.departmentId,
-        qualifiedSubjects: [] // Will be populated separately
+        qualifiedSubjects: [] // Will be populated below
       }));
-
-      setFaculty(transformedFaculty);
 
       // Load subjects using API
       console.log('📚 Loading subjects for department:', user.department_id);
@@ -325,7 +325,53 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
 
       setSubjects(transformedSubjects);
 
-      // Load faculty qualifications if needed (can be added later)
+      // Load faculty qualifications and merge into faculty records
+      console.log('🎓 Loading faculty qualifications...');
+      try {
+        const qualResponse = await fetch(`/api/faculty/qualifications`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (qualResponse.ok) {
+          const qualResult = await qualResponse.json();
+          const qualifications: any[] = qualResult.qualifications || [];
+          console.log(`✅ Loaded ${qualifications.length} faculty qualifications`);
+
+          // Build a map: faculty_id → Subject[]
+          const qualsByFaculty = new Map<string, Subject[]>();
+          qualifications.forEach((qual: any) => {
+            if (qual.subject) {
+              const subj: Subject = {
+                id: qual.subject.id,
+                name: qual.subject.name,
+                code: qual.subject.code,
+                subjectType: qual.subject.subject_type,
+                credits: qual.subject.credits_per_week,
+                requiresLab: qual.subject.requires_lab,
+                semester: qual.subject.semester || 1
+              };
+              if (!qualsByFaculty.has(qual.faculty_id)) {
+                qualsByFaculty.set(qual.faculty_id, []);
+              }
+              qualsByFaculty.get(qual.faculty_id)!.push(subj);
+            }
+          });
+
+          // Merge qualifications into transformedFaculty then set state once
+          const facultyWithQuals: Faculty[] = transformedFaculty.map(f => ({
+            ...f,
+            qualifiedSubjects: qualsByFaculty.get(f.id) || []
+          }));
+          setFaculty(facultyWithQuals);
+        } else {
+          // Still set faculty even if qualifications fail
+          setFaculty(transformedFaculty);
+          console.warn('⚠ Could not load qualifications, faculty shown without qualification data');
+        }
+      } catch (qualErr) {
+        setFaculty(transformedFaculty);
+        console.warn('⚠ Qualification fetch error:', qualErr);
+      }
+
       console.log('✅ Data loading completed successfully!');
       console.log(`Final counts - Faculty: ${transformedFaculty.length}, Subjects: ${transformedSubjects.length}`);
     } catch (error) {
@@ -730,18 +776,28 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
     return null;
   };
 
-  const saveSchedule = async () => {
+  const { showConfirm } = useConfirm();
+
+  const saveSchedule = () => {
+    if (assignments.length === 0) {
+      toast.error('Please create at least one assignment before saving.');
+      return;
+    }
+    if (!timetableTitle.trim()) {
+      toast.error('Please enter a title for the timetable.');
+      return;
+    }
+    showConfirm({
+      title: 'Save Draft',
+      message: `Save "${timetableTitle.trim()}" as a draft? You can submit it for review later.`,
+      confirmText: 'Save Draft',
+      onConfirm: () => _doSaveDraft()
+    });
+  };
+
+  const _doSaveDraft = async () => {
     setSaving(true);
     try {
-      if (assignments.length === 0) {
-        alert('Please create at least one assignment before saving.');
-        return;
-      }
-
-      if (!timetableTitle.trim()) {
-        alert('Please enter a title for the timetable.');
-        return;
-      }
 
       // Log the full user object to see what we're working with
       console.log('👤 Full user object:', user);
@@ -762,14 +818,14 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
 
       // Validate critical user ID field
       if (!userId) {
-        alert('User information is incomplete. Missing user ID. Please log in again.');
+        toast.error('User information is incomplete. Please log in again.');
         console.error('❌ Missing user ID in user object:', user);
         return;
       }
 
       // Check if batch is selected
       if (!selectedBatch) {
-        alert('Please wait for batch information to load, or create a batch for this semester first.');
+        toast.error('Please wait for batch information to load, or create a batch for this semester first.');
         return;
       }
 
@@ -794,51 +850,55 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
 
       console.log('📤 Sending timetable save request:', payload);
 
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+      const authHeader: Record<string, string> = raw ? { 'Authorization': `Bearer ${btoa(raw)}` } : {};
+
       const response = await fetch('/api/timetables', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...authHeader,
         },
         body: JSON.stringify(payload),
       });
 
       const data = await response.json();
       console.log('📥 Save response:', data);
-      console.log('📥 Response status:', response.status);
-      console.log('📥 Full response data:', JSON.stringify(data, null, 2));
 
       if (data.success) {
-        alert('Timetable saved successfully! You can now submit it for review.');
-        // Optionally reset the form or redirect
-        // setAssignments([]);
-        // setTimetableTitle('');
+        toast.success('Timetable saved as draft! You can submit it for review when ready.', { duration: 4000 });
       } else {
         console.error('❌ Save failed with error:', data.error);
-        console.error('❌ Error details:', data.details);
-        console.error('❌ Error hint:', data.hint);
-        console.error('❌ Error code:', data.code);
-        alert(`Error saving timetable: ${data.error}\n\nDetails: ${data.details || 'No details'}\n\nHint: ${data.hint || 'No hint'}`);
+        toast.error(`Failed to save: ${data.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('❌ Exception during save:', error);
-      alert('Error saving schedule. Please try again.');
+      toast.error('Error saving schedule. Please try again.');
     } finally {
       setSaving(false);
     }
   };
 
-  const submitForReview = async () => {
+  const submitForReview = () => {
+    if (assignments.length === 0) {
+      toast.error('Please create at least one assignment before submitting.');
+      return;
+    }
+    if (!timetableTitle.trim()) {
+      toast.error('Please enter a title for the timetable.');
+      return;
+    }
+    showConfirm({
+      title: 'Submit for Review',
+      message: `Submit "${timetableTitle.trim()}" for review? Your HOD/Publisher will be notified to approve it.`,
+      confirmText: 'Submit for Review',
+      onConfirm: () => _doSubmitForReview()
+    });
+  };
+
+  const _doSubmitForReview = async () => {
     setSubmitting(true);
     try {
-      if (assignments.length === 0) {
-        alert('Please create at least one assignment before submitting.');
-        return;
-      }
-
-      if (!timetableTitle.trim()) {
-        alert('Please enter a title for the timetable.');
-        return;
-      }
 
       // Log the full user object to see what we're working with
       console.log('👤 Full user object (submit):', user);
@@ -850,14 +910,14 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
 
       // Validate critical user ID field
       if (!userId) {
-        alert('User information is incomplete. Missing user ID. Please log in again.');
+        toast.error('User information is incomplete. Please log in again.');
         console.error('❌ Missing user ID in user object:', user);
         return;
       }
 
       // Check if batch is selected
       if (!selectedBatch) {
-        alert('Please wait for batch information to load, or create a batch for this semester first.');
+        toast.error('Please wait for batch information to load, or create a batch for this semester first.');
         return;
       }
 
@@ -882,11 +942,15 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
 
       console.log('📤 Sending timetable save request for review:', payload);
 
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+      const authHeader: Record<string, string> = raw ? { 'Authorization': `Bearer ${btoa(raw)}` } : {};
+
       // First save the timetable
       const saveResponse = await fetch('/api/timetables', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...authHeader,
         },
         body: JSON.stringify(payload),
       });
@@ -895,7 +959,7 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
       console.log('📥 Save response:', saveData);
 
       if (!saveData.success) {
-        alert(`Error saving timetable: ${saveData.error}`);
+        toast.error(`Error saving timetable: ${saveData.error}`);
         return;
       }
 
@@ -904,6 +968,7 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...authHeader,
         },
         body: JSON.stringify({
           timetableId: saveData.timetable.id,
@@ -915,18 +980,18 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
       const publishData = await publishResponse.json();
 
       if (publishData.success) {
-        alert('Timetable submitted for review successfully! Publishers will be notified.');
+        toast.success('Timetable submitted for review! Publishers will be notified.', { duration: 5000 });
         // Reset form
         setAssignments([]);
         setTimetableTitle('');
         setSelectedFaculty(null);
         setSelectedSubject(null);
       } else {
-        alert(`Error submitting for review: ${publishData.error}`);
+        toast.error(`Error submitting for review: ${publishData.error}`);
       }
     } catch (error) {
       console.error('Error submitting for review:', error);
-      alert('Error submitting for review. Please try again.');
+      toast.error('Error submitting for review. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -1145,12 +1210,33 @@ export default function ManualSchedulingComponent({ user }: ManualSchedulingComp
                     {facultyMember.firstName} {facultyMember.lastName}
                   </div>
                   <div className="text-sm text-gray-500">{facultyMember.email}</div>
-                  <div className="text-xs text-blue-600 mt-1">
-                    {facultyMember.qualifiedSubjects.length > 0
-                      ? `${facultyMember.qualifiedSubjects.filter(s => s.semester === selectedSemester).length} qualified subjects for Sem ${selectedSemester}`
-                      : 'No qualifications set up yet'
+                  {(() => {
+                    const semSubjects = facultyMember.qualifiedSubjects.filter(s => s.semester === selectedSemester);
+                    const allSubjects = facultyMember.qualifiedSubjects;
+                    if (semSubjects.length > 0) {
+                      return (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {semSubjects.map(s => (
+                            <span key={s.id} className="inline-block bg-blue-100 text-blue-700 text-xs font-medium px-1.5 py-0.5 rounded" title={s.name}>
+                              {s.code}
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    } else if (allSubjects.length > 0) {
+                      return (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {allSubjects.map(s => (
+                            <span key={s.id} className="inline-block bg-gray-100 text-gray-500 text-xs font-medium px-1.5 py-0.5 rounded" title={`${s.name} (Sem ${s.semester})`}>
+                              {s.code}
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    } else {
+                      return <div className="text-xs text-gray-400 mt-1">No qualifications set up yet</div>;
                     }
-                  </div>
+                  })()}
                 </div>
               )) : (
                 <div className="text-center text-gray-500 py-4">

@@ -94,9 +94,9 @@ export class SupabaseTimetableRepository implements ITimetableRepository {
             .from('generated_timetables' as any) as any)
             .insert({
                 title: timetable.title,
-                department_id: timetable.departmentId,
                 batch_id: timetable.batchId,
                 college_id: timetable.collegeId,
+                generation_task_id: (timetable as any).generationTaskId ?? null,
                 semester: timetable.semester,
                 academic_year: timetable.academicYear,
                 fitness_score: timetable.fitnessScore,
@@ -137,6 +137,8 @@ export class SupabaseTimetableRepository implements ITimetableRepository {
         const updateData: any = {};
         if (data.status) updateData.status = data.status;
         if (data.publishedAt !== undefined) updateData.published_at = data.publishedAt;
+        if (data.fitnessScore !== undefined) updateData.fitness_score = data.fitnessScore;
+        if (data.constraintViolations !== undefined) updateData.constraint_violations = data.constraintViolations;
 
         const { data: result, error } = await (this.db
             .from('generated_timetables' as any) as any)

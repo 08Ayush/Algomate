@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { Bot, Calendar, Sparkles, Send, Grid3x3, MessageCircle, Wand2, Eye, Save, Upload, CheckCircle, AlertCircle, X } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 import ManualSchedulingComponent from './ManualSchedulingComponent';
 
 interface TimetableCreatorIntegratedProps {
@@ -121,10 +123,16 @@ Just tell me what semester or batch you'd like to schedule, and I'll generate an
         content: `🔄 Generating timetable for Semester ${semester}...\n\nFetching data from database...`
       }]);
 
+      // Build auth token from stored user session (base64-encoded JSON)
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+      const authHeaders: Record<string, string> = raw
+        ? { 'Authorization': `Bearer ${btoa(raw)}` }
+        : {};
+
       // Call AI generation API
       const response = await fetch('/api/ai-timetable/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
           semester,
           department_id: user.department_id,
@@ -180,6 +188,36 @@ The timetable is displayed in the grid below. Review it and choose an action!`
     }
   };
 
+  const { showConfirm } = useConfirm();
+
+  const confirmSaveTimetable = (status: 'draft' | 'pending_approval' | 'published') => {
+    if (!generatedTimetable) return;
+    const configs = {
+      draft: {
+        title: 'Save as Draft',
+        message: `Save "Semester ${generatedTimetable.semester} - ${generatedTimetable.academic_year}" as a draft? You can submit it for approval later.`,
+        confirmText: 'Save Draft'
+      },
+      pending_approval: {
+        title: 'Submit for Approval',
+        message: `Submit "Semester ${generatedTimetable.semester} - ${generatedTimetable.academic_year}" for review? Your HOD/Publisher will be notified.`,
+        confirmText: 'Submit for Approval'
+      },
+      published: {
+        title: 'Publish Timetable',
+        message: `Publish "Semester ${generatedTimetable.semester} - ${generatedTimetable.academic_year}"? This will make it live and notify all users.`,
+        confirmText: 'Publish'
+      }
+    };
+    const cfg = configs[status];
+    showConfirm({
+      title: cfg.title,
+      message: cfg.message,
+      confirmText: cfg.confirmText,
+      onConfirm: () => handleSaveTimetable(status)
+    });
+  };
+
   const handleSaveTimetable = async (status: 'draft' | 'pending_approval' | 'published') => {
     if (!generatedTimetable) return;
 
@@ -190,9 +228,14 @@ The timetable is displayed in the grid below. Review it and choose an action!`
         setSavingTimetable(true);
       }
 
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+      const authHeaders: Record<string, string> = raw
+        ? { 'Authorization': `Bearer ${btoa(raw)}` }
+        : {};
+
       const response = await fetch('/api/ai-timetable/save', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify({
           title: `Semester ${generatedTimetable.semester} - ${generatedTimetable.academic_year}`,
           semester: generatedTimetable.semester,
@@ -227,12 +270,9 @@ The timetable is displayed in the grid below. Review it and choose an action!`
             const notifyData = await notifyResponse.json();
             if (notifyData.success) {
               const stats = notifyData.stats;
-              alert(
-                `✅ ${result.data.message}\n\n` +
-                `📧 Email notifications sent to:\n` +
-                `• ${stats.students} students\n` +
-                `• ${stats.faculty} faculty members\n` +
-                `Total: ${stats.sent}/${stats.total} emails delivered`
+              toast.success(
+                `${result.data.message} — 📧 ${stats.sent}/${stats.total} emails delivered`,
+                { duration: 5000 }
               );
 
               setMessages(prev => [...prev, {
@@ -240,7 +280,8 @@ The timetable is displayed in the grid below. Review it and choose an action!`
                 content: `✅ **Timetable published successfully!**\n\nTimetable ID: ${timetableId}\nClasses Created: ${result.data.classes_created}\n\n📧 **Email Notifications Sent:**\n• ${stats.students} students notified\n• ${stats.faculty} faculty members notified\n• Total: ${stats.sent}/${stats.total} emails delivered\n\nThe timetable is now live and all users have been notified!`
               }]);
             } else {
-              alert(`✅ ${result.data.message}\n\n⚠️ Warning: Failed to send email notifications.`);
+              toast.success(result.data.message, { duration: 4000 });
+              toast.error('Failed to send email notifications', { duration: 4000 });
 
               setMessages(prev => [...prev, {
                 role: 'ai',
@@ -249,7 +290,8 @@ The timetable is displayed in the grid below. Review it and choose an action!`
             }
           } catch (emailError) {
             console.error('Error sending email notifications:', emailError);
-            alert(`✅ ${result.data.message}\n\n⚠️ Warning: Failed to send email notifications.`);
+            toast.success(result.data.message, { duration: 4000 });
+            toast.error('Failed to send email notifications', { duration: 4000 });
 
             setMessages(prev => [...prev, {
               role: 'ai',
@@ -257,18 +299,18 @@ The timetable is displayed in the grid below. Review it and choose an action!`
             }]);
           }
         } else {
-          alert(`✅ ${result.data.message}`);
+          toast.success(result.data.message, { duration: 4000 });
           setMessages(prev => [...prev, {
             role: 'ai',
             content: `✅ **Timetable ${status === 'draft' ? 'saved as draft' : 'submitted for approval'} successfully!**\n\nTimetable ID: ${timetableId}\nClasses Created: ${result.data.classes_created}\n\n${status === 'pending_approval' ? 'Your HOD/Publisher will review and approve it.' : 'You can edit it later from the drafts section.'}`
           }]);
         }
       } else {
-        alert(`❌ Error: ${result.error}`);
+        toast.error(result.error || 'Failed to save timetable');
       }
     } catch (error: any) {
       console.error('Error saving timetable:', error);
-      alert(`❌ Failed to save: ${error.message}`);
+      toast.error(`Failed to save: ${error.message}`);
     } finally {
       setSavingTimetable(false);
       setPublishingTimetable(false);
@@ -368,16 +410,16 @@ What would you like to do?`;
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Mode Toggle */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-4">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Timetable Creator</h2>
-            <div className="flex items-center bg-gray-100 dark:bg-slate-700 rounded-lg p-1">
+            <h2 className="text-xl font-semibold text-gray-900">Timetable Creator</h2>
+            <div className="flex items-center bg-gray-100 rounded-lg p-1">
               <button
                 onClick={() => setMode('ai')}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-all ${mode === 'ai'
-                  ? 'bg-white dark:bg-slate-600 shadow-sm text-blue-600 dark:text-blue-400'
-                  : 'text-gray-600 dark:text-gray-400'
+                  ? 'bg-white shadow-sm text-[#4D869C]'
+                  : 'text-gray-600'
                   }`}
               >
                 <Bot className="w-4 h-4" />
@@ -386,8 +428,8 @@ What would you like to do?`;
               <button
                 onClick={() => setMode('manual')}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-md transition-all ${mode === 'manual'
-                  ? 'bg-white dark:bg-slate-600 shadow-sm text-blue-600 dark:text-blue-400'
-                  : 'text-gray-600 dark:text-gray-400'
+                  ? 'bg-white shadow-sm text-[#4D869C]'
+                  : 'text-gray-600'
                   }`}
               >
                 <Grid3x3 className="w-4 h-4" />
@@ -395,7 +437,7 @@ What would you like to do?`;
               </button>
             </div>
           </div>
-          <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
+          <div className="flex items-center space-x-2 text-sm text-gray-600">
             <Calendar className="w-4 h-4" />
             <span>{user?.department_code || 'CSE'} Department</span>
           </div>
@@ -408,9 +450,9 @@ What would you like to do?`;
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Chat Interface - 2/3 width */}
             <div className="lg:col-span-2">
-              <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 {/* Chat Header */}
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4">
+                <div className="bg-gradient-to-r from-[#4D869C] to-[#7AB2B2] p-4">
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
                       <Sparkles className="w-5 h-5 text-white" />
@@ -423,21 +465,21 @@ What would you like to do?`;
                 </div>
 
                 {/* Chat Messages */}
-                <div className="h-[500px] p-6 overflow-y-auto space-y-4 bg-gray-50 dark:bg-slate-900">
+                <div className="h-[500px] p-6 overflow-y-auto space-y-4 bg-gray-50">
                   {messages.map((msg, idx) => (
                     <div
                       key={idx}
                       className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                     >
                       {msg.role === 'ai' && (
-                        <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 mr-3">
+                        <div className="w-8 h-8 bg-gradient-to-br from-[#4D869C] to-[#7AB2B2] rounded-full flex items-center justify-center flex-shrink-0 mr-3">
                           <Bot className="w-4 h-4 text-white" />
                         </div>
                       )}
                       <div
                         className={`max-w-[80%] rounded-2xl p-4 ${msg.role === 'user'
-                          ? 'bg-blue-600 text-white rounded-tr-none'
-                          : 'bg-white dark:bg-slate-800 text-gray-900 dark:text-white rounded-tl-none border border-gray-200 dark:border-slate-700'
+                          ? 'bg-[#4D869C] text-white rounded-tr-none'
+                          : 'bg-white text-gray-900 rounded-tl-none border border-gray-200'
                           }`}
                       >
                         <p className="whitespace-pre-line text-sm leading-relaxed">{msg.content}</p>
@@ -446,14 +488,14 @@ What would you like to do?`;
                   ))}
                   {isProcessing && (
                     <div className="flex justify-start">
-                      <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-full flex items-center justify-center flex-shrink-0 mr-3">
+                      <div className="w-8 h-8 bg-gradient-to-br from-[#4D869C] to-[#7AB2B2] rounded-full flex items-center justify-center flex-shrink-0 mr-3">
                         <Bot className="w-4 h-4 text-white" />
                       </div>
-                      <div className="bg-white dark:bg-slate-800 rounded-2xl rounded-tl-none p-4 border border-gray-200 dark:border-slate-700">
+                      <div className="bg-white rounded-2xl rounded-tl-none p-4 border border-gray-200">
                         <div className="flex space-x-2">
-                          <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"></div>
-                          <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                          <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                          <div className="w-2 h-2 bg-[#4D869C] rounded-full animate-bounce"></div>
+                          <div className="w-2 h-2 bg-[#4D869C] rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                          <div className="w-2 h-2 bg-[#4D869C] rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                         </div>
                       </div>
                     </div>
@@ -461,7 +503,7 @@ What would you like to do?`;
                 </div>
 
                 {/* Chat Input */}
-                <div className="p-4 border-t border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                <div className="p-4 border-t border-gray-200 bg-white">
                   <div className="flex items-center space-x-2">
                     <input
                       type="text"
@@ -469,13 +511,13 @@ What would you like to do?`;
                       onChange={(e) => setInputMessage(e.target.value)}
                       onKeyPress={handleKeyPress}
                       placeholder="Ask AI to create a timetable... (e.g., 'Create Semester 3 schedule')"
-                      className="flex-1 px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-slate-700 dark:text-white"
+                      className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#4D869C] focus:border-transparent bg-white text-gray-900"
                       disabled={isProcessing}
                     />
                     <button
                       onClick={handleSendMessage}
                       disabled={!inputMessage.trim() || isProcessing}
-                      className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                      className="px-6 py-3 bg-gradient-to-r from-[#4D869C] to-[#7AB2B2] text-white rounded-lg hover:from-[#3d6d80] hover:to-[#6a9fa0] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                     >
                       <Send className="w-4 h-4" />
                       <span>Send</span>
@@ -488,8 +530,8 @@ What would you like to do?`;
             {/* Quick Actions & Info - 1/3 width */}
             <div className="space-y-4">
               {/* Quick Actions */}
-              <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-4">
-                <h3 className="font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+                <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
                   <Wand2 className="w-4 h-4 mr-2" />
                   Quick Actions
                 </h3>
@@ -506,7 +548,7 @@ What would you like to do?`;
                           setInputMessage(action);
                           setTimeout(() => handleSendMessage(), 100);
                         }}
-                        className="w-full text-left px-4 py-2 bg-gray-50 dark:bg-slate-700 hover:bg-gray-100 dark:hover:bg-slate-600 rounded-lg text-sm text-gray-700 dark:text-gray-300 transition-colors"
+                        className="w-full text-left px-4 py-2 bg-gray-50 hover:bg-[#CDE8E5] rounded-lg text-sm text-gray-700 transition-colors"
                       >
                         {action}
                       </button>
@@ -516,35 +558,35 @@ What would you like to do?`;
               </div>
 
               {/* Database Stats */}
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-slate-800 dark:to-slate-700 rounded-xl shadow-sm border border-blue-100 dark:border-slate-600 p-4">
-                <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Database Overview</h3>
+              <div className="bg-gradient-to-br from-[#EEF7FF] to-[#CDE8E5] rounded-xl shadow-sm border border-[#7AB2B2]/30 p-4">
+                <h3 className="font-semibold text-gray-900 mb-4">Database Overview</h3>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Faculty Members</span>
-                    <span className="font-semibold text-blue-600 dark:text-blue-400">15+</span>
+                    <span className="text-sm text-gray-600">Faculty Members</span>
+                    <span className="font-semibold text-[#4D869C]">15+</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Subjects Available</span>
-                    <span className="font-semibold text-blue-600 dark:text-blue-400">74</span>
+                    <span className="text-sm text-gray-600">Subjects Available</span>
+                    <span className="font-semibold text-[#4D869C]">74</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Classrooms</span>
-                    <span className="font-semibold text-blue-600 dark:text-blue-400">20+</span>
+                    <span className="text-sm text-gray-600">Classrooms</span>
+                    <span className="font-semibold text-[#4D869C]">20+</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600 dark:text-gray-400">Batches</span>
-                    <span className="font-semibold text-blue-600 dark:text-blue-400">8 Semesters</span>
+                    <span className="text-sm text-gray-600">Batches</span>
+                    <span className="font-semibold text-[#4D869C]">8 Semesters</span>
                   </div>
                 </div>
               </div>
 
               {/* Tips */}
-              <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl border border-amber-200 dark:border-amber-800 p-4">
-                <h3 className="font-semibold text-amber-900 dark:text-amber-400 mb-2 flex items-center">
+              <div className="bg-amber-50 rounded-xl border border-amber-200 p-4">
+                <h3 className="font-semibold text-amber-900 mb-2 flex items-center">
                   <MessageCircle className="w-4 h-4 mr-2" />
                   💡 Pro Tips
                 </h3>
-                <ul className="text-sm text-amber-800 dark:text-amber-300 space-y-1">
+                <ul className="text-sm text-amber-800 space-y-1">
                   <li>• AI generates from real database</li>
                   <li>• Faculty auto-matched by qualification</li>
                   <li>• Conflicts detected automatically</li>
@@ -556,55 +598,55 @@ What would you like to do?`;
 
           {/* Generated Timetable View */}
           {showTimetableView && generatedTimetable && (
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center">
+                  <h3 className="text-xl font-semibold text-gray-900 flex items-center">
                     <Eye className="w-5 h-5 mr-2" />
                     Generated Timetable - Semester {generatedTimetable.semester}
                   </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  <p className="text-sm text-gray-600 mt-1">
                     Academic Year: {generatedTimetable.academic_year} | Total Classes: {generatedTimetable.schedule.length}
                   </p>
                 </div>
                 <button
                   onClick={() => setShowTimetableView(false)}
-                  className="p-2 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                 >
-                  <X className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                  <X className="w-5 h-5 text-gray-600" />
                 </button>
               </div>
 
               {/* Statistics */}
               {generatedTimetable.statistics && (
                 <div className="grid grid-cols-4 gap-4 mb-6">
-                  <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-                    <div className="text-sm text-blue-600 dark:text-blue-400 font-medium">Total Subjects</div>
-                    <div className="text-2xl font-bold text-blue-900 dark:text-blue-300">{generatedTimetable.statistics.totalSubjects}</div>
+                  <div className="bg-blue-50 rounded-lg p-4">
+                    <div className="text-sm text-[#4D869C] font-medium">Total Subjects</div>
+                    <div className="text-2xl font-bold text-[#2d5f73]">{generatedTimetable.statistics.totalSubjects}</div>
                   </div>
-                  <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
-                    <div className="text-sm text-green-600 dark:text-green-400 font-medium">Theory Classes</div>
-                    <div className="text-2xl font-bold text-green-900 dark:text-green-300">{generatedTimetable.statistics.theoryAssignments}</div>
+                  <div className="bg-green-50 rounded-lg p-4">
+                    <div className="text-sm text-green-600 font-medium">Theory Classes</div>
+                    <div className="text-2xl font-bold text-green-900">{generatedTimetable.statistics.theoryAssignments}</div>
                   </div>
-                  <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
-                    <div className="text-sm text-purple-600 dark:text-purple-400 font-medium">Lab Sessions</div>
-                    <div className="text-2xl font-bold text-purple-900 dark:text-purple-300">{generatedTimetable.statistics.labAssignments}</div>
+                  <div className="bg-purple-50 rounded-lg p-4">
+                    <div className="text-sm text-purple-600 font-medium">Lab Sessions</div>
+                    <div className="text-2xl font-bold text-purple-900">{generatedTimetable.statistics.labAssignments}</div>
                   </div>
-                  <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4">
-                    <div className="text-sm text-amber-600 dark:text-amber-400 font-medium">Completion</div>
-                    <div className="text-2xl font-bold text-amber-900 dark:text-amber-300">{generatedTimetable.statistics.completionRate}%</div>
+                  <div className="bg-amber-50 rounded-lg p-4">
+                    <div className="text-sm text-amber-600 font-medium">Completion</div>
+                    <div className="text-2xl font-bold text-amber-900">{generatedTimetable.statistics.completionRate}%</div>
                   </div>
                 </div>
               )}
 
               {/* Timetable Grid */}
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse border border-gray-300 dark:border-slate-600">
+                <table className="w-full border-collapse border border-gray-300">
                   <thead>
-                    <tr className="bg-gray-100 dark:bg-slate-700">
-                      <th className="border border-gray-300 dark:border-slate-600 p-2 text-sm font-semibold text-gray-900 dark:text-white">Time</th>
+                    <tr className="bg-gray-100">
+                      <th className="border border-gray-300 p-2 text-sm font-semibold text-gray-900">Time</th>
                       {days.map(day => (
-                        <th key={day} className="border border-gray-300 dark:border-slate-600 p-2 text-sm font-semibold text-gray-900 dark:text-white">
+                        <th key={day} className="border border-gray-300 p-2 text-sm font-semibold text-gray-900">
                           {day}
                         </th>
                       ))}
@@ -613,13 +655,13 @@ What would you like to do?`;
                   <tbody>
                     {timeSlots.map(time => (
                       <tr key={time}>
-                        <td className="border border-gray-300 dark:border-slate-600 p-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-slate-800">
+                        <td className="border border-gray-300 p-2 text-sm font-medium text-gray-700 bg-gray-50">
                           {timeSlotDisplay[time] || time}
                         </td>
                         {time === 'LUNCH' ? (
                           // Lunch break row - spans all days
-                          <td colSpan={days.length} className="border border-gray-300 dark:border-slate-600 p-4 text-center bg-yellow-50 dark:bg-yellow-900/20">
-                            <div className="flex items-center justify-center space-x-2 text-yellow-700 dark:text-yellow-400">
+                          <td colSpan={days.length} className="border border-gray-300 p-4 text-center bg-yellow-50">
+                            <div className="flex items-center justify-center space-x-2 text-yellow-700">
                               <span className="text-2xl">🍽️</span>
                               <span className="font-semibold">LUNCH BREAK</span>
                             </div>
@@ -629,17 +671,17 @@ What would you like to do?`;
                             const scheduleItem = getScheduleForSlot(day, time);
 
                             return (
-                              <td key={`${day}-${time}`} className="border border-gray-300 dark:border-slate-600 p-2 text-xs">
+                              <td key={`${day}-${time}`} className="border border-gray-300 p-2 text-xs">
                                 {scheduleItem ? (
-                                  <div className={`p-2 rounded ${scheduleItem.is_lab ? 'bg-purple-100 dark:bg-purple-900/30 border-l-4 border-purple-600' : 'bg-blue-100 dark:bg-blue-900/30 border-l-4 border-blue-600'}`}>
-                                    <div className="font-semibold text-gray-900 dark:text-white">{scheduleItem.subject_code}</div>
-                                    <div className="text-gray-700 dark:text-gray-300 text-xs">{scheduleItem.subject_name}</div>
-                                    <div className="text-gray-600 dark:text-gray-400 mt-1 text-xs">{scheduleItem.faculty_name}</div>
-                                    <div className="text-gray-500 dark:text-gray-500 text-xs">{scheduleItem.classroom_name}</div>
-                                    {scheduleItem.is_lab && <div className="text-purple-600 dark:text-purple-400 text-xs font-medium mt-1">LAB</div>}
+                                  <div className={`p-2 rounded ${scheduleItem.is_lab ? 'bg-purple-100 border-l-4 border-purple-600' : 'bg-[#EEF7FF] border-l-4 border-[#4D869C]'}`}>
+                                    <div className="font-semibold text-gray-900">{scheduleItem.subject_code}</div>
+                                    <div className="text-gray-700 text-xs">{scheduleItem.subject_name}</div>
+                                    <div className="text-gray-600 mt-1 text-xs">{scheduleItem.faculty_name}</div>
+                                    <div className="text-gray-500 text-xs">{scheduleItem.classroom_name}</div>
+                                    {scheduleItem.is_lab && <div className="text-purple-600 text-xs font-medium mt-1">LAB</div>}
                                   </div>
                                 ) : (
-                                  <div className="h-20 bg-gray-50 dark:bg-slate-900"></div>
+                                  <div className="h-20 bg-gray-50"></div>
                                 )}
                               </td>
                             );
@@ -669,7 +711,7 @@ What would you like to do?`;
               {/* Action Buttons */}
               <div className="flex items-center justify-end space-x-4 mt-6 pt-6 border-t border-gray-200 dark:border-slate-700">
                 <button
-                  onClick={() => handleSaveTimetable('draft')}
+                  onClick={() => confirmSaveTimetable('draft')}
                   disabled={savingTimetable}
                   className="flex items-center space-x-2 px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-all disabled:opacity-50"
                 >
@@ -677,7 +719,7 @@ What would you like to do?`;
                   <span>{savingTimetable ? 'Saving...' : 'Save as Draft'}</span>
                 </button>
                 <button
-                  onClick={() => handleSaveTimetable('pending_approval')}
+                  onClick={() => confirmSaveTimetable('pending_approval')}
                   disabled={savingTimetable}
                   className="flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50"
                 >
@@ -687,7 +729,7 @@ What would you like to do?`;
                 {/* Only publishers can see Publish button */}
                 {user?.faculty_type === 'publisher' && (
                   <button
-                    onClick={() => handleSaveTimetable('published')}
+                    onClick={() => confirmSaveTimetable('published')}
                     disabled={publishingTimetable}
                     className="flex items-center space-x-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all disabled:opacity-50"
                   >

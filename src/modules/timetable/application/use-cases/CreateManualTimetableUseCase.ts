@@ -117,7 +117,7 @@ export class CreateManualTimetableUseCase {
             started_at: new Date().toISOString(),
             completed_at: new Date().toISOString(),
             solutions_generated: 1,
-            best_fitness_score: 100.0,
+            best_fitness_score: 1.0,
             execution_time_seconds: 0
         };
 
@@ -129,11 +129,12 @@ export class CreateManualTimetableUseCase {
             departmentId: finalDepartmentId,
             batchId: finalBatchId,
             collegeId: finalCollegeId,
+            generationTaskId: task.id,
             semester: semester,
             academicYear: academicYear,
             status: 'draft',
             createdBy: createdBy,
-            fitnessScore: 100.0,
+            fitnessScore: 1.0,
             constraintViolations: [],
             generationMethod: 'HYBRID',
             publishedAt: null
@@ -208,20 +209,34 @@ export class CreateManualTimetableUseCase {
                     subjectId: assignment.subject.id,
                     facultyId: assignment.faculty.id,
                     classroomId: assignedClassroomId,
-                    dayOfWeek: assignment.timeSlot.day, // This might need mapping to number if DB expects number
-                    startTime: assignment.timeSlot.startTime,
-                    endTime: assignment.timeSlot.endTime, // We might need to map this carefully
                     isLab: isLabAssignment,
                     sessionDuration: (assignment.duration || 1) * 60,
                     classType: isLabAssignment ? 'LAB' : 'THEORY',
                     creditHourNumber: scheduledClassesToCreate.length + 1,
-                    // Extra fields for repository createMany if needed
                     timetable_id: createdTimetable.id,
                     batch_id: finalBatchId,
-                    time_slot_id: dbTimeSlotId
+                    time_slot_id: dbTimeSlotId,
+                    is_continuation: false,
+                    session_number: 1
                 };
 
                 scheduledClassesToCreate.push(classData);
+
+                // For 2-hour lab sessions: insert a continuation row for the second slot
+                if (isLabAssignment && (assignment.duration || 1) >= 2) {
+                    const normalizedNextStart = normalizeTime(assignment.timeSlot.endTime);
+                    const nextTimeSlotKey = `${assignment.timeSlot.day}-${normalizedNextStart}`;
+                    const nextDbTimeSlotId = timeSlotMap.get(nextTimeSlotKey);
+                    if (nextDbTimeSlotId) {
+                        scheduledClassesToCreate.push({
+                            ...classData,
+                            creditHourNumber: scheduledClassesToCreate.length + 1,
+                            time_slot_id: nextDbTimeSlotId,
+                            is_continuation: true,
+                            session_number: 2
+                        });
+                    }
+                }
             }
 
             // 8. Bulk Create Classes
@@ -231,15 +246,14 @@ export class CreateManualTimetableUseCase {
                 subject_id: sc.subjectId,
                 faculty_id: sc.facultyId,
                 classroom_id: sc.classroomId,
-                time_slot_id: sc.time_slot_id, // Important
+                time_slot_id: sc.time_slot_id,
                 credit_hour_number: sc.creditHourNumber,
                 class_type: sc.classType,
                 session_duration: sc.sessionDuration,
                 is_recurring: true,
                 is_lab: sc.isLab,
-                day_of_week: sc.dayOfWeek, // Check if this should be number or string
-                start_time: sc.startTime,
-                end_time: sc.endTime
+                is_continuation: sc.is_continuation || false,
+                session_number: sc.session_number || 1
             }));
 
             const { error: classesError } = await (this.supabase
@@ -263,21 +277,34 @@ export class CreateManualTimetableUseCase {
                 duration_minutes: ts.duration_minutes
             }));
 
-            // We need to fetch the just created classes again to get IDs and verify?
-            // Or just map what we have.
-            // Let's try to validate what we constructed.
+            // Map to the snake_case shape expected by validateConstraints
+            const classesForValidation: LibScheduledClass[] = scheduledClassesToCreate.map(sc => ({
+                timetable_id: sc.timetableId,
+                batch_id: sc.batch_id,
+                subject_id: sc.subjectId,
+                faculty_id: sc.facultyId,
+                classroom_id: sc.classroomId,
+                time_slot_id: sc.time_slot_id,
+                class_type: sc.classType as any,
+                credit_hour_number: sc.creditHourNumber,
+                is_lab: sc.isLab,
+                is_continuation: sc.is_continuation || false,
+                session_number: sc.session_number || 1
+            }));
+
             const { violations, score } = await validateConstraints(
-                scheduledClassesToCreate as any[], // lib expects its own type
+                classesForValidation,
                 timeSlotData,
                 constraintRules
             );
 
-            if (violations.length > 0) {
-                await this.timetableRepository.update(createdTimetable.id, {
-                    fitnessScore: score,
-                    constraintViolations: violations
-                });
+            // Always persist the actual fitness score (stored as 0-1 decimal)
+            await this.timetableRepository.update(createdTimetable.id, {
+                fitnessScore: score / 100,
+                constraintViolations: violations
+            });
 
+            if (violations.length > 0) {
                 // Calculate counts for notification
                 const criticalCount = violations.filter(v => v.severity === 'CRITICAL').length;
 

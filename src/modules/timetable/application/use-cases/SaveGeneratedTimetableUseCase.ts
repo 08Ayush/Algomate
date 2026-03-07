@@ -72,6 +72,20 @@ export class SaveGeneratedTimetableUseCase {
             throw new Error('Could not determine batch. Please provide batch_id or ensure department and college are set.');
         }
 
+        // Ensure college_id is resolved — fall back to batch's college if still missing
+        if (!college_id) {
+            const { data: batchData } = await this.supabase
+                .from('batches')
+                .select('college_id')
+                .eq('id', batch_id)
+                .single();
+            if (batchData) college_id = batchData.college_id;
+        }
+
+        if (!college_id) {
+            throw new Error('Could not determine college_id. Please ensure user has a college assigned.');
+        }
+
         // Cleanup existing drafts
         const { data: existingDrafts } = await this.supabase
             .from('generated_timetables')
@@ -120,6 +134,7 @@ export class SaveGeneratedTimetableUseCase {
                 generation_task_id: task.id,
                 title: title || `Semester ${semester} Timetable - ${academic_year}`,
                 batch_id: batch_id,
+                college_id: college_id,
                 academic_year: academic_year,
                 semester: semester,
                 status: status,
