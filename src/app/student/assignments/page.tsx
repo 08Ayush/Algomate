@@ -106,12 +106,12 @@ export default function StudentAssignments() {
                     subject_name: a.subjects?.name || 'N/A',
                     subject_code: a.subjects?.code || '',
                     faculty_name: a.faculty_name || '',
-                    due_date: a.end_time || a.due_date,
+                    due_date: a.scheduled_end || a.end_time || a.due_date,
                     created_at: a.created_at,
-                    max_marks: a.total_marks || 100,
+                    max_marks: Number(a.total_marks) || 100,
                     submission_type: 'file',
                     status: a.has_submitted ? (a.submission?.score ? 'graded' : 'submitted') :
-                        (new Date(a.end_time || a.due_date) < new Date() ? 'overdue' : 'pending'),
+                        (new Date(a.scheduled_end || a.end_time || a.due_date) < new Date() ? 'overdue' : 'pending'),
                     submission: a.submission ? {
                         id: a.submission.id,
                         submitted_at: a.submission.submitted_at,

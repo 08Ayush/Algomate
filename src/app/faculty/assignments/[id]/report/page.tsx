@@ -144,7 +144,7 @@ export default function AssignmentReportPage() {
       sub.student?.college_uid || 'N/A',
       sub.student?.email,
       `${sub.score}/${assignment.total_marks}`,
-      `${sub.percentage?.toFixed(2) || 0}%`,
+      `${Number(sub.percentage)?.toFixed(2) || 0}%`,
       `${Math.floor(sub.time_taken_seconds / 60)}m ${sub.time_taken_seconds % 60}s`,
       new Date(sub.submitted_at).toLocaleString(),
       sub.requires_manual_grading && !sub.graded_at ? 'Pending' : 'Graded'
@@ -333,7 +333,7 @@ export default function AssignmentReportPage() {
                   <p className="text-3xl font-bold text-purple-600 mt-1">{statistics.graded_submissions}</p>
                   <p className="text-xs text-gray-400 mt-1">
                     {statistics.total_submissions > 0
-                      ? ((statistics.graded_submissions / statistics.total_submissions) * 100).toFixed(1)
+                      ? ((Number(statistics.graded_submissions) / Number(statistics.total_submissions)) * 100).toFixed(1)
                       : 0}% Complete
                   </p>
                 </div>
@@ -421,11 +421,11 @@ export default function AssignmentReportPage() {
                         <span className="text-gray-400">/{assignment.total_marks}</span>
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`font-medium ${(sub.percentage || 0) >= (assignment.passing_marks / assignment.total_marks * 100)
+                        <span className={`font-medium ${(Number(sub.percentage) || 0) >= (Number(assignment.passing_marks) / Number(assignment.total_marks) * 100)
                             ? 'text-green-600'
                             : 'text-red-600'
                           }`}>
-                          {sub.percentage?.toFixed(1) || 0}%
+                          {Number(sub.percentage)?.toFixed(1) || 0}%
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">

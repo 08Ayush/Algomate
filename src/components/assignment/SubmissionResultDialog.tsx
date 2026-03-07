@@ -33,6 +33,11 @@ export function SubmissionResultDialog({
 }: SubmissionResultDialogProps) {
   const router = useRouter();
 
+  // Normalize numeric fields — PostgreSQL DECIMAL columns arrive as strings
+  const percentage = Number(result.percentage) || 0;
+  const score = Number(result.score) || 0;
+  const totalMarks = Number(result.totalMarks) || 0;
+
   const handleClose = () => {
     onOpenChange(false);
     router.push('/student/dashboard');
@@ -75,26 +80,26 @@ export function SubmissionResultDialog({
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-6 text-center border border-blue-200">
             <p className="text-sm text-gray-600 mb-2">Your Score</p>
             <div className="flex items-center justify-center gap-2">
-              <span className={`text-5xl font-bold ${getGradeColor(result.percentage)}`}>
-                {result.score}
+              <span className={`text-5xl font-bold ${getGradeColor(percentage)}`}>
+                {score}
               </span>
               <span className="text-2xl text-gray-400">/</span>
-              <span className="text-3xl text-gray-600">{result.totalMarks}</span>
+              <span className="text-3xl text-gray-600">{totalMarks}</span>
             </div>
             <div className="mt-3 flex items-center justify-center gap-2">
-              <TrendingUp className={`h-5 w-5 ${getGradeColor(result.percentage)}`} />
-              <span className={`text-2xl font-semibold ${getGradeColor(result.percentage)}`}>
-                {result.percentage.toFixed(2)}%
+              <TrendingUp className={`h-5 w-5 ${getGradeColor(percentage)}`} />
+              <span className={`text-2xl font-semibold ${getGradeColor(percentage)}`}>
+                {percentage.toFixed(2)}%
               </span>
             </div>
             <Badge 
               className={`mt-3 ${
-                result.percentage >= 60 
+                percentage >= 60 
                   ? 'bg-green-100 text-green-800 border-green-300' 
                   : 'bg-yellow-100 text-yellow-800 border-yellow-300'
               }`}
             >
-              {getGradeLabel(result.percentage)}
+              {getGradeLabel(percentage)}
             </Badge>
           </div>
 

@@ -166,7 +166,7 @@ const AssignmentsPage: React.FC = () => {
                     </div>
                     <div className="bg-white rounded-2xl shadow-lg p-6 flex items-center gap-4">
                         <div className="p-3 rounded-xl bg-purple-100"><Users size={24} className="text-purple-600" /></div>
-                        <div><p className="text-2xl font-bold text-gray-900">{assignments.reduce((sum, a) => sum + (a.total_marks || 0), 0)}</p><p className="text-sm text-gray-500">Total Marks</p></div>
+                        <div><p className="text-2xl font-bold text-gray-900">{assignments.reduce((sum, a) => sum + (Number(a.total_marks) || 0), 0)}</p><p className="text-sm text-gray-500">Total Marks</p></div>
                     </div>
                 </div>
 

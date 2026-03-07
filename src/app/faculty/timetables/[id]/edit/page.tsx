@@ -229,6 +229,24 @@ export default function EditTimetablePage() {
 
     // ── Render guards ─────────────────────────────────────────
     if (loading) return <PageLoader message="Loading Timetable Editor" subMessage="Fetching schedule, subjects, faculty and rooms..." />;
+
+    // Block general/guest faculty from the edit page entirely
+    const rawUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+    const currentFacultyType = rawUser ? JSON.parse(rawUser).faculty_type : null;
+    const canEdit = currentFacultyType === 'creator' || currentFacultyType === 'publisher';
+    if (!canEdit) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-[#CDE8E5] via-[#EEF7FF] to-[#7AB2B2] flex items-center justify-center">
+                <div className="text-center bg-white rounded-2xl p-10 shadow-lg max-w-md">
+                    <AlertCircle size={48} className="text-amber-500 mx-auto mb-4" />
+                    <h2 className="text-xl font-bold text-gray-900 mb-2">Access Denied</h2>
+                    <p className="text-gray-600 mb-6">Only <strong>Creator</strong> and <strong>Publisher</strong> faculty can edit timetables.</p>
+                    <button onClick={() => router.push('/faculty/timetables')} className="px-6 py-3 bg-[#4D869C] text-white rounded-xl font-medium">Back to Timetables</button>
+                </div>
+            </div>
+        );
+    }
+
     if (error || !timetable) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-[#CDE8E5] via-[#EEF7FF] to-[#7AB2B2] flex items-center justify-center">

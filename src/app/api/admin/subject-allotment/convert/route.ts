@@ -1,4 +1,5 @@
 import { serviceDb as supabase } from '@/shared/database';
+import { getPool } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 
@@ -20,37 +21,43 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Bucket ID is required' }, { status: 400 });
     }
 
-    // Get bucket's max_selection limit
-    const { data: bucket } = await supabase
-      .from('elective_buckets')
-      .select('max_selection')
-      .eq('id', bucketId)
-      .single();
+    // Get bucket's max_selection limit via raw SQL
+    const pool = getPool();
+    const bucketRes = await pool.query(
+      'SELECT max_selection FROM elective_buckets WHERE id = $1',
+      [bucketId]
+    );
+    const maxSelection = bucketRes.rows[0]?.max_selection || 1;
 
-    const maxSelection = bucket?.max_selection || 1;
+    // Fetch allotted choices with user + subject JOINs (raw SQL to avoid Neon compat shim stripping relations)
+    const { rows: allotments, rowCount } = await pool.query(
+      `SELECT
+         ssc.id,
+         ssc.student_id,
+         ssc.subject_id,
+         ssc.bucket_id,
+         ssc.priority,
+         ssc.is_allotted,
+         ssc.allotment_status,
+         ssc.created_at,
+         ssc.updated_at,
+         u.first_name,
+         u.last_name,
+         u.college_uid,
+         u.cgpa,
+         s.code AS subject_code,
+         s.name AS subject_name
+       FROM student_subject_choices ssc
+       LEFT JOIN users u ON u.id = ssc.student_id
+       LEFT JOIN subjects s ON s.id = ssc.subject_id
+       WHERE ssc.bucket_id = $1
+         AND (ssc.is_allotted = true OR ssc.allotment_status = 'allotted')
+       ORDER BY ssc.priority ASC`,
+      [bucketId]
+    );
 
-    // Fetch allotted choices for this bucket (is_allotted = true OR allotment_status = 'allotted')
-    const { data: allotments, error } = await supabase
-      .from('student_subject_choices')
-      .select(`
-        id,
-        student_id,
-        subject_id,
-        bucket_id,
-        priority,
-        is_allotted,
-        allotment_status,
-        created_at,
-        updated_at,
-        users:student_id(id, first_name, last_name, college_uid, cgpa),
-        subjects:subject_id(id, code, name)
-      `)
-      .eq('bucket_id', bucketId)
-      .or('is_allotted.eq.true,allotment_status.eq.allotted')
-      .order('priority', { ascending: true }); // Sort by priority (lower = higher priority)
-
-    if (error) {
-      console.error('Error fetching allotments:', error);
+    if (rowCount === null) {
+      console.error('Error fetching allotments');
       return NextResponse.json({ allotments: [] });
     }
 
@@ -78,13 +85,13 @@ export async function GET(request: NextRequest) {
     const mappedAllotments = filteredAllotments.map((a: any) => ({
       id: a.id,
       student_id: a.student_id,
-      first_name: a.users?.first_name || '',
-      last_name: a.users?.last_name || '',
-      college_uid: a.users?.college_uid || '',
-      subject_code: a.subjects?.code || '',
-      subject_name: a.subjects?.name || '',
+      first_name: a.first_name || '',
+      last_name: a.last_name || '',
+      college_uid: a.college_uid || '',
+      subject_code: a.subject_code || '',
+      subject_name: a.subject_name || '',
       priority_rank: a.priority || 0,
-      student_cgpa: a.users?.cgpa || 0,
+      student_cgpa: a.cgpa || 0,
       allotted_at: a.updated_at || a.created_at
     }));
 
@@ -113,37 +120,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Bucket ID is required' }, { status: 400 });
     }
 
-    // Get the bucket's max_selection limit
-    const { data: bucket, error: bucketError } = await supabase
-      .from('elective_buckets')
-      .select('max_selection')
-      .eq('id', bucket_id)
-      .single();
+    // Get the bucket's max_selection limit via raw SQL
+    const pool = getPool();
+    const bucketPostRes = await pool.query(
+      'SELECT max_selection FROM elective_buckets WHERE id = $1',
+      [bucket_id]
+    );
+    const maxSelection = bucketPostRes.rows[0]?.max_selection || 1;
 
-    const maxSelection = bucket?.max_selection || 1;
-
-    // Get pending student choices for this bucket (not yet allotted)
-    const { data: choices, error: choicesError } = await supabase
-      .from('student_subject_choices')
-      .select(`
-        id,
-        student_id,
-        subject_id,
-        bucket_id,
-        priority,
-        is_allotted,
-        allotment_status,
-        users:student_id(id, first_name, last_name, college_uid, cgpa)
-      `)
-      .eq('bucket_id', bucket_id)
-      .eq('is_allotted', false)
-      .neq('allotment_status', 'allotted')
-      .order('priority', { ascending: true });
-
-    if (choicesError) {
-      console.error('Error fetching choices:', choicesError);
-      return NextResponse.json({ error: 'Failed to fetch student choices' }, { status: 500 });
-    }
+    // Get pending student choices with user CGPA via raw SQL (Neon compat shim strips relation syntax)
+    const { rows: choices } = await pool.query(
+      `SELECT
+         ssc.id,
+         ssc.student_id,
+         ssc.subject_id,
+         ssc.bucket_id,
+         ssc.priority,
+         ssc.is_allotted,
+         ssc.allotment_status,
+         u.cgpa
+       FROM student_subject_choices ssc
+       LEFT JOIN users u ON u.id = ssc.student_id
+       WHERE ssc.bucket_id = $1
+         AND ssc.is_allotted = false
+         AND ssc.allotment_status != 'allotted'
+       ORDER BY ssc.priority ASC`,
+      [bucket_id]
+    );
 
     if (!choices || choices.length === 0) {
       return NextResponse.json({
@@ -163,10 +166,10 @@ export async function POST(request: NextRequest) {
       studentChoices.get(studentId)!.push(choice);
     });
 
-    // Sort students by CGPA (highest first)
+    // Sort students by CGPA (highest first) — cgpa is now a direct column from the SQL join
     const sortedStudents = Array.from(studentChoices.entries()).sort((a, b) => {
-      const cgpaA = a[1][0]?.users?.cgpa || 0;
-      const cgpaB = b[1][0]?.users?.cgpa || 0;
+      const cgpaA = Number(a[1][0]?.cgpa) || 0;
+      const cgpaB = Number(b[1][0]?.cgpa) || 0;
       return cgpaB - cgpaA;
     });
 
@@ -182,16 +185,13 @@ export async function POST(request: NextRequest) {
 
       for (const choice of toAllot) {
         // Update the choice to mark as allotted
-        const { error: updateError } = await supabase
-          .from('student_subject_choices')
-          .update({
-            is_allotted: true,
-            allotment_status: 'allotted',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', choice.id);
-
-        if (!updateError) {
+        const { rowCount: updateCount } = await pool.query(
+          `UPDATE student_subject_choices
+           SET is_allotted = true, allotment_status = 'allotted', updated_at = NOW()
+           WHERE id = $1`,
+          [choice.id]
+        );
+        if (updateCount && updateCount > 0) {
           allottedCount++;
         }
       }
